@@ -67,6 +67,7 @@ def usb_present():
     result = subprocess.run(
         [
             "powershell",
+            "-NonInteractive",
             "-NoProfile",
             "-Command",
             (
@@ -469,7 +470,10 @@ async def encode_lcd_jpeg(raw_path, jpeg_path):
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            await asyncio.wait_for(process.communicate(), 10)
+            # A cold Windows PowerShell/System.Drawing launch can exceed 10 s
+            # on a fresh machine. Keep a finite deadline without treating the
+            # 30-second snapshot performance target as a startup guarantee.
+            await asyncio.wait_for(process.communicate(), 30)
         except BaseException:
             if process.returncode is None:
                 process.kill()

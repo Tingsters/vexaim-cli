@@ -961,7 +961,9 @@ class JpegOutputTests(unittest.IsolatedAsyncioTestCase):
             report["snapshot_seconds"],
             report["screen_capture_protocol"]["capture_to_raw_seconds"],
         )
-        self.assertTrue(report["snapshot_within_30_seconds"])
+        self.assertEqual(
+            report["snapshot_within_30_seconds"], report["snapshot_seconds"] <= 30
+        )
         self.assertFalse(report["python_console_touched"])
 
     async def test_unknown_layout_cannot_start_an_encoder(self):

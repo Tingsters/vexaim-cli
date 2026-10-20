@@ -24,6 +24,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config shellcheck
 
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cli/target
+          key: rust-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('cli/Cargo.lock', 'cli/**/Cargo.toml') }}
 
       - name: Build
         run: cargo build --locked --release --manifest-path cli/Cargo.toml
