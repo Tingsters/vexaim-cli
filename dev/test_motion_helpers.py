@@ -7,6 +7,7 @@ import types
 import unittest
 
 HELPERS = Path(__file__).resolve().parents[1] / "cli/vexaim/src/motion.py"
+STOP_HELPER = HELPERS.with_name("stop.py")
 
 
 class Robot:
@@ -21,6 +22,8 @@ class Robot:
         self.calibrating = False
         self.interrupt = False
         self.stops = 0
+        self.stop_settle_ms = 0
+        self.stopped_after = 0
         self.starts = 0
         self.timer = types.SimpleNamespace(time=lambda unit: self.clock)
         self.inertial = types.SimpleNamespace(
@@ -47,7 +50,7 @@ class Robot:
         self.target = 0
 
     def is_stopped(self):
-        return not self.is_turn_active()
+        return not self.is_turn_active() and self.clock >= self.stopped_after
 
     def is_turn_active(self):
         return self.clock < self.active_until or (self.stalled and self.starts > self.stops)
@@ -61,6 +64,7 @@ class Robot:
         self.rotation = self.get_rotation()
         self.active_until = self.started = self.clock
         self.stops += 1
+        self.stopped_after = self.clock + self.stop_settle_ms
 
     def wait(self, amount, unit):
         self.clock += amount
@@ -73,7 +77,7 @@ class MotionHelpers(unittest.TestCase):
     def setUp(self):
         self.robot = Robot()
         self.namespace = dict(robot=self.robot, wait=self.robot.wait, MSEC=0, LEFT=-1, RIGHT=1, DPS=0, MMPS=0)
-        exec(compile(HELPERS.read_text(), str(HELPERS), "exec"), self.namespace)
+        exec(compile(STOP_HELPER.read_text() + '\n' + HELPERS.read_text(), str(HELPERS), "exec"), self.namespace)
         self.motion = self.namespace["_va_motion"]
 
     def test_full_turn_is_one_action_and_reports_only_sensor_verification(self):
@@ -111,6 +115,30 @@ class MotionHelpers(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.motion("turn", value, 0, 60)
         self.assertEqual(self.robot.starts, 0)
+
+    def test_delayed_stopped_state_is_polled_without_repeating_stop_or_motion(self):
+        self.robot.stop_settle_ms = 350
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.motion("turn", -15, 0, 30)
+        result = json.loads(output.getvalue().splitlines()[-1])
+        self.assertTrue(result['stopped'])
+        self.assertEqual((self.robot.starts, self.robot.stops), (1, 1))
+        self.assertGreaterEqual(self.robot.clock, 850)
+        self.assertLessEqual(self.robot.clock, 900)
+
+    def test_unconfirmed_stop_has_a_finite_deadline_and_no_retry(self):
+        self.robot.stop_settle_ms = float('inf')
+        self.assertFalse(self.namespace['_va_stop']())
+        self.assertEqual(self.robot.clock, 1000)
+        self.assertEqual((self.robot.starts, self.robot.stops), (0, 1))
+
+    def test_movement_with_unconfirmed_stop_still_fails(self):
+        self.robot.stop_settle_ms = float('inf')
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, 'sensor check failed'):
+            self.motion('turn', -15, 0, 30)
+        self.assertEqual((self.robot.starts, self.robot.stops), (1, 1))
+        self.assertLessEqual(self.robot.clock, 1500)
 
 
 if __name__ == "__main__":

@@ -44,8 +44,7 @@ def _va_motion(kind, value, angle, speed):
                 raise RuntimeError('Movement deadline reached; stopped without retry')
             wait(20, MSEC)
     finally:
-        robot.stop_all_movement()
-        wait(100, MSEC)
+        _va_stop()
     after = _va_state()
     delta = after['rotation'] - before['rotation']
     result = {
@@ -63,4 +62,4 @@ def _va_motion(kind, value, angle, speed):
         raise RuntimeError('Movement sensor check failed; stopped without retry')
 
 
-_va_helpers_version = 1
+_va_helpers_version = 2

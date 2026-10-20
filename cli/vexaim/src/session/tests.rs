@@ -1,5 +1,6 @@
 //! Real local IPC with a fake radio owner: no robot/credentials required.
 use super::*;
+use std::process::Command;
 use std::future::pending;
 
 #[derive(Clone, Default)]

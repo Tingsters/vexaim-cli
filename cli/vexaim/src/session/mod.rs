@@ -1,5 +1,6 @@
 //! One radio owner per user/name; short CLI calls reach it over private local IPC.
 mod ipc;
+mod owner_process;
 mod robot;
 #[cfg(test)]
 mod tests;
@@ -9,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     cell::{Cell, RefCell},
-    process::{Command, Stdio},
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -449,9 +449,7 @@ async fn start(name: &str) -> Result<Value, Fail> {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
     }
-    let mut command = Command::new(std::env::current_exe().map_err(failure)?);
-    command
-        .args([
+    let arguments = [
             "--json",
             "--transport",
             "bluetooth",
@@ -461,24 +459,11 @@ async fn start(name: &str) -> Result<Value, Fail> {
             "serve",
             "--id",
             &id,
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
+        ];
     let mut child = if connecting {
         None
     } else {
-        Some(command.spawn().map_err(failure)?)
+        Some(owner_process::spawn(&arguments).map_err(failure)?)
     };
     let deadline = Instant::now() + Duration::from_secs(55);
     loop {

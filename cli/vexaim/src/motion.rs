@@ -2,7 +2,10 @@
 use crate::repl::Fail;
 use clap::ValueEnum;
 
-pub const HELPERS: &str = include_str!("motion.py");
+pub const STOP_HELPER: &str = include_str!("stop.py");
+pub fn helpers() -> String {
+    format!("{STOP_HELPER}\n{}", include_str!("motion.py"))
+}
 #[cfg(feature = "bluetooth")]
 pub const EVENT_PREFIX: &str = "__VEXAIM_EVENT__";
 

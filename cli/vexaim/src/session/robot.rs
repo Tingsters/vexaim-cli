@@ -80,7 +80,7 @@ impl Robot {
             .exec(
                 &format!(
                     "{PREAMBLE}{}\nprint(_va_json.dumps(_va_state()))\n",
-                    motion::HELPERS
+                    motion::helpers()
                 ),
                 Duration::from_secs(15),
             )
@@ -122,7 +122,7 @@ impl Robot {
                 .exec(
                     &format!(
                         "{PREAMBLE}{}\nprint(_va_json.dumps(_va_state()))\n",
-                        motion::HELPERS
+                        motion::helpers()
                     ),
                     Duration::from_secs(12),
                 )
@@ -283,7 +283,7 @@ impl Backend for Robot {
         let result = self
             .repl
             .exec(
-                &format!("{PREAMBLE}robot.stop_all_movement()\ntry:\n    robot.sound.stop()\nexcept Exception:\n    pass\nprint(robot.is_stopped())\n"),
+                &format!("{PREAMBLE}{}\nprint(_va_stop())\ntry:\n    robot.sound.stop()\nexcept Exception:\n    pass\n", motion::STOP_HELPER),
                 Duration::from_secs(5),
             )
             .await?;

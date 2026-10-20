@@ -71,6 +71,7 @@ if [ "$FROM_SOURCE" -eq 1 ]; then
   cargo build --locked --release --manifest-path "$HERE/cli/Cargo.toml"
   cp "$HERE/cli/target/release/vexaim" "$TMP/vexaim"
   cp "$HERE/VERSION" "$TMP/VERSION"; cp -R "$HERE/skill" "$TMP/skill"
+  cp "$HERE/LICENSE" "$HERE/NOTICE.md" "$TMP/"
 elif [ -z "$FROM_DIR" ] && [ -z "$BASE_URL" ] && [ -f "$HERE/vexaim" ]; then
   bundle=$HERE
 else
@@ -110,6 +111,9 @@ for d do
   mkdir -p "$(dirname "$d")"
   cp -R "$bundle/skill/vex-aim" "$stage"; mkdir -p "$stage/bin"
   cp "$bundle/vexaim" "$stage/bin/vexaim"; chmod +x "$stage/bin/vexaim"
+  for notice in LICENSE NOTICE.md licenses; do
+    if [ -e "$bundle/$notice" ]; then cp -R "$bundle/$notice" "$stage/"; fi
+  done
   printf 'vexaim-cli %s\n' "$bundled_version" > "$stage/$MARKER"
   if [ -e "$d" ]; then mv -- "$d" "$backup"; fi
   if ! mv -- "$stage" "$d"; then

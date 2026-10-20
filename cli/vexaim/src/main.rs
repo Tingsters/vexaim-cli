@@ -168,7 +168,7 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
             speed,
         } => {
             let source = motion::turn_source(*direction, *degrees, *speed)?;
-            run_exec(cli, &format!("{}{source}", motion::HELPERS), 23, true)
+            run_exec(cli, &format!("{}{source}", motion::helpers()), 23, true)
         }
         Cmd::Move {
             distance,
@@ -176,7 +176,7 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
             speed,
         } => {
             let source = motion::move_source(*distance, *angle, *speed)?;
-            run_exec(cli, &format!("{}{source}", motion::HELPERS), 23, true)
+            run_exec(cli, &format!("{}{source}", motion::helpers()), 23, true)
         }
         Cmd::Bluetooth { .. } => unreachable!(),
         Cmd::Doctor => doctor(cli),

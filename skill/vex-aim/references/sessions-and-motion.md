@@ -84,6 +84,8 @@ avoid unrelated reporting work after every small action.
 
 Stop uses the owner connection and preempts an active operation. It is not a
 guaranteed instant emergency stop; use the physical switch when necessary.
+The firmware's stopped flag can lag a stop command. The CLI sends stop once and
+polls for up to one second; it reports failure if confirmation never arrives.
 Helpers have a robot-side maximum 20-second action deadline even if the owner
 dies. Arbitrary `exec` does not inherit their bounds. A second movement is rejected
 as busy, never silently queued. Caller disconnection interrupts its active action.

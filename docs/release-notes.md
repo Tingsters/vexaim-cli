@@ -4,6 +4,8 @@ Standalone vexaim CLI with a matching general-purpose vex-aim agent skill.
 - Finite turn/move helpers, private local IPC, explicit stop and recovery without automatic movement replay.
 - Complete Windows x86_64, Linux x86_64, macOS Apple Silicon and macOS Intel bundles.
 - Checksummed installers; no Rust or Python packages required for normal use.
+- Windows session owners do not inherit PowerShell capture pipes; captured startup JSON returns while the owner stays connected.
+- Stop confirmation tolerates the firmware's asynchronous stopped flag with a bounded poll and no movement replay.
 
 Download, extract and run install.ps1 (Windows) or install.sh (macOS/Linux), then
 start a new agent session. See https://tingsters.github.io/vexaim-cli/.

@@ -56,6 +56,7 @@ try {
     Copy-Item (Join-Path $PSScriptRoot 'cli/target/release/vexaim.exe') $Tmp
     Copy-Item (Join-Path $PSScriptRoot 'VERSION') $Tmp
     Copy-Item -Recurse (Join-Path $PSScriptRoot 'skill') $Tmp
+    Copy-Item (Join-Path $PSScriptRoot 'LICENSE'),(Join-Path $PSScriptRoot 'NOTICE.md') $Tmp
   } elseif (-not $FromDir -and -not $BaseUrl -and (Test-Path (Join-Path $PSScriptRoot 'vexaim.exe'))) {
     $bundle=$PSScriptRoot
   } else {
@@ -106,6 +107,10 @@ try {
       Copy-Item -LiteralPath $skill -Destination $stage -Recurse
       New-Item -ItemType Directory -Path (Join-Path $stage 'bin') -Force | Out-Null
       Copy-Item -LiteralPath $exe -Destination (Join-Path $stage 'bin/vexaim.exe')
+      foreach ($notice in @('LICENSE','NOTICE.md','licenses')) {
+        $noticePath=Join-Path $bundle $notice
+        if (Test-Path -LiteralPath $noticePath) { Copy-Item -LiteralPath $noticePath -Destination $stage -Recurse }
+      }
       Set-Content -LiteralPath (Join-Path $stage $Marker) -Value "vexaim-cli $bundledVersion" -Encoding ASCII
       if (Test-Path -LiteralPath $d) { Move-Item -LiteralPath $d -Destination $backup }
       try { Move-Item -LiteralPath $stage -Destination $d }

@@ -48,6 +48,19 @@ while a successful live state check can restore ordinary movement.
 
 ## Timing and accuracy evidence
 
+During the standalone Windows smoke test, a 15-degree left turn dispatched in
+274 ms and reported -16.24 degrees, but its stopped flag had not settled at the
+old fixed 100 ms check. An independent live state read confirmed stopped. A
+stationary probe then observed false immediately after stop and true by 100 ms.
+The helper now sends stop once and polls for up to 1000 ms. Five stationary stop
+commands and session close passed afterward. This is not independent physical
+accuracy acceptance, and the movement is never automatically replayed.
+
+The same test exposed inherited Windows capture handles: PowerShell's captured
+startup JSON waited until the owner exited. Windows now launches the owner with
+handle inheritance disabled and no console. A real inheritable-pipe regression
+test requires EOF while the child is still alive. Unix process launch is unchanged.
+
 Record discovery, connection/authentication, helper preparation, dispatch and
 motion separately. The goal for an already connected idle session is dispatch
 p95 below one second, excluding model reasoning. `dispatch_ms` ends when the host

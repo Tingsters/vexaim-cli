@@ -298,8 +298,8 @@ async fn run_python(
             Cmd::Info => (STATE.to_string(),10,true),
             Cmd::Stop => (crate::STOP_CODE.to_string(),5,true),
             Cmd::Exec { code,file,timeout,no_preamble } => (crate::exec_source(code,file)?,*timeout,!*no_preamble),
-            Cmd::Turn { direction, degrees, speed } => (format!("{}{}", crate::motion::HELPERS, crate::motion::turn_source(*direction, *degrees, *speed)?), 23, true),
-            Cmd::Move { distance, angle, speed } => (format!("{}{}", crate::motion::HELPERS, crate::motion::move_source(*distance, *angle, *speed)?), 23, true),
+            Cmd::Turn { direction, degrees, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::turn_source(*direction, *degrees, *speed)?), 23, true),
+            Cmd::Move { distance, angle, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::move_source(*distance, *angle, *speed)?), 23, true),
             _ => return Err(fail("Unsupported Bluetooth command.")),
         };
         if preamble {
