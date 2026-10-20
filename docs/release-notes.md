@@ -11,7 +11,8 @@ Download, extract and run install.ps1 (Windows) or install.sh (macOS/Linux), the
 start a new agent session. See https://tingsters.github.io/vexaim-cli/.
 
 All four platforms have software/build/installation checks. Existing hardware
-evidence covers Windows USB/BLE and Linux USB; macOS hardware and new session/
-movement-helper acceptance remain unverified until recorded. Turn default remains
+evidence covers Windows USB/BLE and Linux USB, including a new Windows small-turn,
+stop/session and camera smoke test. macOS hardware, broader physical accuracy and
+in-motion interruption remain unverified. Turn default remains
 30 DPS. Automatic visual correction is disabled. No robot firmware or saved
 project changes are required. Supervise movement and keep camera images local.

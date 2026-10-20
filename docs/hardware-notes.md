@@ -1,4 +1,32 @@
-# Historical hardware evidence
+# Hardware evidence
+
+## Standalone Windows Bluetooth smoke test (2026-10-20)
+
+With USB unplugged and physical readiness confirmed, the 0.2.0 candidate reused
+the existing credential for AIM6518 without pairing again. PowerShell captured
+startup JSON in 13.9 seconds while the background connection remained alive.
+
+One newly authorized 15-degree right turn dispatched in 124 ms, took 965 ms
+including stop confirmation, reported +15.75 degrees and stopped true. This is
+robot-sensor evidence, not independent physical accuracy verification. Defaults
+remain conservative and no movement was replayed after an uncertain result.
+
+Five consecutive stationary stop commands and session close passed after adding
+bounded polling for the firmware's delayed stopped flag. A final stationary
+sequence passed stop, live info, native JPEG capture, live info and close. The
+JPEG was 640x480 / 27,578 bytes and took 9,855 ms; the following Python state read
+took 183 ms and confirmed stopped at battery 83%. Images remain local.
+
+The test found and corrected two issues before publication: fixed/immediate
+stop checks produced false failures, and Windows background owners inherited
+PowerShell capture handles. Tests cover delayed/never-confirmed stops and require
+capture-pipe EOF while the child owner is still alive.
+
+USB was not retested in this standalone smoke test. Broader movement accuracy,
+in-motion interruption, faster speeds, surface variation and macOS hardware
+remain separate acceptance work. A small-turn smoke test does not validate them.
+
+## Historical hardware evidence
 
 These dated investigation notes were imported from the original workshop.
 For current installation and commands see ../README.md and the generic vex-aim

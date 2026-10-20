@@ -34,8 +34,9 @@ agent skill. The default locations are:
 Use `--agents claude` / `-Agents claude` to select an agent, `--dry-run` /
 `-DryRun` to preview, or `--from-dir DIR` / `-FromDir DIR` to use local release
 archives plus checksums. `--version 0.2.0` / `-Version 0.2.0` selects a release.
-No shell profile or agent settings are changed. Rerun the installer to update;
-close active robot sessions first. The robot may be off during installation.
+No shell profile or agent settings are changed. To update, download a fresh bundle
+or rerun the installer from a repository checkout; an extracted bundle installs
+its own version offline. Close active sessions first. The robot may be off during installation.
 
 Start a **new agent session** so it discovers the skill, then try:
 
@@ -72,9 +73,10 @@ For movement, clear the floor and have someone near the power switch.
 [Hardware evidence](docs/hardware-notes.md) · [Movement limits](docs/motion.md)
 
 All four platforms are built and installation-tested in CI. Windows USB and BLE
-have real-robot evidence, and Linux USB has earlier evidence. macOS hardware and
-new session/movement-helper hardware acceptance remain explicitly unverified
-until recorded; CI alone is not a robot test. The current conservative turn
+have real-robot evidence, including a captured-session startup, a small right
+turn, repeated stop confirmation and camera/Python recovery. Linux USB has earlier
+evidence. macOS hardware, broader movement accuracy and in-motion interruption
+remain unverified; CI alone is not a robot test. The current conservative turn
 default remains 30 DPS, without automatic camera-based correction.
 
 Developers with Rust and platform build prerequisites can use

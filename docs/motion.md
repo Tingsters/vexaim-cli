@@ -61,6 +61,12 @@ startup JSON waited until the owner exited. Windows now launches the owner with
 handle inheritance disabled and no console. A real inheritable-pipe regression
 test requires EOF while the child is still alive. Unix process launch is unchanged.
 
+With both fixes installed, captured startup returned in 13.9 seconds while the
+owner stayed connected. One new supervised 15-degree right turn dispatched in
+124 ms, reported +15.75 degrees and confirmed stopped; motion plus confirmation
+took 965 ms. Stop/live-info/snapshot/live-info/close then passed. Full-turn accuracy
+across surfaces and interruption while moving are still unverified.
+
 Record discovery, connection/authentication, helper preparation, dispatch and
 motion separately. The goal for an already connected idle session is dispatch
 p95 below one second, excluding model reasoning. `dispatch_ms` ends when the host

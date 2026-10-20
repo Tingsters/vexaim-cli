@@ -88,7 +88,7 @@ exact turn. Automatic camera-based movement correction is not enabled.
 
 Keep the current 30 DPS turn default unless independent hardware evidence supports
 a change. Do not imply every allowed speed or platform has been tested with a
-robot. Read the linked hardware evidence for actual coverage.
+robot. Actual coverage: https://github.com/Tingsters/vexaim-cli/blob/main/docs/hardware-notes.md.
 
 ## References
 
