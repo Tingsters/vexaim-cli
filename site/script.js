@@ -5,7 +5,7 @@ document.querySelectorAll('button[data-copy]').forEach(button => {
       await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
       status.textContent = 'Copied';
     } catch {
-      status.textContent = 'Select the prompt text and copy it.';
+      status.textContent = 'Select the text above and copy it.';
     }
   });
 });

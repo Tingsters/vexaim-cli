@@ -69,6 +69,9 @@ try {
   $singleHome = Join-Path $work 'single'
   Invoke-Install $singleHome @('-FromDir', $assets, '-Agents', 'claude', '-NoDoctor')
   Assert-True ((Test-Path "$singleHome/.claude/skills/vex-aim") -and -not (Test-Path "$singleHome/.agents")) 'single-agent selection'
+  $streamedHome = Join-Path $work 'streamed home'
+  & ([scriptblock]::Create((Get-Content -Raw $installer))) -TargetHome $streamedHome
+  Assert-True ((Test-Path "$streamedHome/.agents/skills/vex-aim/bin/vexaim.exe") -and (Test-Path "$streamedHome/.claude/skills/vex-aim/SKILL.md")) 'streamed PowerShell installs without a script directory'
 
   $extracted = Join-Path $work 'standalone bundle'
   Expand-Archive -LiteralPath (Join-Path $assets $archive) -DestinationPath $extracted

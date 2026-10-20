@@ -8,14 +8,27 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header><a class="brand" href="./">vexaim<span>CLI</span></a><nav aria-label="Main"><a href="#downloads">Download</a><a href="https://github.com/Tingsters/vexaim-cli#readme">Docs</a><a href="https://github.com/Tingsters/vexaim-cli">GitHub ↗</a></nav></header>
+<header><a class="brand" href="./">vexaim<span>CLI</span></a><nav aria-label="Main"><a href="#install">Install</a><a href="#downloads">Downloads</a><a href="https://github.com/Tingsters/vexaim-cli">GitHub ↗</a></nav></header>
 <main>
   <section class="hero">
     <p class="eyebrow">YOUR IDEAS. YOUR ROBOT.</p>
     <h1>A little robot.<br>A lot of possibilities.</h1>
     <p class="intro">Control VEX AIM over USB or Bluetooth. Run Python, read sensors, make it move, or capture a camera frame — from the command line or your AI agent.</p>
-    <a class="primary" href="#downloads">Get vexaim <span aria-hidden="true">↓</span></a>
+    <a class="primary" href="#install">Install vexaim <span aria-hidden="true">↓</span></a>
     <p class="quiet">Prebuilt binaries. Basic agent skill included. No compiling.</p>
+  </section>
+  <section class="setup" id="install">
+    <p class="eyebrow">ONE COMMAND. READY TO GO.</p><h2>Install for your computer</h2>
+    <p>Paste one command into your terminal. It downloads and installs the latest stable executable and matching <code>vex-aim</code> agent skill. No clone, extraction, compiler or administrator access needed.</p>
+    <div class="install-command"><h3>Windows</h3><p>PowerShell 5.1 or newer · x86_64</p><pre><code id="install-windows">irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1 | iex</code></pre><button type="button" data-copy="install-windows">Copy Windows command</button><span role="status"></span></div>
+    <div class="install-command"><h3>macOS</h3><p>Terminal · Apple Silicon or Intel</p><pre><code id="install-macos">curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh</code></pre><button type="button" data-copy="install-macos">Copy macOS command</button><span role="status"></span></div>
+    <div class="install-command"><h3>Linux</h3><p>Terminal · x86_64</p><pre><code id="install-linux">curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh</code></pre><button type="button" data-copy="install-linux">Copy Linux command</button><span role="status"></span></div>
+    <p>The installer verifies the release archive's SHA-256 checksum and installs for Goose/Codex and Claude Code. The robot can be off. Rerun the same command to update after closing robot sessions. Linux USB may later need an approved udev rule.</p>
+    <p><a href="https://github.com/Tingsters/vexaim-cli/blob/main/install.sh">Review the macOS/Linux installer</a> · <a href="https://github.com/Tingsters/vexaim-cli/blob/main/install.ps1">Review the Windows installer</a> · <a href="https://github.com/Tingsters/vexaim-cli#install">Installer options</a></p>
+    <h3>Start a new agent session</h3><p>Restart your agent so it discovers the installed skill, then connect and switch on your robot and try:</p>
+    <div class="prompt"><p id="prompt">Use the vex-aim skill. Connect to my VEX AIM over USB, report its battery, and set its lights blue for two seconds. Do not move it.</p><button type="button" data-copy="prompt">Copy first prompt</button><span role="status"></span></div>
+    <p>For wireless access, ask for Bluetooth and give your robot's exact name. The skill guides your agent through pairing and connection reuse.</p>
+    <p><strong>Joining the student workshop?</strong> Use the <a href="https://github.com/Tingsters/vex-aim-agent-workshop#start-here">workshop's one-line installer</a> to get the teaching skill too.</p>
   </section>
   <section id="downloads">
     <p class="eyebrow">PICK YOUR COMPUTER</p><h2>Download the latest stable release</h2>
@@ -27,13 +40,7 @@
     </div>
     <p class="quiet"><a href="https://github.com/Tingsters/vexaim-cli/releases/latest">Release notes</a> · <a href="https://github.com/Tingsters/vexaim-cli/releases/latest/download/SHA256SUMS">SHA-256 checksums</a></p>
   </section>
-  <section class="setup" id="install"><p class="eyebrow">LET YOUR AGENT HELP</p><h2>Ask it to set things up</h2>
-    <div class="prompt"><p id="install-prompt">Clone https://github.com/Tingsters/vexaim-cli and follow its README to install the released vexaim executable and basic vex-aim skill for my computer. Use a prebuilt binary. Do not move the robot. Tell me to start a new agent session afterward.</p><button type="button" data-copy="install-prompt">Copy setup prompt</button><span role="status"></span></div>
-    <p class="eyebrow">OR INSTALL IT YOURSELF</p><h2>From download to robot</h2>
-    <ol><li><h3>Extract your download</h3><p>Each bundle includes the executable, a matching <code>vex-aim</code> skill, and installers. Verify the archive against SHA256SUMS before running its files: <code>Get-FileHash -Algorithm SHA256 &lt;archive&gt;</code> on Windows; <code>shasum -a 256 &lt;archive&gt;</code> on macOS/Linux.</p></li>
-      <li><h3>Run the installer</h3><p>Open a terminal in the extracted folder.</p><p>Windows PowerShell</p><pre>powershell -ExecutionPolicy Bypass -File install.ps1</pre><p>macOS / Linux</p><pre>sh install.sh</pre><p>No Rust or Python packages needed. The extracted bundle installs offline. The robot can be off. Your agent's settings stay unchanged.</p></li>
-      <li><h3>Start a new agent session</h3><p>Goose, Codex and Claude Code can discover the installed skill. Connect and switch on your robot, then try this:</p><div class="prompt"><p id="prompt">Use the vex-aim skill. Connect to my VEX AIM over USB, report its battery, and set its lights blue for two seconds. Do not move it.</p><button id="copy" type="button" data-copy="prompt">Copy prompt</button><span role="status"></span></div><p>For wireless access, ask for Bluetooth and give your robot's exact name. The skill guides your agent through pairing and connection reuse.</p></li></ol>
-  </section>
+  <section><h2>Manual or offline installation</h2><p>Download the bundle for your computer above and verify it against SHA256SUMS: use <code>Get-FileHash -Algorithm SHA256 &lt;archive&gt;</code> on Windows or <code>shasum -a 256 &lt;archive&gt;</code> on macOS/Linux. Extract it, open a terminal in that folder and run:</p><p>Windows PowerShell</p><pre>powershell -ExecutionPolicy Bypass -File install.ps1</pre><p>macOS / Linux</p><pre>sh install.sh</pre><p>The extracted bundle installs offline. Start a new agent session afterward.</p></section>
   <section class="details"><div><h2>Prefer a terminal?</h2><p>Run the executable from the extracted folder, or use its full path under your installed skill's <code>bin/</code> directory.</p><pre>./vexaim doctor
 ./vexaim info
 ./vexaim snap -o photo.jpg</pre><p>On PowerShell use <code>.\vexaim.exe</code>. <a href="https://github.com/Tingsters/vexaim-cli#direct-cli-use">More examples →</a></p></div><div><h2>A simple connection</h2><p>No saved robot project, firmware changes or special Wi-Fi. Photographs are saved locally. Clear the floor and keep someone near the power switch before movement.</p><p>All four platforms are built and installation-tested in CI. Windows USB/Bluetooth and earlier Linux USB have real-robot evidence. macOS hardware and the newest movement helpers need further hardware verification.</p><a href="https://github.com/Tingsters/vexaim-cli/blob/main/docs/troubleshooting.md">Connection troubleshooting →</a></div></section>

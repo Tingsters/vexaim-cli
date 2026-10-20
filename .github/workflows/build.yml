@@ -120,6 +120,14 @@ jobs:
 
       - name: Validate skill and release inputs
         run: python dev/check-release.py
+      - name: Test piped PowerShell installation (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Content -Raw install.ps1 | iex
+          powershell -NoProfile -ExecutionPolicy Bypass -Command 'Get-Content -Raw install.ps1 | iex'
+          if ($LASTEXITCODE -ne 0) { throw 'Piped PowerShell 5.1 installation failed' }
+          if (-not (Test-Path "$HOME/.agents/skills/vex-aim/bin/vexaim.exe")) { throw 'Piped installation did not install the executable' }
       - uses: actions/upload-artifact@v4
         with:
           name: vexaim-${{ matrix.target }}

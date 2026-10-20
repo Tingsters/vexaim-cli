@@ -5,7 +5,10 @@
 # An extracted platform bundle installs its own files offline.
 set -eu
 REPO=https://github.com/Tingsters/vexaim-cli
-HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+# A streamed installer has no adjacent bundle or source checkout. Never inspect
+# the caller's working directory as though it were an extracted release.
+HERE=''
+if [ -f "$0" ]; then HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd); fi
 TARGET_HOME=$HOME; AGENTS=all; VERSION=''; BASE_URL=''; FROM_DIR=''
 FROM_SOURCE=0; DRY=0; UNINSTALL=0; FORCE=0; UDEV=0
 MARKER=.vexaim-installed
@@ -22,7 +25,7 @@ while [ $# -gt 0 ]; do
     --from-source) FROM_SOURCE=1; shift ;; --dry-run) DRY=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;; --force) FORCE=1; shift ;;
     --udev) UDEV=1; shift ;; --no-doctor) shift ;;
-    -h|--help) sed -n '2,5p' "$0"; exit 0 ;; *) die "unknown option: $1" ;;
+    -h|--help) printf '%s\n' 'Install vexaim and its matching skill.' '--agents all|goose|codex|claude --version VERSION --home DIR' '--from-dir RELEASE_ASSETS --dry-run --uninstall --force --udev --from-source'; exit 0 ;; *) die "unknown option: $1" ;;
   esac
 done
 USE_AGENTS=0; USE_CLAUDE=0
@@ -67,12 +70,13 @@ sha256_of() {
 }
 bundle=$TMP
 if [ "$FROM_SOURCE" -eq 1 ]; then
+  if [ -z "$HERE" ] || [ ! -f "$HERE/cli/Cargo.toml" ]; then die 'source builds require a repository checkout'; fi
   command -v cargo >/dev/null 2>&1 || die 'source builds require an existing Rust toolchain'
   cargo build --locked --release --manifest-path "$HERE/cli/Cargo.toml"
   cp "$HERE/cli/target/release/vexaim" "$TMP/vexaim"
   cp "$HERE/VERSION" "$TMP/VERSION"; cp -R "$HERE/skill" "$TMP/skill"
   cp "$HERE/LICENSE" "$HERE/NOTICE.md" "$TMP/"
-elif [ -z "$FROM_DIR" ] && [ -z "$BASE_URL" ] && [ -f "$HERE/vexaim" ]; then
+elif [ -n "$HERE" ] && [ -z "$FROM_DIR" ] && [ -z "$BASE_URL" ] && [ -f "$HERE/vexaim" ]; then
   bundle=$HERE
 else
   assets=$FROM_DIR
