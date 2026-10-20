@@ -41,6 +41,8 @@ check "installed binary runs" "$H1/.agents/skills/vex-aim/bin/vexaim" --version
 # contains an unrelated executable. No checkout or adjacent bundle is present.
 printf '#!/bin/sh\nprintf "unrelated executable\\n"\n' > "$WORK/vexaim"
 chmod +x "$WORK/vexaim"
+# Keep the pipe to exercise the same invocation as curl | sh.
+# shellcheck disable=SC2002
 stream_install() { (cd "$WORK" && cat "$HERE/install.sh" | sh -s -- --home "$WORK/streamed home"); }
 check "streamed shell fetches the latest release without a checkout" stream_install
 [ -x "$WORK/streamed home/.agents/skills/vex-aim/bin/vexaim" ] && ok "streamed binary installed" || bad "streamed binary missing"
