@@ -37,6 +37,13 @@ for d in .agents/skills/vex-aim .claude/skills/vex-aim; do
 done
 check "installed binary runs" "$H1/.agents/skills/vex-aim/bin/vexaim" --version
 
+# The downloadable archive is independently installable without this checkout.
+EXTRACTED="$WORK/standalone bundle"; mkdir -p "$EXTRACTED"
+for archive in "$ASSETS"/*.tar.gz; do tar -xzf "$archive" -C "$EXTRACTED"; done
+check "extracted bundle installs offline" sh "$EXTRACTED/install.sh" --home "$WORK/offline home" --agents codex
+[ -f "$WORK/offline home/.agents/skills/vex-aim/references/sessions-and-motion.md" ] && ok "offline bundle includes skill references" || bad "offline bundle missing references"
+expect_fail "requested release mismatch is refused" "release version mismatch" I --home "$WORK/mismatch" --from-dir "$ASSETS" --version 0.2.99
+
 # 3. idempotent re-run
 check "re-run is idempotent" I --home "$H1" --from-dir "$ASSETS" --no-doctor
 

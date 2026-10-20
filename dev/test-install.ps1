@@ -69,6 +69,13 @@ try {
   Invoke-Install $singleHome @('-FromDir', $assets, '-Agents', 'claude', '-NoDoctor')
   Assert-True ((Test-Path "$singleHome/.claude/skills/vex-aim") -and -not (Test-Path "$singleHome/.agents")) 'single-agent selection'
 
+  $extracted = Join-Path $work 'standalone bundle'
+  Expand-Archive -LiteralPath (Join-Path $assets $archive) -DestinationPath $extracted
+  $offlineHome = Join-Path $work 'offline standalone'
+  & $shellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $extracted 'install.ps1') -TargetHome $offlineHome -Agents codex
+  Assert-True ($LASTEXITCODE -eq 0 -and (Test-Path "$offlineHome/.agents/skills/vex-aim/bin/vexaim.exe")) 'extracted bundle installs offline without a checkout'
+  Assert-True (Test-Path "$offlineHome/.agents/skills/vex-aim/references/sessions-and-motion.md") 'offline bundle includes its matching skill references'
+
   $badAssets = Join-Path $work 'bad-checksum'
   New-Item -ItemType Directory -Path $badAssets | Out-Null
   Copy-Item -LiteralPath (Join-Path $assets $archive), (Join-Path $assets 'SHA256SUMS') -Destination $badAssets

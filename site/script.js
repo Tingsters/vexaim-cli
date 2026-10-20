@@ -1,9 +1,11 @@
-document.getElementById('copy').addEventListener('click', async () => {
-  const status = document.getElementById('copy-status');
-  try {
-    await navigator.clipboard.writeText(document.getElementById('prompt').textContent);
-    status.textContent = 'Copied';
-  } catch {
-    status.textContent = 'Select the prompt text and copy it.';
-  }
+document.querySelectorAll('button[data-copy]').forEach(button => {
+  button.addEventListener('click', async () => {
+    const status = button.nextElementSibling;
+    try {
+      await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
+      status.textContent = 'Copied';
+    } catch {
+      status.textContent = 'Select the prompt text and copy it.';
+    }
+  });
 });

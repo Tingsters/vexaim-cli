@@ -52,15 +52,16 @@ The executable can also run directly from the extracted bundle. For installed
 copies, invoke its full path under the selected skill's `bin/` directory.
 
 ```sh
-vexaim doctor
-vexaim info
-vexaim exec 'print(robot.get_battery_level())'
-vexaim snap -o photo.jpg
-vexaim --name AIM1234 session start
-vexaim --session SESSION_ID info
-vexaim --session SESSION_ID session close
+./vexaim doctor
+./vexaim info
+./vexaim exec 'print(robot.get_battery_level())'
+./vexaim snap -o photo.jpg
+./vexaim --name AIM1234 session start
+./vexaim --session SESSION_ID info
+./vexaim --session SESSION_ID session close
 ```
 
+On Windows PowerShell use `.\vexaim.exe` instead of `./vexaim`.
 No saved robot project or firmware modification is needed. Helpers execute in
 the transient REPL. Keep photographs local unless you choose to share them.
 For movement, clear the floor and have someone near the power switch.

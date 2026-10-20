@@ -1,15 +1,14 @@
-# Prompt-driven movement in a short workshop
+# Movement helpers and hardware acceptance
 
-Students describe ideas: "spin in a circle", "move forward five centimetres",
-"turn right", or a movement game they invent. The agent handles connection and
-programming. There are no calibration chores, surface labels, mandatory kit signs
-or extra student dependencies. Kit-target navigation is a separate future feature.
+Ordinary requests such as "spin in a circle" use finite helpers and a reusable
+connection. The helpers need no calibration targets, surface selection or extra
+runtime dependencies. Target navigation is a separate future capability.
 
 ## Implementation and current limits
 
-The development CLI (`0.2.0`) adds persistent Bluetooth sessions and bounded
-turn/move helpers. The earlier workshop release `0.1.1` was USB-only. Install the development
-package's executable and current skill together; source edits alone do not update
+The CLI (`0.2.0`) adds persistent Bluetooth sessions and bounded
+turn/move helpers. The earlier workshop release `0.1.1` was USB-only. Install the release
+bundle's executable and matching skill together; source edits alone do not update
 installed agents. The installer copies the complete skill, including
 `references/sessions-and-motion.md`, into both supported skill locations.
 
