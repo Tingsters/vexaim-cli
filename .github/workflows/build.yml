@@ -31,9 +31,21 @@ jobs:
             ~/.cargo/git
             cli/target
           key: rust-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('cli/Cargo.lock', 'cli/**/Cargo.toml') }}
+          restore-keys: rust-${{ runner.os }}-${{ matrix.target }}-
 
       - name: Build
+        if: runner.os != 'Windows'
         run: cargo build --locked --release --manifest-path cli/Cargo.toml
+      - name: Build portable Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: '-C target-feature=+crt-static'
+        run: |
+          cargo build --locked --release --manifest-path cli/Cargo.toml --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Static Windows release build failed' }
+          New-Item -ItemType Directory -Path cli/target/release -Force | Out-Null
+          Copy-Item cli/target/x86_64-pc-windows-msvc/release/vexaim.exe cli/target/release/vexaim.exe
 
       - name: Test CLI
         run: cargo test --locked --manifest-path cli/Cargo.toml
@@ -98,6 +110,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          python -m pip install pefile==2024.8.26
+          python dev/check-windows-runtime.py cli/target/release/vexaim.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime portability check failed' }
           python scripts/package.py windows-x86_64 cli/target/release/vexaim.exe dist
           ./dev/test-install.ps1 -AssetsDir dist
           powershell -NoProfile -ExecutionPolicy Bypass -File dev/test-install.ps1 -AssetsDir dist

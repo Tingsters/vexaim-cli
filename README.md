@@ -33,7 +33,7 @@ agent skill. The default locations are:
 
 Use `--agents claude` / `-Agents claude` to select an agent, `--dry-run` /
 `-DryRun` to preview, or `--from-dir DIR` / `-FromDir DIR` to use local release
-archives plus checksums. `--version 0.2.0` / `-Version 0.2.0` selects a release.
+archives plus checksums. `--version 0.2.1` / `-Version 0.2.1` selects a release.
 No shell profile or agent settings are changed. To update, download a fresh bundle
 or rerun the installer from a repository checkout; an extracted bundle installs
 its own version offline. Close active sessions first. The robot may be off during installation.
@@ -85,6 +85,8 @@ install with `--from-source` / `-FromSource`. Student installs never fall back
 to compilation. Developer Python tools are optional and not runtime dependencies.
 Tagging a matching `vX.Y.Z` builds complete bundles and publishes them only when
 all shared checks pass. Update `VERSION`, the crate version and lockfile together.
+Windows releases statically link the C runtime; CI checks the executable's actual
+DLL imports so student installs do not need the Visual C++ redistributable.
 
 This independent Apache-2.0 project was extracted from
 [vex-aim-agent-workshop](https://github.com/Tingsters/vex-aim-agent-workshop),
