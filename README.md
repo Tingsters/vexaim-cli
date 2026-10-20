@@ -9,21 +9,37 @@ move, stop, and save native camera photographs. The command is **`vexaim`**.
 
 ## Install
 
-Download the Windows x86_64, Linux x86_64, macOS Apple Silicon or macOS Intel
-bundle from Releases. Extract it and run its installer:
+Paste one command into a terminal. No download, extraction or Git clone is
+needed first. The installer selects the right prebuilt binary for your computer.
+
+**Windows x86_64 — PowerShell 5.1 or newer:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1
+irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1 | iex
 ```
+
+**macOS — Apple Silicon or Intel (Terminal):**
 
 ```sh
-sh install.sh
+curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh
 ```
 
-The extracted bundle installs offline. Alternatively download this repository
-and run its installer to fetch the latest stable release. Archives are checked
-against `SHA256SUMS`; verify a manually downloaded archive before executing files
-from it. Normal installation does not require Rust, Python packages or VEXcode.
+**Linux x86_64 — terminal:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh
+```
+
+These commands download the installer, resolve the latest stable release and
+verify its archive against `SHA256SUMS` before installing. No administrator
+access, Rust, Python packages or VEXcode is needed for installation. The robot
+can be off. Linux USB setup may later need an approved udev rule.
+
+Prefer a manual or offline install? Download your platform's bundle from
+[Releases](https://github.com/Tingsters/vexaim-cli/releases/latest), verify it
+against `SHA256SUMS`, then extract it. In its folder, run
+`powershell -ExecutionPolicy Bypass -File install.ps1` on Windows or
+`sh install.sh` on macOS/Linux. The extracted bundle installs offline.
 
 Each bundle contains a matching executable and general-purpose **`vex-aim`**
 agent skill. The default locations are:
@@ -34,9 +50,15 @@ agent skill. The default locations are:
 Use `--agents claude` / `-Agents claude` to select an agent, `--dry-run` /
 `-DryRun` to preview, or `--from-dir DIR` / `-FromDir DIR` to use local release
 archives plus checksums. `--version 0.2.1` / `-Version 0.2.1` selects a release.
-No shell profile or agent settings are changed. To update, download a fresh bundle
-or rerun the installer from a repository checkout; an extracted bundle installs
-its own version offline. Close active sessions first. The robot may be off during installation.
+No shell profile or agent settings are changed. To update, rerun the one-line
+command for your computer. An extracted bundle installs its own version offline;
+download a fresh bundle when updating offline. Close active sessions first.
+
+To pass options without a checkout, use `curl -fsSL <installer-URL> | sh -s --
+--agents claude` on macOS/Linux, or `& ([scriptblock]::Create((irm
+<installer-URL>))) -Agents claude` in PowerShell, using the URL for your platform
+above. To review the installer first, open that URL or download it without
+executing it.
 
 Start a **new agent session** so it discovers the skill, then try:
 

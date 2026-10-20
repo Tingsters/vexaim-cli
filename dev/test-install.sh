@@ -37,6 +37,16 @@ for d in .agents/skills/vex-aim .claude/skills/vex-aim; do
 done
 check "installed binary runs" "$H1/.agents/skills/vex-aim/bin/vexaim" --version
 
+# Streamed installation must fetch a release even if the caller's directory
+# contains an unrelated executable. No checkout or adjacent bundle is present.
+printf '#!/bin/sh\nprintf "unrelated executable\\n"\n' > "$WORK/vexaim"
+chmod +x "$WORK/vexaim"
+# Keep the pipe to exercise the same invocation as curl | sh.
+# shellcheck disable=SC2002
+stream_install() { (cd "$WORK" && cat "$HERE/install.sh" | sh -s -- --home "$WORK/streamed home"); }
+check "streamed shell fetches the latest release without a checkout" stream_install
+[ -x "$WORK/streamed home/.agents/skills/vex-aim/bin/vexaim" ] && ok "streamed binary installed" || bad "streamed binary missing"
+
 # The downloadable archive is independently installable without this checkout.
 EXTRACTED="$WORK/standalone bundle"; mkdir -p "$EXTRACTED"
 for archive in "$ASSETS"/*.tar.gz; do tar -xzf "$archive" -C "$EXTRACTED"; done

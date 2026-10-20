@@ -7,9 +7,10 @@ contains USB details and platform guidance.
 
 ## Installation
 
-Download the bundle matching your platform, check SHA256SUMS, extract, and run
-its installer. It installs offline without Rust or Python packages. Repository
-installers fetch the latest stable release. -FromDir / --from-dir accepts local
+Use your operating system's [one-line installer](../README.md#install). It needs
+no checkout and selects a checksummed prebuilt release. Alternatively download
+the bundle matching your platform, check SHA256SUMS, extract, and run its
+installer offline without Rust or Python packages. -FromDir / --from-dir accepts local
 release archives and SHA256SUMS; the workshop wrapper also needs the release's
 standalone installers and VERSION. A failed download does not start a build.
 

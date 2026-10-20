@@ -50,6 +50,7 @@ New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
   $bundle=$Tmp
   if ($FromSource) {
+    if (-not $PSScriptRoot -or -not (Test-Path (Join-Path $PSScriptRoot 'cli/Cargo.toml'))) { throw 'source builds require a repository checkout' }
     if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'cargo not found; source builds require an existing Rust toolchain' }
     & cargo build --locked --release --manifest-path (Join-Path $PSScriptRoot 'cli/Cargo.toml')
     if ($LASTEXITCODE -ne 0) { throw 'build failed' }
@@ -57,7 +58,7 @@ try {
     Copy-Item (Join-Path $PSScriptRoot 'VERSION') $Tmp
     Copy-Item -Recurse (Join-Path $PSScriptRoot 'skill') $Tmp
     Copy-Item (Join-Path $PSScriptRoot 'LICENSE'),(Join-Path $PSScriptRoot 'NOTICE.md') $Tmp
-  } elseif (-not $FromDir -and -not $BaseUrl -and (Test-Path (Join-Path $PSScriptRoot 'vexaim.exe'))) {
+  } elseif ($PSScriptRoot -and -not $FromDir -and -not $BaseUrl -and (Test-Path (Join-Path $PSScriptRoot 'vexaim.exe'))) {
     $bundle=$PSScriptRoot
   } else {
     $assets=$FromDir
