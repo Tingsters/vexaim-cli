@@ -84,7 +84,9 @@ else
       valid_version "$VERSION" || die 'invalid release version'
       BASE_URL=$REPO/releases/download/v$VERSION
     fi
-    fetch "$BASE_URL/$ARCHIVE" "$TMP/$ARCHIVE" && fetch "$BASE_URL/SHA256SUMS" "$TMP/SHA256SUMS" || die 'download failed; retry or use --from-dir (no automatic source build)'
+    if ! fetch "$BASE_URL/$ARCHIVE" "$TMP/$ARCHIVE" || ! fetch "$BASE_URL/SHA256SUMS" "$TMP/SHA256SUMS"; then
+      die 'download failed; retry or use --from-dir (no automatic source build)'
+    fi
     assets=$TMP
   fi
   want=$(awk -v name="$ARCHIVE" '$2 == name { print $1 }' "$assets/SHA256SUMS")
@@ -92,7 +94,9 @@ else
   [ "$want" = "$(sha256_of "$assets/$ARCHIVE")" ] || die "checksum mismatch for $ARCHIVE"
   tar -xzf "$assets/$ARCHIVE" -C "$TMP"
 fi
-[ -f "$bundle/skill/vex-aim/SKILL.md" ] && [ -f "$bundle/VERSION" ] || die 'incomplete release bundle: missing skill or VERSION'
+if [ ! -f "$bundle/skill/vex-aim/SKILL.md" ] || [ ! -f "$bundle/VERSION" ]; then
+  die 'incomplete release bundle: missing skill or VERSION'
+fi
 bundled_version=$(tr -d '\r\n' < "$bundle/VERSION")
 valid_version "$bundled_version" || die 'invalid bundled version'
 chmod +x "$bundle/vexaim"
@@ -102,7 +106,7 @@ actual=$("$bundle/vexaim" --version) || die 'the vexaim binary cannot run on thi
 first=$1
 for d do
   stage=$d.stage-$$; backup=$d.backup-$$
-  [ ! -e "$stage" ] && [ ! -e "$backup" ] || die 'staging folder already exists'
+  if [ -e "$stage" ] || [ -e "$backup" ]; then die 'staging folder already exists'; fi
   mkdir -p "$(dirname "$d")"
   cp -R "$bundle/skill/vex-aim" "$stage"; mkdir -p "$stage/bin"
   cp "$bundle/vexaim" "$stage/bin/vexaim"; chmod +x "$stage/bin/vexaim"
