@@ -1,0 +1,104 @@
+name: build and test
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: linux-x86_64,   exe: vexaim }
+          - { os: macos-14,       target: macos-arm64,    exe: vexaim }
+          - { os: macos-15-intel, target: macos-x86_64,   exe: vexaim }
+          - { os: windows-latest, target: windows-x86_64, exe: vexaim.exe }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config shellcheck
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --locked --release --manifest-path cli/Cargo.toml
+
+      - name: Test CLI
+        run: cargo test --locked --manifest-path cli/Cargo.toml
+
+      - name: Test release CLI session reuse across processes (simulated radio)
+        run: cargo test --locked --manifest-path cli/Cargo.toml -p vexaim packaged_cli_reuses_owner_across_processes -- --ignored
+
+      - name: Test USB-only CLI and protocol validation
+        run: |
+          cargo test --locked --manifest-path cli/Cargo.toml -p vexaim --no-default-features
+          cargo test --locked --manifest-path cli/Cargo.toml -p vex-cdc
+          cargo test --locked --manifest-path cli/Cargo.toml -p btleplug --lib
+
+      - name: Test vendored discovery and port configuration
+        run: cargo test --locked --manifest-path cli/Cargo.toml -p vex-v5-serial --no-default-features --features serial
+
+      - name: Test Bluetooth independently and alongside USB
+        run: |
+          cargo test --locked --manifest-path cli/Cargo.toml -p vex-v5-serial --no-default-features --features bluetooth
+          cargo test --locked --manifest-path cli/Cargo.toml -p vex-v5-serial --no-default-features --features serial,bluetooth
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test instructor BLE probe (no hardware or credential access)
+        run: |
+          python -m pip install bleak==3.0.2 keyring==25.7.0
+          python -m unittest discover -s dev -p test_ble_feasibility.py -v
+
+      - name: Test robot motion helpers and independent benchmark evaluation (no hardware)
+        run: |
+          python -m unittest discover -s dev -p test_motion_helpers.py -v
+          python -m unittest discover -s dev -p test_motion_benchmark.py -v
+
+      - name: Test local camera registration spike (no photos or robot)
+        run: |
+          python -m pip install opencv-python-headless==4.13.0.92
+          python -m unittest discover -s dev -p test_turn_frames.py -v
+
+      - name: Test blocking adapter (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo test --locked --manifest-path cli/Cargo.toml --features blocking-io
+          cargo test --locked --manifest-path cli/Cargo.toml -p vex-v5-serial --no-default-features --features blocking-io
+
+      - name: Smoke test the binary
+        shell: bash
+        run: cli/target/release/${{ matrix.exe }} --version
+
+      - name: shellcheck (Linux)
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh scripts/package.sh dev/test-install.sh skill/vex-aim/linux/install-udev.sh
+
+      - name: Package and test the installer (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          sh scripts/package.sh ${{ matrix.target }} cli/target/release/${{ matrix.exe }} dist
+          sh dev/test-install.sh dist
+
+      - name: Package and test the installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/package.py windows-x86_64 cli/target/release/vexaim.exe dist
+          ./dev/test-install.ps1 -AssetsDir dist
+          powershell -NoProfile -ExecutionPolicy Bypass -File dev/test-install.ps1 -AssetsDir dist
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell installer tests failed" }
+
+      - name: Validate skill and release inputs
+        run: python dev/check-release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vexaim-${{ matrix.target }}
+          path: dist/*

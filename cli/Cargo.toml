@@ -1,0 +1,19 @@
+[workspace]
+members = ["vexaim", "vendor/vex-v5-serial", "vendor/vex-cdc", "vendor/btleplug"]
+# Build the combined USB/Bluetooth CLI; --no-default-features keeps USB only.
+default-members = ["vexaim"]
+resolver = "3"
+
+[workspace.dependencies]
+# Vendored AIM USB/Bluetooth transport patches; see vendor/README.md.
+vex-cdc = { version = "0.1.0", path = "vendor/vex-cdc" }
+vex-v5-serial = { version = "0.5.1", path = "vendor/vex-v5-serial" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+[patch.crates-io]
+# AIM advertises indications but delivers its console only through notifications.
+btleplug = { path = "vendor/btleplug" }

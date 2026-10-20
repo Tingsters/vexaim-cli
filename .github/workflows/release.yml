@@ -1,0 +1,42 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: parts
+      - name: Verify tag and assemble complete release
+        shell: bash
+        run: |
+          version=$(cat VERSION)
+          test "$GITHUB_REF_NAME" = "v$version"
+          mkdir out
+          cp parts/*/vexaim-* out/
+          cat parts/*/SHA256SUMS > out/SHA256SUMS
+          test "$(wc -l < out/SHA256SUMS)" -eq 4
+          cp install.sh install.ps1 VERSION out/
+          cd out
+          sha256sum install.sh install.ps1 VERSION >> SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Publish all assets together
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); else flags+=(--latest); fi
+          gh release create "$GITHUB_REF_NAME" out/* --draft --verify-tag --title "vexaim $GITHUB_REF_NAME" \
+            --notes-file docs/release-notes.md "${flags[@]}"
+          gh release edit "$GITHUB_REF_NAME" --draft=false "${flags[@]}"

@@ -1,0 +1,13 @@
+# build output
+target/
+dist/
+# local work
+.showtail/
+.venv/
+__pycache__/
+*.log
+# camera captures and other artifacts
+vexaim-snap-*.jpg
+*.jpg
+*.png
+.DS_Store

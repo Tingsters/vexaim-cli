@@ -1,0 +1,7 @@
+# VEX AIM robot (2888:0700): keep ModemManager from probing its serial ports with AT commands.
+# Without this, ModemManager holds /dev/ttyACM* busy for ~25 s after each plug-in and injects
+# "AT" lines into the robot's MicroPython REPL. Also grants the logged-in user access (uaccess)
+# so students do not need to be in the dialout group.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2888", ATTRS{idProduct}=="0700", ENV{ID_MM_DEVICE_IGNORE}="1", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2888", ATTRS{idProduct}=="0700", ENV{ID_MM_DEVICE_IGNORE}="1", TAG+="uaccess"
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="2888", ATTRS{idProduct}=="0700", TAG+="uaccess"
