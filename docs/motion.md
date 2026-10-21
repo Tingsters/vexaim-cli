@@ -23,7 +23,7 @@ standalone Bluetooth command cannot take over an existing named session.
 Starting/reusing a session is an agent task, not a student command. Agent-facing
 syntax and PowerShell examples live in the [session reference](../skill/vex-aim/references/sessions-and-motion.md).
 The session remains open across prompts; close at actual wrap-up. An idle owner
-exits after 30 minutes without client work. The unreleased 0.3.0-rc.6 candidate
+exits after 30 minutes without client work. The experimental 0.3.0-rc.6 release
 sends a separate acknowledged System Alive request every two seconds,
 independently of LCD mode. This does not renew owner inactivity or motion deadlines.
 Hardware still shut down despite successful replies, so this is not a verified

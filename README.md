@@ -67,26 +67,28 @@ above. To review the installer first, open that URL or download it without
 executing it.
 
 To try the device commands, agent camera workflow and Bluetooth display in
-**0.3.0-rc.5**, select the published prerelease explicitly. Windows PowerShell:
+**0.3.0-rc.6**, select the experimental prerelease explicitly. Windows PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1))) -Version 0.3.0-rc.5
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/v0.3.0-rc.6/install.ps1))) -Version 0.3.0-rc.6
 ```
 
 macOS (Apple Silicon or Intel) and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh -s -- --version 0.3.0-rc.5
+curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/v0.3.0-rc.6/install.sh | sh -s -- --version 0.3.0-rc.6
 ```
 
 Both commands verify the release archive and install its matching basic skill.
 The [hardware notes](docs/hardware-notes.md) distinguish Windows robot checks
 from CI coverage. Unversioned installers continue to select the stable release.
 
-The rc.6 keepalive investigation remains unreleased: acknowledged link probes
-did not prevent shutdown on hardware. See the
-[investigation](docs/keepalive-investigation.md); do not treat its successful
-poll counts as proof that the AIM will stay awake.
+This release supports cross-platform verification; macOS hardware remains
+unverified. Follow the [Mac verification checklist](docs/macos-verification.md).
+The rc.6 keepalive investigation is not a verified sleep fix: acknowledged link
+probes did not prevent shutdown on hardware. See the
+[investigation](docs/keepalive-investigation.md); successful poll counts do not
+prove that the AIM will stay awake.
 
 Start a **new agent session** so it discovers the skill, then try:
 

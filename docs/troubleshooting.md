@@ -40,7 +40,7 @@ find nothing; the AIM can sleep while idle. A cached session status is not a
 fresh live check. Pairing codes belong in a masked local terminal, not chat.
 
 Sleep during active Bluetooth REPL work is still under investigation. The
-unreleased rc.6 candidate sends acknowledged System Alive requests every two
+experimental rc.6 release sends acknowledged System Alive requests every two
 seconds, but hardware still lost the link around five minutes despite 92
 successful polls. Neither that probe nor the earlier display-only heartbeat is
 a verified sleep fix. `keepalive.active` and `healthy` describe link monitoring;

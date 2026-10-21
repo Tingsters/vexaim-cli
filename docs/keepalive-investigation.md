@@ -61,8 +61,9 @@ link loss. The harness detected three subsequent failures and stopped after 187
 seconds; live info could not reach the robot and the next scan found no match.
 The two quiet intervals and camera/display phase therefore did not complete.
 System Alive is a confirmed link probe, but is not a proven AIM inactivity reset.
-The candidate must remain unreleased as a sleep fix. A passing fake radio test
-cannot override this result.
+The candidate must not be presented as a sleep fix. The experimental rc.6 release
+supports cross-platform investigation, including Mac hardware verification.
+A passing fake radio test cannot override this failed endurance result.
 
 Stationary developer probes compared the already sourced AIM native
 flags/status requests, `0x56/0x20` and `0x56/0x22`, through one BLE connection:

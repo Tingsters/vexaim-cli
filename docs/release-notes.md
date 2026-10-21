@@ -1,6 +1,24 @@
-VEX AIM device commands and agent camera observations — prerelease.
+vexaim 0.3.0-rc.6 — experimental cross-platform verification prerelease.
 
-- Unreleased 0.3.0-rc.6 investigates session liveness separately from display
+Prebuilt Apple Silicon Mac, Intel Mac, Windows x86_64 and Linux x86_64 bundles
+include the matching agent skill. macOS robot verification is still pending;
+follow the [Mac checklist](https://github.com/Tingsters/vexaim-cli/blob/v0.3.0-rc.6/docs/macos-verification.md).
+**Sleep prevention remains unresolved.** This is an investigation release,
+not a verified sleep fix. Unversioned installers still select the stable release.
+
+macOS/Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/v0.3.0-rc.6/install.sh | sh -s -- --version 0.3.0-rc.6
+```
+
+Windows PowerShell:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/v0.3.0-rc.6/install.ps1))) -Version 0.3.0-rc.6
+```
+
+- 0.3.0-rc.6 investigates session liveness separately from display
   ownership. Hardware acceptance failed: 92 acknowledged System Alive polls
   did not prevent the observed shutdown. Do not publish as a sleep fix.
   The candidate sends the
@@ -49,8 +67,7 @@ experimental. Custom asset uploads are disabled until firmware storage encoding
 is verified; the official uploader remains supported. macOS hardware, two-robot
 link acceptance and broader motion accuracy are not certified by CI.
 
-When published, all four bundles contain a matching binary and generic skill.
-The rc.6 candidate is currently held for failed hardware acceptance; use a local
-CI bundle only for investigation. Stable one-line installers keep selecting the
-latest stable release. Start a new agent session after installation. Keep images local and
+All four bundles contain a matching binary and generic skill. Developer probes
+remain source-only investigation tools, not student dependencies or verified
+workarounds. Start a new agent session after installation. Keep images local and
 supervise movement. No robot firmware or saved project changes are required.

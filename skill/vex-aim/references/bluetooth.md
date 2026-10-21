@@ -33,7 +33,7 @@ needed. Windows captures have been verified; other OS/firmware combinations need
 their own hardware evidence. Snapshot transfers take several seconds and are
 optional; do not insert one as a prerequisite for every movement.
 
-The unreleased 0.3.0-rc.6 candidate sends and acknowledges the existing System
+The experimental 0.3.0-rc.6 release sends and acknowledges the existing System
 Alive request every two seconds on AIM REV1 / BLE 1.0.0.b0. The tested robot still
 lost power/connectivity around five minutes despite 92 acknowledged replies.
 This is link health monitoring, not verified sleep prevention; metadata reports

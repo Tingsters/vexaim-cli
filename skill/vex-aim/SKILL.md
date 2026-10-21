@@ -20,7 +20,7 @@ named session and retain its returned ID across requests. Startup already reads
 live status; do not scan, reconnect and run doctor before every healthy action.
 Cached session status does not prove the robot is still awake.
 
-The unreleased rc.6 candidate probes Bluetooth link health with acknowledged
+The experimental rc.6 release probes Bluetooth link health with acknowledged
 System Alive requests every two seconds. Hardware testing showed that the AIM
 still shut down despite successful replies: `keepalive.active` and `healthy`
 do not establish sleep prevention (`prevents_sleep:false`). Do not promise that

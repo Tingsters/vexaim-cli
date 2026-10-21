@@ -37,7 +37,7 @@ commands refuse to take over an active session; use its ID instead.
 No separate doctor/info before each movement when the current session is healthy.
 Never call session close at the end of every prompt. Close when robot work is
 finished or before a fresh connection after sleep/failure. Idle owners close after
-30 minutes without client work. The unreleased 0.3.0-rc.6 candidate sends
+30 minutes without client work. The experimental 0.3.0-rc.6 release sends
 acknowledged System Alive requests every two seconds, independently of
 the LCD and without renewing this 30-minute deadline. Stop releases display and
 movement but preserves session liveness. Close ends both. This does not extend a
