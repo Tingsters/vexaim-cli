@@ -3,9 +3,11 @@
 Translate ordinary prompts into robot actions. These commands are agent tools;
 users need no calibration mat, agent settings or Python dependencies.
 
-## One Bluetooth connection
+## One connection
 
-Requires vexaim 0.2.0 or newer with `session` in `--help`.
+Bluetooth requires vexaim 0.2.0 or newer; USB sessions and native catalogue actions
+require the matching 0.3 command release. For USB start with `vexaim --json session
+start` (optionally `--device N`). For Bluetooth use the named start below.
 Use this skill's installed executable after installing its matching release;
 a repository checkout alone does not update it. Pair as described in `bluetooth.md`.
 Use the exact robot name; do not fall back to another robot/USB.
@@ -58,8 +60,9 @@ ordinary request or silently double the requested movement.
 ```
 
 Angle is robot-relative: 0 forward, 90 right, 180 backward. Move speed defaults to
-80 mm/s (`--speed 40..100`); distance is 0.1..500 mm. Turn angle is 0.1..360
-degrees, speed 30..90 DPS. Helpers reject nonfinite/out-of-range values before
+80 mm/s (native ceiling 200 mm/s); distance has no 500 mm cap. Turn angle is
+0.1..360 degrees in the legacy helper, native speed ceiling 150 DPS. Defaults
+remain conservative. Helpers reject nonfinite/out-of-range values before
 motion. Compose finite actions for requests such as a short dance or a square;
 these tools do not restrict students to the example prompts. Bound custom Python
 loops, include `finally: robot.stop_all_movement()`, and choose reasonable small

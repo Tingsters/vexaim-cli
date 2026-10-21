@@ -11,7 +11,9 @@ pub const CTRL_B: u8 = 0x02; // leave raw REPL
 pub const CTRL_C: u8 = 0x03; // interrupt
 pub const CTRL_D: u8 = 0x04; // execute (raw REPL)
 
-pub const PREAMBLE: &str = "try:\n    robot\nexcept NameError:\n    from vex import *\n    from vex_globals import *\n    robot = Robot()\n";
+// An existing robot does not imply constants were imported in this REPL.
+// Refresh API names on every prepared exec, but preserve the robot instance.
+pub const PREAMBLE: &str = "from vex import *\nfrom vex_globals import *\ntry:\n    robot\nexcept NameError:\n    robot = Robot()\n";
 
 #[derive(Debug)]
 pub enum Fail {
@@ -23,6 +25,7 @@ pub enum Fail {
     NotRepl(String),
     Io(String),
     Bluetooth(String),
+    Session(String),
 }
 
 impl std::fmt::Display for Fail {
@@ -30,7 +33,7 @@ impl std::fmt::Display for Fail {
         match self {
             Fail::NoRobot => write!(
                 f,
-                "no VEX device found: check the USB cable is plugged in and carries data, and the robot is on"
+                "no VEX AIM found: check the USB cable is plugged in and carries data, and the robot is on"
             ),
             Fail::Ambiguous(n) => write!(
                 f,
@@ -56,6 +59,7 @@ impl std::fmt::Display for Fail {
             ),
             Fail::Io(e) => write!(f, "robot I/O error: {e}"),
             Fail::Bluetooth(e) => write!(f, "Bluetooth: {e}"),
+            Fail::Session(e) => write!(f, "Session: {e}"),
         }
     }
 }
@@ -67,7 +71,7 @@ fn is_disconnect(e: &str) -> bool {
 
 pub fn devices() -> Result<Vec<SerialDevice>, Fail> {
     match serial::find_devices() {
-        Ok(d) => Ok(d),
+        Ok(d) => Ok(d.into_iter().filter(|dev|matches!(&dev.system_port().port_info.port_type,serialport::SerialPortType::UsbPort(usb) if usb.vid==0x2888 && usb.pid==0x0700)).collect()),
         // nothing recognisable is plugged in (the library reports this as a type-inference failure)
         Err(SerialError::CouldntInferTypes) => Ok(Vec::new()),
         Err(e) => Err(Fail::Io(e.to_string())),
@@ -127,7 +131,15 @@ pub struct ExecResult {
     pub elapsed: Duration,
 }
 
-fn is_timeout(e: &(dyn std::error::Error + 'static)) -> bool {
+pub(crate) fn is_timeout(e: &(dyn std::error::Error + 'static)) -> bool {
+    #[cfg(feature = "bluetooth")]
+    if let Some(inner) = e.downcast_ref::<vex_v5_serial::generic::GenericError>() {
+        return match inner {
+            vex_v5_serial::generic::GenericError::SerialError(e) => is_timeout(e),
+            vex_v5_serial::generic::GenericError::BluetoothError(e) => is_timeout(e),
+            _ => false,
+        };
+    }
     if let Some(SerialError::IoError(io)) = e.downcast_ref::<SerialError>() {
         return io.kind() == std::io::ErrorKind::TimedOut;
     }

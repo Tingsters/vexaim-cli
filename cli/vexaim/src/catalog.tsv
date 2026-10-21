@@ -1,0 +1,146 @@
+# command|native method|kind|positional parameters (name:type[=default])
+robot name|robot.get_name|read|
+robot battery|robot.get_battery_level|read|
+robot stopped|robot.is_stopped|read|
+robot x-position|robot.get_x_position|read|
+robot y-position|robot.get_y_position|read|
+robot set-xy-position|robot.set_xy_position|reference|x:number y:number heading:optional-number=null
+battery level|robot.battery.level|read|
+battery voltage|robot.battery.voltage|read|units:enum(MV,VOLT)=MV
+battery current|robot.battery.current|read|units:enum(AMP)=AMP
+battery status|robot.battery.status|read|
+motion move-for|robot.move_for|motion|distance:positive angle:number=0
+motion move-at|robot.move_at|continuous|angle:number
+motion turn-for|robot.turn_for|motion|direction:enum(LEFT,RIGHT) degrees:positive
+motion turn-to|robot.turn_to|motion|heading:heading
+motion turn|robot.turn|continuous|direction:enum(LEFT,RIGHT)
+motion move-with-vectors|robot.move_with_vectors|continuous|forward:vector rightward:vector rotation:vector
+motion spin-wheels|robot.spin_wheels|experimental|wheel1:vector wheel2:vector wheel3:vector
+motion set-move-velocity|robot.set_move_velocity|setting|velocity:move-speed units:enum(MMPS,PERCENT)=MMPS
+motion set-turn-velocity|robot.set_turn_velocity|setting|velocity:turn-speed units:enum(DPS,PERCENT)=DPS
+motion is-move-active|robot.is_move_active|read|
+motion is-turn-active|robot.is_turn_active|read|
+motion is-stopped|robot.is_stopped|read|
+motion stop-all-movement|robot.stop_all_movement|stop|
+inertial installed|robot.inertial.installed|read|
+inertial get-heading|robot.inertial.get_heading|read|
+inertial get-rotation|robot.inertial.get_rotation|read|
+inertial get-roll|robot.inertial.get_roll|read|
+inertial get-pitch|robot.inertial.get_pitch|read|
+inertial get-yaw|robot.inertial.get_yaw|read|
+inertial orientation|robot.inertial.orientation|read|axis:enum(ROLL,PITCH,YAW)
+inertial get-turn-rate|robot.inertial.get_turn_rate|read|axis:enum(X_AXIS,Y_AXIS,Z_AXIS)=Z_AXIS
+inertial get-acceleration|robot.inertial.get_acceleration|read|axis:enum(X_AXIS,Y_AXIS,Z_AXIS,FORWARD,RIGHTWARD,DOWNWARD)=FORWARD
+inertial set-heading|robot.inertial.set_heading|reference|degrees:heading
+inertial reset-heading|robot.inertial.reset_heading|reference|
+inertial set-rotation|robot.inertial.set_rotation|reference|degrees:number
+inertial reset-rotation|robot.inertial.reset_rotation|reference|
+inertial calibrate|robot.inertial.calibrate|calibrate|
+inertial is-calibrating|robot.inertial.is_calibrating|read|
+inertial set-turn-type|robot.inertial.set_turn_type|reference|mode:enum(LEFT,RIGHT)
+inertial get-turn-type|robot.inertial.get_turn_type|read|
+inertial set-crash-sensitivity|robot.inertial.set_crash_sensitivity|setting|sensitivity:enum(LOW,NORMAL,HIGH)
+inertial collision-data|robot.inertial.collision_data|read|
+vision installed|robot.vision.installed|read|
+vision get-data|robot.vision.get_data|vision|target:target=ALL_AIOBJS count:count=8
+vision take-snapshot|robot.vision.take_snapshot|vision|target:target=ALL_AIOBJS count:count=8
+vision object-count|robot.vision.object_count|read|
+vision largest-object|robot.vision.largest_object|vision|
+vision tag-detection|robot.vision.tag_detection|setting|enabled:bool
+vision color-detection|robot.vision.color_detection|setting|enabled:bool merge:bool=false
+vision model-detection|robot.vision.model_detection|setting|enabled:bool
+vision set-tag-family|robot.vision.set_tag_family|setting|family:integer
+vision start-awb|robot.vision.start_awb|setting|
+vision status-overlay|robot.vision.status_overlay|setting|enabled:bool
+vision usb-overlay|robot.vision.usb_overlay|setting|enabled:bool
+vision color-description|robot.vision.color_description|color-description|index:color-index red:byte green:byte blue:byte hue:hue saturation:saturation
+vision code-description|robot.vision.code_description|code-description|index:code-index colors:colors
+cargo has-any-barrel|robot.vision.has_any_barrel|read|
+cargo has-orange-barrel|robot.vision.has_orange_barrel|read|
+cargo has-blue-barrel|robot.vision.has_blue_barrel|read|
+cargo has-sports-ball|robot.vision.has_sports_ball|read|
+kicker kick|robot.kicker.kick|actuator|strength:enum(SOFT,MEDIUM,HARD)=SOFT
+kicker place|robot.kicker.place|actuator|
+led on|robot.led.on|write|leds:leds color:color
+led set-light-color|robot.led.set_light_color|write|leds:leds color:color
+led off|robot.led.off|write|leds:leds=ALL_LEDS
+led get-light-color|robot.led.get_light_color|read|led:enum(LED1,LED2,LED3,LED4,LED5,LED6)
+screen print|robot.screen.print|write|text:text
+screen print-at|robot.screen.print_at|print-at|text:text x:number y:number
+screen set-cursor|robot.screen.set_cursor|write|row:positive column:positive
+screen next-row|robot.screen.next_row|write|
+screen clear-row|robot.screen.clear_row|write|row:positive
+screen get-row|robot.screen.get_row|read|
+screen get-column|robot.screen.get_column|read|
+screen set-origin|robot.screen.set_origin|write|x:number y:number
+screen clear-screen|robot.screen.clear_screen|write|color:color=BLACK
+screen set-font|robot.screen.set_font|write|font:enum(MONO12,MONO15,MONO20,MONO24,MONO30,MONO36,MONO40,MONO60,PROP20,PROP24,PROP30,PROP36,PROP40,PROP60)
+screen set-pen-width|robot.screen.set_pen_width|write|width:positive
+screen set-pen-color|robot.screen.set_pen_color|write|color:color
+screen set-fill-color|robot.screen.set_fill_color|write|color:color
+screen draw-pixel|robot.screen.draw_pixel|write|x:number y:number
+screen draw-line|robot.screen.draw_line|write|x1:number y1:number x2:number y2:number
+screen draw-rectangle|robot.screen.draw_rectangle|write|x:number y:number width:positive height:positive
+screen draw-circle|robot.screen.draw_circle|write|x:number y:number radius:positive
+screen show-file|robot.screen.show_file|write|slot:image-slot x:number=0 y:number=0 center:bool=false
+screen set-clip-region|robot.screen.set_clip_region|write|x:number y:number width:positive height:positive
+screen pressing|robot.screen.pressing|read|
+screen x-position|robot.screen.x_position|read|
+screen y-position|robot.screen.y_position|read|
+screen show-emoji|robot.screen.show_emoji|write|emoji:emoji look:enum(LOOK_FORWARD,LOOK_LEFT,LOOK_RIGHT)=LOOK_FORWARD
+screen hide-emoji|robot.screen.hide_emoji|write|
+screen show-aivision|robot.screen.show_aivision|write|
+screen hide-aivision|robot.screen.hide_aivision|write|
+screen screenshot|host.screen_capture|host|output:text
+sound play|robot.sound.play|write|sound:sound volume:percent=50
+sound play-file|robot.sound.play_file|write|slot:sound-slot volume:percent=50
+sound play-note|robot.sound.play_note|write|note:note length:milliseconds volume:percent=50
+sound is-active|robot.sound.is_active|read|
+sound stop|robot.sound.stop|write|
+controller is-connected|onestick.is_connected|read|
+controller get-battery-level|onestick.get_battery_level|read|
+controller axis1-position|onestick.axis1.position|read|
+controller axis2-position|onestick.axis2.position|read|
+controller axis1-value|onestick.axis1.value|read|
+controller axis2-value|onestick.axis2.value|read|
+controller button-up|onestick.button_up.pressing|read|
+controller button-down|onestick.button_down.pressing|read|
+controller button-left|onestick.button_left.pressing|read|
+controller button-right|onestick.button_right.pressing|read|
+controller button-stick|onestick.button_stick.pressing|read|
+link is-connected|robot.link.is_connected|read|
+link is-message-available|robot.link.is_message_available|read|
+link send-message|robot.link.send_message|write|message:text data:json=[]
+link get-message|robot.link.get_message|read|timeout:milliseconds=1000
+link get-message-and-data|robot.link.get_message_and_data|read|timeout:milliseconds=1000
+timer time|robot.timer.time|read|units:enum(MSEC,SECONDS)=MSEC
+timer value|robot.timer.value|read|
+timer reset|robot.timer.reset|write|
+timer clear|robot.timer.clear|write|
+timer system|robot.timer.system|read|
+timer system-high-res|robot.timer.system_high_res|read|
+actions list|_vx_actions|actions|
+actions status|_vx_action_status|actions|id:text
+actions wait|_vx_action_wait|actions|id:text
+actions cancel|_vx_action_cancel|actions|id:text
+events watch|_vx_watch|events|source:event
+macro act-happy|_vx_macro|macro|behavior:text=happy
+macro act-sad|_vx_macro|macro|behavior:text=sad
+macro act-silly|_vx_macro|macro|behavior:text=silly
+macro act-angry|_vx_macro|macro|behavior:text=angry
+macro act-excited|_vx_macro|macro|behavior:text=excited
+macro turn-right-until-sports-ball|_vx_macro|macro|behavior:text=search-right target:target=SPORTS_BALL
+macro turn-left-until-sports-ball|_vx_macro|macro|behavior:text=search-left target:target=SPORTS_BALL
+macro turn-right-until-orange-barrel|_vx_macro|macro|behavior:text=search-right target:target=ORANGE_BARREL
+macro turn-left-until-orange-barrel|_vx_macro|macro|behavior:text=search-left target:target=ORANGE_BARREL
+macro turn-right-until-blue-barrel|_vx_macro|macro|behavior:text=search-right target:target=BLUE_BARREL
+macro turn-left-until-blue-barrel|_vx_macro|macro|behavior:text=search-left target:target=BLUE_BARREL
+macro turn-right-until-aim-robot|_vx_macro|macro|behavior:text=search-right target:target=AIM_ROBOT
+macro turn-left-until-aim-robot|_vx_macro|macro|behavior:text=search-left target:target=AIM_ROBOT
+macro turn-right-until-apriltag|_vx_macro|macro|behavior:text=search-right target:target=ALL_TAGS
+macro turn-left-until-apriltag|_vx_macro|macro|behavior:text=search-left target:target=ALL_TAGS
+macro get-sports-ball|_vx_macro|macro|behavior:text=collect target:target=SPORTS_BALL
+macro get-orange-barrel|_vx_macro|macro|behavior:text=collect target:target=ORANGE_BARREL
+macro get-blue-barrel|_vx_macro|macro|behavior:text=collect target:target=BLUE_BARREL
+macro move-to-aim-robot|_vx_macro|macro|behavior:text=approach target:target=AIM_ROBOT
+macro move-to-apriltag|_vx_macro|macro|behavior:text=approach target:target=ALL_TAGS

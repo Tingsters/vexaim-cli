@@ -253,6 +253,37 @@ async fn protocol_rejects_oversized_input_before_allocating_body() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn start_waits_for_slow_closing_owner_without_spawning_a_competitor() {
+    tokio::task::LocalSet::new().run_until(async {
+        let name = format!("test-closing-{}", std::process::id());
+        let id = ipc::id_for(&name).unwrap();
+        let mut listener = ipc::Listener::bind(&id).await.unwrap();
+        let cache = Rc::new(RefCell::new(json!({
+            "ok":true,"protocol":PROTOCOL,"name":name,"state":"closing"
+        })));
+        let (normal, _normal_rx) = mpsc::unbounded_channel();
+        let (priority, _priority_rx) = mpsc::unbounded_channel();
+        let listener_cache = cache.clone();
+        let listening = tokio::task::spawn_local(async move {
+            while let Ok(stream) = listener.accept().await {
+                tokio::task::spawn_local(handle(stream, normal.clone(), priority.clone(),
+                    listener_cache.clone(), Rc::new(Cell::new(false))));
+            }
+        });
+        // A legitimate successor becomes ready later than the old fixed 500 ms.
+        let ready = tokio::task::spawn_local(async move {
+            tokio::time::sleep(Duration::from_millis(1100)).await;
+            cache.borrow_mut()["state"] = json!("ready");
+        });
+        let value = tokio::time::timeout(Duration::from_secs(4), start(&name)).await.unwrap().unwrap();
+        assert_eq!(value["state"], "ready");
+        ready.await.unwrap();
+        listening.abort();
+        let _ = listening.await;
+    }).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 #[ignore = "build the release CLI first; this launches real short-lived clients against a fake radio owner"]
 async fn packaged_cli_reuses_owner_across_processes() {
     tokio::task::LocalSet::new()

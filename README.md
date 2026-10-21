@@ -3,6 +3,12 @@
 Control a VEX AIM robot over USB or Bluetooth. Run MicroPython, read sensors,
 move, stop, and save native camera photographs. The command is **`vexaim`**.
 
+The next command release adds the [VEX AIM device catalogue](docs/device-commands.md)
+and [agent image workflow](skill/vex-aim/references/agent-vision.md): strafing and
+vector motion, sensors, vision, LEDs, screen, sound and bounded actions. Use a
+matching candidate binary/skill to try it. Firmware-gated features report their
+limits; stable installers continue to select the latest stable release.
+
 **[Downloads and installation](https://tingsters.github.io/vexaim-cli/)** ·
 [Latest release](https://github.com/Tingsters/vexaim-cli/releases/latest) ·
 [Command and agent guidance](skill/vex-aim/SKILL.md)
@@ -59,6 +65,23 @@ To pass options without a checkout, use `curl -fsSL <installer-URL> | sh -s --
 <installer-URL>))) -Agents claude` in PowerShell, using the URL for your platform
 above. To review the installer first, open that URL or download it without
 executing it.
+
+To try the device commands, agent camera workflow and Bluetooth display fix in
+**0.3.0-rc.5**, select the prerelease explicitly. Windows PowerShell:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1))) -Version 0.3.0-rc.5
+```
+
+macOS (Apple Silicon or Intel) and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh -s -- --version 0.3.0-rc.5
+```
+
+Both commands verify the release archive and install its matching basic skill.
+The [hardware notes](docs/hardware-notes.md) distinguish Windows robot checks
+from CI coverage. Unversioned installers continue to select the stable release.
 
 Start a **new agent session** so it discovers the skill, then try:
 

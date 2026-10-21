@@ -1,5 +1,164 @@
 # Hardware evidence
 
+## Bluetooth display lifecycle candidate (2026-10-20)
+
+Local Windows 0.3.0-rc.5 now displays named HAPPY, text and shapes over Bluetooth
+on AIM6518 (AIM REV1 / BLE 1.0.0.b0), without USB, saved projects or firmware
+changes. This is local candidate evidence, not a published release or CI hardware
+certification. See [protocol provenance and investigation](display-investigation.md).
+
+Normalized Python drawing alone left the LCD on its menu. Source-derived remote
+start briefly showed a default face/chirp, but the program display disappeared
+before drawing when the probe waited three seconds for an ACK. No 0x57 ACKs
+arrived, despite the physical effect. Inspection of official VEXcom's delay
+function revealed read-only remote-status polls every 100 ms. With that keepalive,
+both start-before-REPL and start-after-REPL variants displayed the drawing and
+emoji. The operator confirmed blue background, white circle, readable LCD TEST,
+HAPPY and restoration of the drawing after hide. Numeric emoji 6 produced a
+sunglasses face in the probe; named firmware constants produced HAPPY. White
+text on white fill had independently caused a solid white bar.
+
+The static-CRT portable Windows binary passed its PE dependency check (15 OS
+imports; no Visual C++ runtime DLLs) and 33 installer assertions under PowerShell
+5.1. Its normal screen command held HAPPY on the physical LCD. A local 240x240
+LCD PNG (10,013 bytes) completed in 41.625 seconds with control ready. The first
+integrated transfer had exceeded 45 seconds because every heartbeat also read
+the pairing characteristic; the fixed read-only keepalive avoids that overhead.
+Ordinary commands still check authentication. LCD transfers have a separate
+55-second budget; native JPEG transfers retain 45 seconds.
+
+Three connections with the final portable implementation passed display checks,
+including a user-confirmed fresh boot and a manually selected Dashboard/AI Vision
+camera view. HAPPY replaced that view, then the blue LCD TEST drawing appeared;
+the operator confirmed both. Two further reconnects repeated HAPPY, drawing,
+stop and live info successfully. HAPPY commands took about 0.54-0.56 seconds;
+reconnect startup remained about 18.5-18.8 seconds. Reuse a session for ordinary
+prompts. The original Robot object and marker 6518 survived activation and drawing.
+
+During active display, native 640x480 JPEGs completed in 6.489 seconds (17,359
+bytes) and 7.805 seconds (21,170 bytes), with control ready. The agent opened the
+images and recognized the VEX controller/desk scene. Native heading, forward
+acceleration, cargo and vision queries passed. Camera capture after stop also
+passed in 6.500 seconds (17,503 bytes), after the required live info recovery
+check. The first acceptance script omitted that recovery step and was correctly
+rejected; a corrected follow-up passed. Photos/reports stay local and ignored.
+
+Position stayed (0,0); heading changed only by about 0.007 degrees across the
+clean-boot display/camera sequence, with no calibration. Final repeated checks
+reported stopped at battery 27%, heading about 1.094 degrees and position (0,0).
+No wheel or kicker commands ran. All sessions were explicitly closed. Menu-exit
+reactivation, idle expiry, disconnects and no-replay behavior also have simulated
+regressions; the physical takeover test used AI Vision as its starting screen.
+
+## Device-command candidate (2026-10-20)
+
+### Published rc.3 stationary follow-up
+
+The unmodified, checksum-verified CI Windows 0.3.0-rc.3 binary connected to
+AIM6518 in 18.794 seconds at battery 64%, stopped true. Its native camera
+observation returned a 21,441-byte 640x480 JPEG in 7.976 seconds, with control
+ready and stopped before/after. Codex opened the image in the same turn and
+recognized the white VEX controller.
+
+The acceptance run recorded 52 checks: 48 succeeded; robot-name and two link
+queries were explicitly unsupported, and the happy emoji was rejected because
+the dispatcher did not search the firmware's `Emoji` / `EmojiLook` aliases.
+The read-only sweep included every acceleration/gyro axis, orientation, vision,
+cargo, One Stick axes/buttons/battery, touchscreen coordinates/cursor, battery
+and timer. Disconnected-controller and empty-cargo results do not verify real
+button presses or loaded cargo. The live capability report transferred intact.
+
+Adding the two emoji aliases to the transient helper made the native CLI
+`screen show-emoji happy` return successfully. LCD screenshots after a circle
+and happy emoji both remained the home menu (240x240 PNG, 13,296 bytes; 38.654 s
+and 39.885 s). After a later reconnect, a six-second transient Python sequence
+set blue LEDs, played CHIRP at volume 25, requested a happy emoji for three
+seconds, then hid it and requested a white circle for three seconds. The user
+confirmed blue lights and audible chirp, but the LCD stayed on its menu even
+during execution. Lights/sound were cleaned up and live info confirmed stopped
+at battery 60%. Visible display output remains unresolved in this REPL workflow;
+the API acknowledgement alone is not acceptance. No wheel or kicker movement ran
+during those stationary checks.
+
+After fresh physical readiness on a clear floor, the published rc.3 owner ran
+exactly one 15-degree right turn, 50 mm forward move, 20 mm left strafe, a
+300 ms `(0,10,0)` native vector move, one SOFT kick and place. All six commands
+completed successfully; stopped state was confirmed after each drive action
+and at the end. Drive action times, including cleanup, were 893, 1,058, 629 and
+533 ms respectively. The turn's gyro delta was about +15.30 degrees. The user
+confirmed the movements and kicker looked right. This confirms the requested
+directions and visible actuator behavior, not independently measured distances
+or accuracy. Final battery was 55%. No failed movement was replayed.
+
+The retry also exposed a preamble defect: a retained `robot` caused API imports
+to be skipped, leaving ALL_LEDS/HAPPY undefined. Explicit imports restored both
+on the live robot. The fix always refreshes VEX API imports while constructing
+Robot only when absent. Tests cover both retained and newly constructed robots.
+The acceptance harness now cleans up every effect in a finally block, reports
+cleanup failures, distinguishes unsupported from failed checks, and cannot
+report a completed sweep as passing when a read failed. These changes and the
+emoji aliases are in rc.4; live evidence above uses rc.3 and transient fixes.
+
+### Earlier rc.2 checks
+
+The published CI-built 0.3.0-rc.2 Windows candidate connected to AIM6518 over
+Bluetooth in 18.207 seconds (discovery 8.039 s, connection 3.691 s, preparation
+6.476 s), reporting battery 71% and stopped true. Windows showed no present AIM
+USB serial endpoints. Two native camera observations returned fully decoded
+640x480 JPEGs: 21,970 bytes in 8.015 s and 21,443 bytes in 8.066 s. Both were
+opened in Codex's image reader within the turn and visibly showed the white VEX
+controller. Both confirmed control ready and stopped before/after; the second
+included a successful empty native detection result. Agent recognition does not
+depend on the robot's limited object classes.
+
+The test exposed two defects missed by desktop simulation: AIM MicroPython's
+`str.endswith` rejects a tuple, breaking vision commands, and 256-byte/35 ms
+printing truncated the live capability report. After refreshing only the
+transient helpers with the source fixes, get-data returned an empty list,
+largest-object returned null for an empty scene, and take-snapshot returned an
+object with all 12 fields. That detection is not a verified classification of
+the controller. A 6,000-character patterned payload transferred exactly with
+128-byte/100 ms pacing (5.053 s), and a complete 4,064-character capability report
+followed (4.218 s). Of 118 unique native methods, six were absent: robot.get_name
+and the five robot.link methods. These remain unsupported, never fabricated.
+
+Orientation, acceleration on all three axes, Z turn rate, all four cargo
+predicates, native vision count, controller connection/axis, touchscreen pressed
+state and cursor row/column, battery voltage/current and timer reads returned
+successfully. The controller was disconnected and cargo predicates were false;
+this does not verify button handling or detection of real cargo. A two-second
+heading sample run delivered ten JSON Lines records and a one-second timer
+watch delivered one callback with zero dropped events. Live info then confirmed
+stopped, battery 66%. These checks used rc.2 plus the transient helper fixes,
+rather than an unchanged released rc.3 binary.
+
+A subsequent close/start revealed a teardown race, addressed by publishing the
+closing state before its acknowledgement and waiting for endpoint release.
+The locally rebuilt owner reconnected in 18.967 s at battery 65%, but the next
+camera attempt failed with Windows HRESULT 0x800704C7 and a following info call
+reported the link down. No image or effects results came from that attempt.
+No shutdown/reset command or wheel/kicker movement was requested. The disconnect's cause
+is unresolved; screen/power confirmation and further checks remain pending.
+
+The following paragraph records the earlier, separate first attempt:
+
+The command expansion's first stationary Windows BLE connection to AIM6518
+completed in 18.636 seconds, including discovery 8.047 s, connection 4.258 s and
+helper preparation 6.330 s. It reported battery 72%, stopped true and gyro not
+calibrating. This development build preceded the prerelease version bump.
+
+The subsequent image and individual-sensor requests found the link down before
+execution. They produced no image or sensor acceptance results; no new movement
+or kicker action ran. A fresh power-on confirmation was then requested. The updated
+acceptance harness captures immediately after startup to avoid an idle gap.
+
+The 0.3 candidates have simulated command/runtime/image tests and four-platform
+software checks, independently of hardware evidence. USB sessions, catalogue
+operations beyond the checks above, in-motion concurrency/cancellation, real
+vision targets, linked second robot and closed-loop visual action acceptance
+still need their own supervised checks. Asset upload encoding is unverified
+and remains disabled; independent wheel signs/units are experimental.
+
 ## Standalone Windows Bluetooth smoke test (2026-10-20)
 
 With USB unplugged and physical readiness confirmed, the 0.2.0 candidate reused

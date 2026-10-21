@@ -254,7 +254,7 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                 ).await, Ok(Ok(())));
                 let started = Instant::now();
                 let image = tokio::time::timeout(Duration::from_secs(60), capture_jpeg(&mut conn)).await.map_err(|_| fail("Camera capture timed out; existing output was preserved."))??;
-                let (width,height) = jpeg_dimensions(&image)?;
+                let (width,height) = crate::observation::validate(&image)?;
                 let path = crate::snap::output_path(output.as_deref());
                 save_atomic(Path::new(&path), &image)?;
                 let elapsed = started.elapsed();
@@ -291,20 +291,30 @@ async fn run_python(
     conn: &mut BluetoothConnection,
     info: &serde_json::Value,
 ) -> Result<i32, Fail> {
-    let mut repl = Repl::from_connection(conn);
+    let mut repl = Repl::from_connection(crate::display::DisplayConnection::new(conn));
     let operation = async {
         let (source, timeout, preamble) = match &cli.cmd {
             Cmd::Doctor => (STATUS.to_string(),10,true),
             Cmd::Info => (STATE.to_string(),10,true),
             Cmd::Stop => (crate::STOP_CODE.to_string(),5,true),
-            Cmd::Exec { code,file,timeout,no_preamble } => (crate::exec_source(code,file)?,*timeout,!*no_preamble),
+            Cmd::Exec { code,inputs,file,timeout,no_preamble } => (crate::with_inputs(crate::exec_source(code,file)?,inputs)?,*timeout,!*no_preamble),
             Cmd::Turn { direction, degrees, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::turn_source(*direction, *degrees, *speed)?), 23, true),
             Cmd::Move { distance, angle, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::move_source(*distance, *angle, *speed)?), 23, true),
+            Cmd::Capabilities {..} => (crate::device::capability_source(),30,true),
+            Cmd::Native(words) => { let a=crate::device::parse(words,false)?; (crate::device::standalone(&a),a.timeout+crate::device::RESULT_TIMEOUT_SECS,true) },
             _ => return Err(fail("Unsupported Bluetooth command.")),
         };
         if preamble {
             let setup = repl.exec(PREAMBLE,Duration::from_secs(10)).await?;
             if setup.timed_out || !setup.stderr.is_empty() { return Err(fail("Python robot initialization failed or timed out.")); }
+        }
+        let display = (preamble && matches!(cli.cmd, Cmd::Exec {..}) && crate::display::program_uses_display(&source)) || matches!(&cli.cmd, Cmd::Native(words) if words.first().is_some_and(|w|w=="screen") && crate::device::parse(words,false).is_ok_and(|a|a.kind!="read"));
+        if display {
+            let state=repl.exec(STATE,Duration::from_secs(5)).await?;
+            if state.timed_out || !state.stderr.is_empty() || serde_json::from_str::<serde_json::Value>(state.stdout.trim()).map_err(io)?["stopped"]!=true {
+                return Err(fail("Finish movement before the first display program"));
+            }
+            repl.connection_mut().enable(info).await?;
         }
         let result = repl.exec(&source,Duration::from_secs(timeout)).await?;
         if matches!(cli.cmd,Cmd::Doctor) {
@@ -314,7 +324,9 @@ async fn run_python(
         }
         Ok(print_exec(cli,&result,timeout))
     }.await;
+    let cleanup = repl.connection_mut().disable().await.map_err(io);
     repl.close().await;
+    cleanup?;
     operation
 }
 
@@ -327,15 +339,23 @@ pub(crate) fn require_camera_firmware(info: &serde_json::Value) -> Result<(), Fa
     Ok(())
 }
 
-pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u8>, Fail> {
-    conn.handshake(
-        ScreenCapturePacket { layer: Some(8) },
-        Duration::from_secs(3),
-        0,
-    )
-    .await
-    .map_err(io)?
-    .map_err(io)?;
+pub(crate) async fn capture_jpeg<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
+    capture_buffer(conn, Some(8), true).await
+}
+
+pub(crate) async fn capture_lcd<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
+    capture_buffer(conn, None, false).await
+}
+
+async fn capture_buffer<C: Connection>(
+    conn: &mut C,
+    layer: Option<u8>,
+    jpeg: bool,
+) -> Result<Vec<u8>, Fail> {
+    conn.handshake(ScreenCapturePacket { layer }, Duration::from_secs(3), 0)
+        .await
+        .map_err(io)?
+        .map_err(io)?;
     let init = conn
         .handshake(
             FileTransferInitializePacket {
@@ -369,17 +389,24 @@ pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u
     if size == 0 || size > 1024 * 1024 {
         return Err(fail("Camera buffer is empty or exceeds the 1 MiB limit."));
     }
+    if !jpeg && size != 240 * 240 * 2 {
+        return Err(fail(
+            "Unsupported AIM LCD buffer layout; expected 240x240 RGB565, no alternate layer was tried",
+        ));
+    }
     let chunk = usize::from(init.window_size.saturating_sub(14)).min(216) / 4 * 4;
     if chunk == 0 {
         return Err(fail("Camera receive window is too small."));
     }
-    let deadline = Instant::now() + Duration::from_secs(45);
+    let seconds = if jpeg { 45 } else { 55 };
+    let deadline = Instant::now() + Duration::from_secs(seconds);
     let mut bytes = Vec::with_capacity(size);
     while bytes.len() < size {
         if Instant::now() >= deadline {
-            return Err(fail(
-                "Camera transfer exceeded 45 seconds; existing output was preserved.",
-            ));
+            return Err(fail(format!(
+                "{} transfer exceeded {seconds} seconds; existing output was preserved.",
+                if jpeg { "Camera" } else { "LCD" }
+            )));
         }
         let requested = if bytes.is_empty() {
             128.min(chunk)
@@ -401,13 +428,15 @@ pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u
             .map_err(io)?
             .map_err(io)?;
         append_block(&mut bytes, size, address, requested, &reply)?;
-        if address == 0 && !bytes.starts_with(&[0xff, 0xd8]) {
+        if jpeg && address == 0 && !bytes.starts_with(&[0xff, 0xd8]) {
             return Err(fail(
                 "Camera layer did not return JPEG; no other layer or menu action was attempted.",
             ));
         }
     }
-    jpeg_dimensions(&bytes)?;
+    if jpeg {
+        jpeg_dimensions(&bytes)?;
+    }
     // Read-only downloads have no FILE_EXIT/program-upload completion command.
     Ok(bytes)
 }

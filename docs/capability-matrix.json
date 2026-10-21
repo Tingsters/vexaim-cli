@@ -1,0 +1,2090 @@
+{
+  "schema_version": 1,
+  "model": "VEX AIM",
+  "source": "VEX_AIM_Software_Capability_Reference.html (user supplied)",
+  "note": "Command presence is implementation coverage, not hardware verification; consult hardware-notes.md",
+  "api": [
+    {
+      "api": "robot.get_battery_capacity",
+      "disposition": "unsupported",
+      "detail": "Remote-library alias; on-robot canonical getter is get_battery_level"
+    },
+    {
+      "api": "robot.get_battery_level",
+      "disposition": "command",
+      "detail": "robot battery"
+    },
+    {
+      "api": "robot.get_name",
+      "disposition": "command",
+      "detail": "robot name"
+    },
+    {
+      "api": "robot.has_any_barrel",
+      "disposition": "command",
+      "detail": "cargo has-any-barrel maps robot.vision.has_any_barrel"
+    },
+    {
+      "api": "robot.has_blue_barrel",
+      "disposition": "command",
+      "detail": "cargo has-blue-barrel maps robot.vision.has_blue_barrel"
+    },
+    {
+      "api": "robot.has_orange_barrel",
+      "disposition": "command",
+      "detail": "cargo has-orange-barrel maps robot.vision.has_orange_barrel"
+    },
+    {
+      "api": "robot.has_sports_ball",
+      "disposition": "command",
+      "detail": "cargo has-sports-ball maps robot.vision.has_sports_ball"
+    },
+    {
+      "api": "robot.inertial.calibrate",
+      "disposition": "command",
+      "detail": "inertial calibrate"
+    },
+    {
+      "api": "robot.inertial.crashed",
+      "disposition": "event",
+      "detail": "events watch inertial.crashed"
+    },
+    {
+      "api": "robot.inertial.get_acceleration",
+      "disposition": "command",
+      "detail": "inertial get-acceleration"
+    },
+    {
+      "api": "robot.inertial.get_heading",
+      "disposition": "command",
+      "detail": "inertial get-heading"
+    },
+    {
+      "api": "robot.inertial.get_pitch",
+      "disposition": "command",
+      "detail": "inertial get-pitch"
+    },
+    {
+      "api": "robot.inertial.get_roll",
+      "disposition": "command",
+      "detail": "inertial get-roll"
+    },
+    {
+      "api": "robot.inertial.get_rotation",
+      "disposition": "command",
+      "detail": "inertial get-rotation"
+    },
+    {
+      "api": "robot.inertial.get_turn_rate",
+      "disposition": "command",
+      "detail": "inertial get-turn-rate"
+    },
+    {
+      "api": "robot.inertial.get_yaw",
+      "disposition": "command",
+      "detail": "inertial get-yaw"
+    },
+    {
+      "api": "robot.inertial.is_calibrating",
+      "disposition": "command",
+      "detail": "inertial is-calibrating"
+    },
+    {
+      "api": "robot.inertial.reset_heading",
+      "disposition": "command",
+      "detail": "inertial reset-heading"
+    },
+    {
+      "api": "robot.inertial.reset_rotation",
+      "disposition": "command",
+      "detail": "inertial reset-rotation"
+    },
+    {
+      "api": "robot.inertial.set_crash_sensitivity",
+      "disposition": "command",
+      "detail": "inertial set-crash-sensitivity"
+    },
+    {
+      "api": "robot.inertial.set_heading",
+      "disposition": "command",
+      "detail": "inertial set-heading"
+    },
+    {
+      "api": "robot.kicker.kick",
+      "disposition": "command",
+      "detail": "kicker kick"
+    },
+    {
+      "api": "robot.kicker.place",
+      "disposition": "command",
+      "detail": "kicker place"
+    },
+    {
+      "api": "robot.led.off",
+      "disposition": "command",
+      "detail": "led off"
+    },
+    {
+      "api": "robot.led.on",
+      "disposition": "command",
+      "detail": "led on"
+    },
+    {
+      "api": "robot.link",
+      "disposition": "prerequisite",
+      "detail": "Two AIMs manually linked in Settings; missing on older firmware"
+    },
+    {
+      "api": "robot.link.connected",
+      "disposition": "event",
+      "detail": "events watch link.connected"
+    },
+    {
+      "api": "robot.link.disconnected",
+      "disposition": "event",
+      "detail": "events watch link.disconnected"
+    },
+    {
+      "api": "robot.link.get_message",
+      "disposition": "command",
+      "detail": "link get-message"
+    },
+    {
+      "api": "robot.link.get_message_and_data",
+      "disposition": "command",
+      "detail": "link get-message-and-data"
+    },
+    {
+      "api": "robot.link.get_name",
+      "disposition": "unsupported",
+      "detail": "Remote extension not established in on-robot SDK"
+    },
+    {
+      "api": "robot.link.handle_message",
+      "disposition": "event",
+      "detail": "events watch link.handle_message"
+    },
+    {
+      "api": "robot.link.is_connected",
+      "disposition": "command",
+      "detail": "link is-connected"
+    },
+    {
+      "api": "robot.link.is_message_available",
+      "disposition": "command",
+      "detail": "link is-message-available"
+    },
+    {
+      "api": "robot.link.send_message",
+      "disposition": "command",
+      "detail": "link send-message"
+    },
+    {
+      "api": "robot.robot_send",
+      "disposition": "unsupported",
+      "detail": "Remote WebSocket transport internals; outside USB/BLE scope"
+    },
+    {
+      "api": "robot.screen.clear_row",
+      "disposition": "command",
+      "detail": "screen clear-row"
+    },
+    {
+      "api": "robot.screen.clear_screen",
+      "disposition": "command",
+      "detail": "screen clear-screen"
+    },
+    {
+      "api": "robot.screen.draw_circle",
+      "disposition": "command",
+      "detail": "screen draw-circle"
+    },
+    {
+      "api": "robot.screen.draw_line",
+      "disposition": "command",
+      "detail": "screen draw-line"
+    },
+    {
+      "api": "robot.screen.draw_pixel",
+      "disposition": "command",
+      "detail": "screen draw-pixel"
+    },
+    {
+      "api": "robot.screen.draw_rectangle",
+      "disposition": "command",
+      "detail": "screen draw-rectangle"
+    },
+    {
+      "api": "robot.screen.get_column",
+      "disposition": "command",
+      "detail": "screen get-column"
+    },
+    {
+      "api": "robot.screen.get_row",
+      "disposition": "command",
+      "detail": "screen get-row"
+    },
+    {
+      "api": "robot.screen.hide_aivision",
+      "disposition": "command",
+      "detail": "screen hide-aivision"
+    },
+    {
+      "api": "robot.screen.hide_emoji",
+      "disposition": "command",
+      "detail": "screen hide-emoji"
+    },
+    {
+      "api": "robot.screen.next_row",
+      "disposition": "command",
+      "detail": "screen next-row"
+    },
+    {
+      "api": "robot.screen.pressed",
+      "disposition": "event",
+      "detail": "events watch screen.pressed"
+    },
+    {
+      "api": "robot.screen.pressing",
+      "disposition": "command",
+      "detail": "screen pressing"
+    },
+    {
+      "api": "robot.screen.print",
+      "disposition": "command",
+      "detail": "screen print"
+    },
+    {
+      "api": "robot.screen.print_at",
+      "disposition": "command",
+      "detail": "screen print-at"
+    },
+    {
+      "api": "robot.screen.released",
+      "disposition": "event",
+      "detail": "events watch screen.released"
+    },
+    {
+      "api": "robot.screen.set_clip_region",
+      "disposition": "command",
+      "detail": "screen set-clip-region"
+    },
+    {
+      "api": "robot.screen.set_cursor",
+      "disposition": "command",
+      "detail": "screen set-cursor"
+    },
+    {
+      "api": "robot.screen.set_fill_color",
+      "disposition": "command",
+      "detail": "screen set-fill-color"
+    },
+    {
+      "api": "robot.screen.set_font",
+      "disposition": "command",
+      "detail": "screen set-font"
+    },
+    {
+      "api": "robot.screen.set_origin",
+      "disposition": "command",
+      "detail": "screen set-origin"
+    },
+    {
+      "api": "robot.screen.set_pen_color",
+      "disposition": "command",
+      "detail": "screen set-pen-color"
+    },
+    {
+      "api": "robot.screen.set_pen_width",
+      "disposition": "command",
+      "detail": "screen set-pen-width"
+    },
+    {
+      "api": "robot.screen.show_aivision",
+      "disposition": "command",
+      "detail": "screen show-aivision"
+    },
+    {
+      "api": "robot.screen.show_emoji",
+      "disposition": "command",
+      "detail": "screen show-emoji"
+    },
+    {
+      "api": "robot.screen.show_file",
+      "disposition": "command",
+      "detail": "screen show-file"
+    },
+    {
+      "api": "robot.screen.x_position",
+      "disposition": "command",
+      "detail": "screen x-position"
+    },
+    {
+      "api": "robot.screen.y_position",
+      "disposition": "command",
+      "detail": "screen y-position"
+    },
+    {
+      "api": "robot.sound.is_active",
+      "disposition": "command",
+      "detail": "sound is-active"
+    },
+    {
+      "api": "robot.sound.play",
+      "disposition": "command",
+      "detail": "sound play"
+    },
+    {
+      "api": "robot.sound.play_file",
+      "disposition": "command",
+      "detail": "sound play-file"
+    },
+    {
+      "api": "robot.sound.play_local_file",
+      "disposition": "host-only",
+      "detail": "assets sound upload is encoding-gated; sound play-file handles playback"
+    },
+    {
+      "api": "robot.sound.play_note",
+      "disposition": "command",
+      "detail": "sound play-note"
+    },
+    {
+      "api": "robot.sound.stop",
+      "disposition": "command",
+      "detail": "sound stop"
+    },
+    {
+      "api": "robot.spin_wheels",
+      "disposition": "command",
+      "detail": "motion spin-wheels"
+    },
+    {
+      "api": "robot.status",
+      "disposition": "host-only",
+      "detail": "info/capabilities live status; no remote WebSocket cache"
+    },
+    {
+      "api": "robot.stop_program",
+      "disposition": "unsupported",
+      "detail": "Saved program control excluded; stop bounds transient helpers"
+    },
+    {
+      "api": "robot.vision.code_description",
+      "disposition": "command",
+      "detail": "vision code-description"
+    },
+    {
+      "api": "robot.vision.color_description",
+      "disposition": "command",
+      "detail": "vision color-description"
+    },
+    {
+      "api": "robot.vision.get_camera_image",
+      "disposition": "host-only",
+      "detail": "camera observe; native camera bytes plus artifact metadata"
+    },
+    {
+      "api": "robot.vision.get_data",
+      "disposition": "command",
+      "detail": "vision get-data"
+    },
+    {
+      "api": "robot.vision.tag_detection",
+      "disposition": "command",
+      "detail": "vision tag-detection"
+    }
+  ],
+  "python_features": [
+    "conditions",
+    "loops",
+    "variables",
+    "functions",
+    "Thread",
+    "Timer.event",
+    "math",
+    "random",
+    "time",
+    "json",
+    "sys",
+    "gc",
+    "micropython",
+    "array",
+    "struct",
+    "collections",
+    "io",
+    "errno",
+    "os",
+    "re"
+  ],
+  "blocks": [
+    {
+      "category": "Motion",
+      "operation": "move",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "move at angle",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "move for",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "move at angle for",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "turn",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "turn for",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "turn to heading",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "move with controller",
+      "disposition": "python",
+      "detail": "Read Onestick axes and apply bounded native move_with_vectors in a loop"
+    },
+    {
+      "category": "Motion",
+      "operation": "stop all movement",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "set move velocity",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "set turn velocity",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "position",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "set robot position",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "move active",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "turn active",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Motion",
+      "operation": "stopped",
+      "disposition": "command",
+      "detail": "catalog motion; JSON reports values/properties"
+    },
+    {
+      "category": "Emoji",
+      "operation": "show emoji",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Emoji",
+      "operation": "hide emoji",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Kicker",
+      "operation": "kick object",
+      "disposition": "command",
+      "detail": "catalog kicker; JSON reports values/properties"
+    },
+    {
+      "category": "Kicker",
+      "operation": "place object",
+      "disposition": "command",
+      "detail": "catalog kicker; JSON reports values/properties"
+    },
+    {
+      "category": "Sound",
+      "operation": "play sound",
+      "disposition": "command",
+      "detail": "catalog sound; JSON reports values/properties"
+    },
+    {
+      "category": "Sound",
+      "operation": "play sound file",
+      "disposition": "command",
+      "detail": "catalog sound; JSON reports values/properties"
+    },
+    {
+      "category": "Sound",
+      "operation": "play note",
+      "disposition": "command",
+      "detail": "catalog sound; JSON reports values/properties"
+    },
+    {
+      "category": "Sound",
+      "operation": "stop sound",
+      "disposition": "command",
+      "detail": "catalog sound; JSON reports values/properties"
+    },
+    {
+      "category": "Sound",
+      "operation": "sound active",
+      "disposition": "command",
+      "detail": "catalog sound; JSON reports values/properties"
+    },
+    {
+      "category": "LED",
+      "operation": "set LED color",
+      "disposition": "command",
+      "detail": "catalog led; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "latest message",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "latest data",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "is message available?",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "is connected?",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "linked robot name",
+      "disposition": "unsupported",
+      "detail": "No established native MessageLink.get_name method"
+    },
+    {
+      "category": "Message",
+      "operation": "send message",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "send message with data",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "get latest message",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Message",
+      "operation": "get latest message with data",
+      "disposition": "command",
+      "detail": "catalog link; JSON reports values/properties"
+    },
+    {
+      "category": "Macro",
+      "operation": "act",
+      "disposition": "command",
+      "detail": "catalog macro; JSON reports values/properties"
+    },
+    {
+      "category": "Macro",
+      "operation": "turn until object",
+      "disposition": "command",
+      "detail": "catalog macro; JSON reports values/properties"
+    },
+    {
+      "category": "Macro",
+      "operation": "get object",
+      "disposition": "command",
+      "detail": "catalog macro; JSON reports values/properties"
+    },
+    {
+      "category": "Macro",
+      "operation": "move to object",
+      "disposition": "command",
+      "detail": "catalog macro; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "AI Vision viewer on screen",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "get object data",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "set AI Vision object item",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "has object",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "AI Vision object exists",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "AI Vision object is",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "AI Vision object is AprilTag ID",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "AI Vision object count",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "AI Vision",
+      "operation": "AI Vision object property",
+      "disposition": "command",
+      "detail": "catalog vision; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "print on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set cursor to row column on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set cursor to next row on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "clear row on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "screen cursor column",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "screen cursor row",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "print at coordinate on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set screen origin",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "clear screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "fill screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set font on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set print precision on screen",
+      "disposition": "python",
+      "detail": "Format values with Python format/round before print"
+    },
+    {
+      "category": "Screen",
+      "operation": "set pen width on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set pen / font color on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "set fill color on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "show image file on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "draw pixel on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "draw line on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "draw rectangle on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "draw circle on screen",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "screen pressed",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "screen position",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Screen",
+      "operation": "when screen event",
+      "disposition": "command",
+      "detail": "catalog screen; JSON reports values/properties"
+    },
+    {
+      "category": "Controller",
+      "operation": "controller button pressed?",
+      "disposition": "command",
+      "detail": "catalog controller; JSON reports values/properties"
+    },
+    {
+      "category": "Controller",
+      "operation": "controller axis position",
+      "disposition": "command",
+      "detail": "catalog controller; JSON reports values/properties"
+    },
+    {
+      "category": "Controller",
+      "operation": "when controller button",
+      "disposition": "command",
+      "detail": "catalog controller; JSON reports values/properties"
+    },
+    {
+      "category": "Controller",
+      "operation": "when controller axis is changed",
+      "disposition": "command",
+      "detail": "catalog controller; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "heading",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "rotation",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "acceleration",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "get turn rate",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "orientation",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "when crashed",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "set crash sensitivity",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "reset heading",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Inertial",
+      "operation": "reset rotation",
+      "disposition": "command",
+      "detail": "catalog inertial; JSON reports values/properties"
+    },
+    {
+      "category": "Timer",
+      "operation": "reset timer",
+      "disposition": "command",
+      "detail": "catalog timer; JSON reports values/properties"
+    },
+    {
+      "category": "Timer",
+      "operation": "timer in seconds",
+      "disposition": "command",
+      "detail": "catalog timer; JSON reports values/properties"
+    },
+    {
+      "category": "Timer",
+      "operation": "when timer",
+      "disposition": "command",
+      "detail": "catalog timer; JSON reports values/properties"
+    },
+    {
+      "category": "Console",
+      "operation": "print on console",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Console",
+      "operation": "set cursor to next row on console",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Console",
+      "operation": "clear console",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Console",
+      "operation": "ask and wait",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Console",
+      "operation": "answer",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Console",
+      "operation": "set print precision on console",
+      "disposition": "python",
+      "detail": "Format values with Python format/round before print"
+    },
+    {
+      "category": "Console",
+      "operation": "set font color on console",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Robot",
+      "operation": "battery level",
+      "disposition": "command",
+      "detail": "catalog robot; JSON reports values/properties"
+    },
+    {
+      "category": "Robot",
+      "operation": "robot name",
+      "disposition": "command",
+      "detail": "catalog robot; JSON reports values/properties"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "wait",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "wait until",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "repeat",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "forever",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "repeat until",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "while",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "if",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "if / else",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "if / else if / else",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "break",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Control",
+      "operation": "stop project",
+      "disposition": "unsupported",
+      "detail": "Saved project control excluded; stop handles transient motion"
+    },
+    {
+      "category": "Logic / Events",
+      "operation": "when started",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Events",
+      "operation": "when I receive event",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Events",
+      "operation": "broadcast event",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Events",
+      "operation": "broadcast event and wait",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "math operator",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "comparison operator",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "logical operator",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "not operator",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "range operator",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "pick random",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "round number",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "math functions",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "atan2",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "remainder",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "join",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "letter",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "length",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "contains",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Operators",
+      "operation": "convert",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "numeric variable",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "set numeric variable",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "change numeric variable",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "Boolean variable",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "set Boolean variable",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "list item",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "replace list item",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "set list items",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "length of list",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "2D list item",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "replace 2D list item",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "set 2D list items",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Variables",
+      "operation": "length of 2D list",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / My Blocks",
+      "operation": "define My Block",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / My Blocks",
+      "operation": "call My Block",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Logic / Comments",
+      "operation": "comment",
+      "disposition": "python",
+      "detail": "Standard Python via exec; explicit --input answers for input()"
+    },
+    {
+      "category": "Switch",
+      "operation": "Stack",
+      "disposition": "python",
+      "detail": "VEXcode editor block-to-Python conversion, no robot method"
+    },
+    {
+      "category": "Switch",
+      "operation": "C Block",
+      "disposition": "python",
+      "detail": "VEXcode editor block-to-Python conversion, no robot method"
+    },
+    {
+      "category": "Switch",
+      "operation": "C Expandable",
+      "disposition": "python",
+      "detail": "VEXcode editor block-to-Python conversion, no robot method"
+    },
+    {
+      "category": "Switch",
+      "operation": "Boolean",
+      "disposition": "python",
+      "detail": "VEXcode editor block-to-Python conversion, no robot method"
+    },
+    {
+      "category": "Switch",
+      "operation": "Reporter",
+      "disposition": "python",
+      "detail": "VEXcode editor block-to-Python conversion, no robot method"
+    },
+    {
+      "category": "Switch",
+      "operation": "Hat",
+      "disposition": "python",
+      "detail": "VEXcode editor block-to-Python conversion, no robot method"
+    }
+  ],
+  "micropython": [
+    {
+      "module": "asyncio",
+      "operation": "create_task(coro)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "current_task()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "run(coro)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "sleep(t)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "sleep_ms(t)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "wait_for(awaitable, timeout)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "wait_for_ms(awaitable, timeout)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "gather(*awaitables, return_exceptions=False)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Task.cancel()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Event()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Event.is_set()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Event.set(); Event.clear()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Event.wait()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "ThreadSafeFlag()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "ThreadSafeFlag.set(); ThreadSafeFlag.clear()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "ThreadSafeFlag.wait()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Lock()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Lock.locked()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Lock.acquire()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Lock.release()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "open_connection(host, port, ssl=None)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "start_server(callback, host, port, backlog=5, ssl=None)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream / StreamReader / StreamWriter",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.get_extra_info(v)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.close()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.wait_closed()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.read(n=-1)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.readinto(buf)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.readexactly(n)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.readline()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.write(buf)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Stream.drain()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Server.close()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Server.wait_closed()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "get_event_loop(); new_event_loop()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.create_task(coro)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.run_forever()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.run_until_complete(awaitable)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.stop(); Loop.close()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.set_exception_handler(handler)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.get_exception_handler()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.default_exception_handler(context)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "asyncio",
+      "operation": "Loop.call_exception_handler(context)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "binascii",
+      "operation": "hexlify(data[, sep])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "binascii",
+      "operation": "unhexlify(data)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "binascii",
+      "operation": "a2b_base64(data)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "binascii",
+      "operation": "b2a_base64(data, *, newline=True)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "cos(z); sin(z)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "exp(z)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "log(z); log10(z)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "sqrt(z)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "phase(z)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "polar(z)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "cmath",
+      "operation": "rect(r, phi)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "gc",
+      "operation": "enable(); disable()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "gc",
+      "operation": "collect()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "gc",
+      "operation": "mem_alloc()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "gc",
+      "operation": "mem_free()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "gc",
+      "operation": "threshold([amount])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "hashlib",
+      "operation": "sha256([data])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "hashlib",
+      "operation": "sha1([data])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "hashlib",
+      "operation": "md5([data])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "hashlib",
+      "operation": "hash.update(data)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "hashlib",
+      "operation": "hash.digest()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "heapq",
+      "operation": "heappush(heap, item)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "heapq",
+      "operation": "heappop(heap)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "heapq",
+      "operation": "heapify(x)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "io",
+      "operation": "open(name, mode='r', **kwargs)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "io",
+      "operation": "StringIO([string]); BytesIO([string])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "io",
+      "operation": "StringIO(alloc_size); BytesIO(alloc_size)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "io",
+      "operation": "stream.getvalue()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "io",
+      "operation": "stream.read(...); stream.write(...); stream.seek(...); stream.flush(); stream.close()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "json",
+      "operation": "dump(obj, stream, separators=None)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "json",
+      "operation": "dumps(obj, separators=None)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "json",
+      "operation": "load(stream)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "json",
+      "operation": "loads(str)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "uname()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "urandom(n)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "chdir(path)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "getcwd()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "ilistdir([dir])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "listdir([dir])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "mkdir(path); remove(path); rmdir(path)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "rename(old_path, new_path)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "stat(path)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "statvfs(path)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "sync()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "dupterm(stream_object, index=0, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "mount(fsobj, mount_point, *, readonly)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "umount(mount_point)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "VfsFat(block_dev)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "VfsFat.mkfs(block_dev)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "VfsLfs1(block_dev, readsize=32, progsize=32, lookahead=32)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "VfsLfs1.mkfs(block_dev, readsize=32, progsize=32, lookahead=32)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "VfsLfs2(block_dev, readsize=32, progsize=32, lookahead=32, mtime=True)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "VfsLfs2.mkfs(block_dev, readsize=32, progsize=32, lookahead=32)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "protocol readblocks(block_num, buf[, offset])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "protocol writeblocks(block_num, buf[, offset])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "os",
+      "operation": "protocol ioctl(op, arg)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "compile(regex_str[, flags])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "match(regex_str, string)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "search(regex_str, string)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "sub(regex_str, replace, string, count=0, flags=0, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "regex.match(string); regex.search(string)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "regex.sub(replace, string, count=0, flags=0, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "regex.split(string, max_split=-1, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "match.group(index)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "match.groups()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "match.start([index]); match.end([index])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "match.span([index])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "re",
+      "operation": "DEBUG",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "poll()",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "select(rlist, wlist, xlist[, timeout])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "poll.register(obj[, eventmask])",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "poll.unregister(obj)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "poll.modify(obj, eventmask)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "poll.poll(timeout=-1, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "select",
+      "operation": "poll.ipoll(timeout=-1, flags=0, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "struct",
+      "operation": "calcsize(fmt)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "struct",
+      "operation": "pack(fmt, v1, v2, ...)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "struct",
+      "operation": "pack_into(fmt, buffer, offset, v1, v2, ...)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "struct",
+      "operation": "unpack(fmt, data)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "struct",
+      "operation": "unpack_from(fmt, data, offset=0, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "sys",
+      "operation": "exit(retval=0, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "sys",
+      "operation": "atexit(func)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "sys",
+      "operation": "print_exception(exc, file=sys.stdout, /)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    },
+    {
+      "module": "sys",
+      "operation": "settrace(tracefunc)",
+      "disposition": "python",
+      "detail": "exec on firmware providing this MicroPython module; network helpers require additional runtime support"
+    }
+  ],
+  "host_operations": [
+    "pairing",
+    "sessions",
+    "camera observe",
+    "snap",
+    "asset slots"
+  ],
+  "exclusions": [
+    "firmware updates",
+    "saved programs",
+    "other VEX models",
+    "Wi-Fi",
+    "raw encoders",
+    "microphone capture",
+    "custom neural training"
+  ]
+}

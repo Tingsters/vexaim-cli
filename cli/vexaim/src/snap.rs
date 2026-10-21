@@ -17,18 +17,41 @@ pub struct Snap {
 }
 
 pub fn snap(output: Option<&str>) -> Result<Snap, String> {
+    let image = capture(None)?;
+    let (width, height) = crate::observation::validate(&image).map_err(|e| e.to_string())?;
+    let path = output_path(output);
+    crate::observation::save(std::path::Path::new(&path), &image).map_err(|e| e.to_string())?;
+    Ok(Snap {
+        path,
+        width,
+        height,
+        bytes: image.len(),
+    })
+}
+
+pub fn capture(camera_index: Option<u32>) -> Result<Vec<u8>, String> {
     // macOS needs a camera-permission prompt before first use.
     nokhwa::nokhwa_initialize(|_| {});
     let cams = query(ApiBackend::Auto).map_err(|e| format!("cannot list cameras: {e}"))?;
     let aim: Vec<_> = cams
         .iter()
-        .filter(|c| c.human_name().to_lowercase().contains("aim"))
+        .filter(|c| {
+            c.human_name().to_lowercase().contains("aim")
+                && camera_index.is_none_or(|n| c.index().as_index().ok() == Some(n))
+        })
         .collect();
     if aim.is_empty() {
         let names: Vec<_> = cams.iter().map(|c| c.human_name()).collect();
         return Err(format!(
             "no camera with 'AIM' in its name; found {names:?}. Is the robot plugged in? (macOS/Windows: allow camera access for this app)"
         ));
+    }
+    // With one connected AIM the sole camera group belongs to that robot. With
+    // multiple devices the caller must supply an explicit OS camera binding.
+    if camera_index.is_none() && crate::repl::devices().map_err(|e| e.to_string())?.len() != 1 {
+        return Err(
+            "Ambiguous AIM camera ownership; select --camera-index N for this robot".into(),
+        );
     }
     let want = CameraFormat::new(Resolution::new(640, 480), FrameFormat::MJPEG, 30);
     let mut last = String::new();
@@ -55,8 +78,6 @@ pub fn snap(output: Option<&str>) -> Result<Snap, String> {
             }
         }
         let Some(f) = frame else { continue };
-        let path = output_path(output);
-        let (w, h) = (f.resolution().width(), f.resolution().height());
         let bytes = if f.source_frame_format() == FrameFormat::MJPEG {
             trim_jpeg(f.buffer()).to_vec() // already a JPEG; drop the driver's zero padding
         } else {
@@ -65,13 +86,8 @@ pub fn snap(output: Option<&str>) -> Result<Snap, String> {
                 f.source_frame_format()
             ));
         };
-        std::fs::write(&path, &bytes).map_err(|e| format!("{path}: {e}"))?;
-        return Ok(Snap {
-            path,
-            width: w,
-            height: h,
-            bytes: bytes.len(),
-        });
+        crate::observation::validate(&bytes).map_err(|e| e.to_string())?;
+        return Ok(bytes);
     }
     Err(format!("could not stream from the AIM camera: {last}"))
 }
@@ -80,9 +96,9 @@ pub fn output_path(output: Option<&str>) -> String {
     output.map(String::from).unwrap_or_else(|| {
         let t = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
+            .map(|d| d.as_nanos())
             .unwrap_or(0);
-        format!("vexaim-snap-{t}.jpg")
+        format!("vexaim-snap-{t}-{}.jpg", std::process::id())
     })
 }
 

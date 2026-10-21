@@ -1,6 +1,6 @@
 ---
 name: vex-aim
-description: Control a VEX AIM robot over USB or Bluetooth using vexaim. Run Python, read sensors, move, stop, set lights and sounds, and capture camera photographs from ordinary requests.
+description: Control a VEX AIM over USB or Bluetooth with vexaim. Use native device commands, run Python, read sensors, move, set effects, and capture images for the agent to inspect and act on from ordinary requests.
 ---
 
 # Control a VEX AIM robot
@@ -26,11 +26,23 @@ options or the existing session; a USB diagnostic cannot diagnose a wireless lin
 Close VEXcode and other programs using the robot. Installation does not require
 the robot to be connected; ask for power-on/readiness when interaction needs it.
 
+For repeated USB work, `vexaim --json session start` creates the same reusable
+owner as Bluetooth; select `--device N` before startup if several robots are
+connected. Keep the returned session ID. Do not switch transports implicitly.
+
 Translate ordinary requests into finite actions. "Spin in a circle" means one
 360-degree turn in place, left unless specified. Honor explicit direction and
-distance. Use `turn`/`move` helpers where applicable and compose actions for other
+distance. Discover native device commands with `vexaim catalog GROUP` and use
+`vexaim --session ID capabilities --live` when firmware support is uncertain.
+See `references/device-commands.md` for motion, sensors, display, sound, events,
+assets and actions. Use native commands where applicable and compose actions for other
 ideas; arbitrary Python is available. Do not require surface labels, targets or
 calibration before ordinary movement.
+
+For faces, messages and drawings over Bluetooth, use 0.3.0-rc.5 or newer and a
+reusable session. Screen writes activate the program display automatically;
+named emoji constants match the firmware. Stop/close or 60 seconds without
+activity returns to the menu. See the device-command reference for display limits.
 
 Announce movement and establish a clear, level area with a person near the power
 switch. Preserve readiness within the current interaction rather than asking
@@ -52,7 +64,7 @@ vexaim snap -o photo.jpg
 vexaim stop
 ```
 
-For a Bluetooth session, include `--session ID` before the subcommand. See the
+For an owned USB or Bluetooth connection, include `--session ID` before the subcommand. See the
 session reference for progress/result JSON and responsive `turn`/`move` calls.
 Print small summaries: bursts above roughly 2 KB can lose console output.
 Default execution timeout is 30 seconds; errors return a traceback and failure.
@@ -83,7 +95,13 @@ the selected transport is Bluetooth. Busy actions are rejected, never queued.
 the robot or navigate to AI Vision for a photograph. After cancelling a camera
 transfer, another snapshot requires a fresh session; live status can restore
 ordinary movement first. View captures locally and obtain consent before sending
-them elsewhere. An image or the robot's IMU alone cannot certify a physically
+them to external services. When the user requests visual understanding, use
+`--json --session ID camera observe`, then open its returned absolute `path`
+with Codex `view_image` or Claude Code `Read` in the **same agent turn**. Read
+`references/agent-vision.md` before this workflow. A filename, JSON metadata or
+desktop preview does not put the pixels in your model context. No extra image
+API key, SDK, image upload service or custom model training is needed.
+An image or the robot's IMU alone cannot certify a physically
 exact turn. Automatic camera-based movement correction is not enabled.
 
 Keep the current 30 DPS turn default unless independent hardware evidence supports
@@ -97,6 +115,8 @@ robot. Actual coverage: https://github.com/Tingsters/vexaim-cli/blob/main/docs/h
 - `references/troubleshooting.md`: known failures, including the Windows DTR fix.
 - `references/api.md`: available Python APIs, constants and observed limitations.
 - `references/examples.md`: short Python examples for creative compositions.
+- `references/device-commands.md`: VEX-style native command catalogue and actions.
+- `references/agent-vision.md`: capture, inspect, decide, act and observe again.
 
 For Linux USB only, `linux/install-udev.sh` avoids ModemManager interference.
 Ask before its administrator action and explicitly cue a USB reconnect afterward.

@@ -19,16 +19,29 @@ use tokio::{
 };
 
 const LIMIT: usize = 64 * 1024;
-const PROTOCOL: u32 = 1;
+const PROTOCOL: u32 = 2;
 const IDLE: Duration = Duration::from_secs(30 * 60);
 
 pub(super) fn failure(e: impl std::fmt::Display) -> Fail {
-    Fail::Bluetooth(e.to_string())
+    Fail::Session(e.to_string())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Request {
+    Screenshot {
+        output: String,
+    },
+    Assets(crate::assets::AssetRequest),
+    Native {
+        words: Vec<String>,
+    },
+    Capabilities,
+    Observe {
+        output_dir: String,
+        with_detections: bool,
+        camera_index: Option<u32>,
+    },
     Status,
     Info,
     Doctor,
@@ -57,6 +70,19 @@ pub(super) enum Request {
 impl Request {
     fn validate(&self) -> Result<(), Fail> {
         match self {
+            Self::Screenshot { output }
+                if !std::path::Path::new(output).is_absolute()
+                    || !output.to_lowercase().ends_with(".png") =>
+            {
+                return Err(failure("LCD screenshot needs an absolute .png output path"));
+            }
+            Self::Assets(request) => request.validate()?,
+            Self::Native { words } => {
+                crate::device::parse(words, true)?;
+            }
+            Self::Observe { output_dir, .. } if !std::path::Path::new(output_dir).is_absolute() => {
+                return Err(failure("Observation directory must be absolute"));
+            }
             Self::Turn {
                 left,
                 degrees,
@@ -111,6 +137,9 @@ pub(super) trait Backend {
     fn interrupted(&mut self, request: &Request);
     async fn halt(&mut self) -> Result<Value, Fail>;
     async fn close(&mut self);
+    async fn idle(&mut self) -> Result<(), Fail> {
+        Ok(())
+    }
 }
 
 struct Job {
@@ -192,7 +221,8 @@ async fn handle(
         .await;
         return;
     }
-    if !request.priority() && busy.replace(true) {
+    let concurrent_device = matches!(&request,Request::Native{words} if crate::device::parse(words,true).is_ok_and(|a|matches!(a.kind.as_str(),"read"|"write"|"vision"|"setting"|"actions")));
+    if !request.priority() && busy.replace(true) && !concurrent_device {
         let _ = write_frame(
             &mut stream,
             &error(
@@ -243,16 +273,28 @@ async fn actor<B: Backend>(
     cache: Cache,
     busy: Rc<Cell<bool>>,
 ) {
+    let mut idle_deadline = tokio::time::Instant::now() + IDLE;
     loop {
         let job = tokio::select! { biased;
             job = priority.recv() => job,
             job = normal.recv() => job,
-            _ = tokio::time::sleep(IDLE) => { let _ = backend.halt().await; break; }
+            _ = tokio::time::sleep_until(idle_deadline) => { let _ = backend.halt().await; break; }
+            _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                if let Err(e)=backend.idle().await {
+                    cache.borrow_mut()["needs_check"]=json!(true);
+                    cache.borrow_mut()["display_error"]=json!(e.to_string());
+                }
+                continue;
+            }
         };
+        idle_deadline = tokio::time::Instant::now() + IDLE;
         let Some(job) = job else { break };
         busy.set(true);
         cache.borrow_mut()["busy"] = json!(true);
         if job.request.priority() {
+            if matches!(job.request, Request::Close) {
+                cache.borrow_mut()["state"] = json!("closing");
+            }
             backend.interrupted(&job.request);
             cache.borrow_mut()["needs_check"] = json!(true);
             // Stop also cancels an accepted action that the actor has not started yet.
@@ -285,7 +327,7 @@ async fn actor<B: Backend>(
         let mut close = false;
         match outcome {
             Outcome::Complete(Ok(mut value)) => {
-                if value["ok"] == false {
+                if value["ok"] == false && value["rejected"] != true {
                     backend.interrupted(&job.request);
                     let stopped = backend.halt().await;
                     value["needs_check"] = json!(true);
@@ -317,6 +359,9 @@ async fn actor<B: Backend>(
                 result(&job.events, cancelled, job.received);
                 if let Outcome::Stop(stop) = other {
                     close = matches!(stop.request, Request::Close);
+                    if close {
+                        cache.borrow_mut()["state"] = json!("closing");
+                    }
                     result(&stop.events, halted, stop.received);
                 }
             }
@@ -392,7 +437,7 @@ async fn client(
         let response_timeout = if matches!(request, Request::Status) {
             2
         } else {
-            130
+            165
         };
         let value = tokio::time::timeout(
             Duration::from_secs(response_timeout),
@@ -430,7 +475,8 @@ async fn client(
 async fn start(name: &str) -> Result<Value, Fail> {
     let id = ipc::id_for(name)?;
     let mut connecting = false;
-    if let Ok(value) = client(&id, &Request::Status, false, false).await {
+    let closing_deadline = Instant::now() + Duration::from_secs(15);
+    while let Ok(value) = client(&id, &Request::Status, false, false).await {
         if value["name"] != name || value["protocol"] != PROTOCOL {
             return Err(failure("Existing session identity/protocol mismatch"));
         }
@@ -444,22 +490,32 @@ async fn start(name: &str) -> Result<Value, Fail> {
                     .unwrap_or("Session initialization failed"),
             ));
         }
-        connecting = value["state"] == "connecting";
         if value["state"] == "closed" || value["state"] == "closing" {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            // A close acknowledgement confirms stopped state before BLE teardown.
+            // Wait for the owner to release its endpoint, rather than racing a
+            // new process against the old named pipe/socket after a fixed sleep.
+            if Instant::now() >= closing_deadline {
+                return Err(failure(
+                    "Previous session is still closing; no new owner was started",
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            continue;
         }
+        connecting = value["state"] == "connecting";
+        break;
     }
     let arguments = [
-            "--json",
-            "--transport",
-            "bluetooth",
-            "--name",
-            name,
-            "session",
-            "serve",
-            "--id",
-            &id,
-        ];
+        "--json",
+        "--transport",
+        "bluetooth",
+        "--name",
+        name,
+        "session",
+        "serve",
+        "--id",
+        &id,
+    ];
     let mut child = if connecting {
         None
     } else {
@@ -514,11 +570,16 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             if cli.session.is_some() {
                 return Err(failure("Use --name for session start"));
             }
-            let name = cli
-                .name
-                .as_deref()
-                .ok_or_else(|| failure("Select the robot with --name NAME"))?;
-            let value = start(name).await?;
+            let name = if let Some(name) = &cli.name {
+                name.clone()
+            } else {
+                if cli.transport == crate::Transport::Bluetooth {
+                    return Err(failure("Select Bluetooth robot with --name NAME"));
+                }
+                let dev = crate::repl::pick(crate::repl::devices()?, cli.device)?;
+                format!("usb:{}", dev.system_port().port_info.port_name)
+            };
+            let value = start(&name).await?;
             crate::out(cli.json, value.clone(), || {
                 format!(
                     "Connected to {name}; session {}",
@@ -544,7 +605,49 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
         if !ipc::valid_id(id) {
             return Err(failure("Invalid session ID"));
         }
-        let request = match &cli.cmd {
+        let mut request = match &cli.cmd {
+            Cmd::Assets {
+                kind,
+                operation,
+                slot,
+                file,
+                output,
+                replace,
+            } => Request::Assets(crate::assets::AssetRequest {
+                kind: kind.clone(),
+                operation: operation.clone(),
+                slot: *slot,
+                file: file
+                    .as_ref()
+                    .map(crate::observation::absolute)
+                    .transpose()?
+                    .map(|p| p.to_string_lossy().into_owned()),
+                output: output
+                    .as_ref()
+                    .map(crate::observation::absolute)
+                    .transpose()?
+                    .map(|p| p.to_string_lossy().into_owned()),
+                replace: *replace,
+            }),
+            Cmd::Native(words) => {
+                let a=crate::device::parse(words,true)?;
+                if a.command=="screen screenshot" {Request::Screenshot{output:crate::observation::absolute(a.args[0].as_str().unwrap())?.to_string_lossy().into_owned()}}else {Request::Native{words:words.clone()}}
+            },
+            Cmd::Capabilities { .. } => Request::Capabilities,
+            Cmd::Camera {
+                command:
+                    crate::CameraCmd::Observe {
+                        output_dir,
+                        with_detections,
+                        camera_index,
+                    },
+            } => Request::Observe {
+                output_dir: crate::observation::absolute(output_dir)?
+                    .to_string_lossy()
+                    .into_owned(),
+                with_detections: *with_detections,
+                camera_index: *camera_index,
+            },
             Cmd::Session {
                 command: SessionCmd::Status,
             } => Request::Status,
@@ -574,11 +677,12 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             },
             Cmd::Exec {
                 code,
+                inputs,
                 file,
                 timeout,
                 no_preamble,
             } => Request::Exec {
-                source: crate::exec_source(code, file)?,
+                source: crate::with_inputs(crate::exec_source(code, file)?, inputs)?,
                 timeout: *timeout,
                 preamble: !*no_preamble,
             },
@@ -607,7 +711,50 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                 ));
             }
         }
-        let value = client(id, &request, cli.json, true).await?;
+        let native = if let Request::Native { words } = &request {
+            Some(crate::device::parse(words, true)?)
+        } else {
+            None
+        };
+        let foreground = native.as_ref().is_some_and(|a| !a.no_wait);
+        if matches!(request,Request::Observe{..}) {eprintln!("Capturing a fresh native frame; allow up to 60 seconds plus cleanup.");}
+        let wait_id=native.as_ref().filter(|a|a.command=="actions wait").and_then(|a|a.args[0].as_str()).map(str::to_owned);
+        if let Some(id)=&wait_id {request=Request::Native{words:vec!["actions".into(),"status".into(),id.clone()]};}
+        let mut value = client(id, &request, cli.json, !foreground && !cli.jsonl).await?;
+        if foreground {
+            if let Some(action_id) = value["value"]["action"]["id"].as_str().map(str::to_owned).or(wait_id) {
+                let started = Instant::now();
+                loop {
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                    let status = client(
+                        id,
+                        &Request::Native {
+                            words: vec!["actions".into(), "status".into(), action_id.clone()],
+                        },
+                        false,
+                        false,
+                    )
+                    .await?;
+                    if status["ok"] != true {
+                        value = status;
+                        break;
+                    }
+                    let action = &status["value"]["value"];
+                    if action["state"] != "running" {
+                        value = json!({"ok":action["state"]=="completed","action":action});
+                        break;
+                    }
+                    if started.elapsed().as_secs() > native.as_ref().unwrap().timeout + 3 {
+                        if native.as_ref().unwrap().command!="actions wait" {let _ = client(id, &Request::Stop, false, false).await;}
+                        return Err(failure(
+                            "Foreground wait exceeded its deadline; no action replayed. Check live state before further motion.",
+                        ));
+                    }
+                }
+            }
+            if !cli.jsonl {crate::out(cli.json, value.clone(), || value.to_string());}
+        }
+        if cli.jsonl {crate::device::print_jsonl(value.clone());}
         Ok(if value["ok"] == true { 0 } else { 1 })
     });
     runtime.shutdown_timeout(Duration::from_millis(100));

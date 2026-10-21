@@ -1,6 +1,6 @@
 [package]
 name = "vexaim"
-version = "0.2.1"
+version = "0.3.0-rc.5"
 edition = "2024"
 description = "Run MicroPython and capture camera frames on a VEX AIM over USB or Bluetooth"
 license = "Apache-2.0"
@@ -8,23 +8,26 @@ repository = "https://github.com/Tingsters/vexaim-cli"
 
 [features]
 default = ["bluetooth"]
-bluetooth = ["vex-v5-serial/bluetooth", "dep:btleplug", "dep:tokio", "dep:keyring", "dep:rpassword", "dep:uuid", "dep:tempfile", "dep:windows-sys", "dep:libc"]
+bluetooth = ["vex-v5-serial/bluetooth", "dep:btleplug", "dep:tokio", "dep:keyring", "dep:rpassword", "dep:uuid", "dep:windows-sys", "dep:libc"]
 # Use the thread-based serial adapter that Windows uses, on any OS (for testing it).
 blocking-io = ["vex-v5-serial/blocking-io"]
 
 [dependencies]
-vex-v5-serial = { workspace = true, features = ["serial"], default-features = false }
+vex-v5-serial = { workspace = true, features = ["serial", "file-commands"], default-features = false }
 smol = "2.0.2"
 clap = { version = "4", features = ["derive"] }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
+serialport = { version = "4.9", features = ["usbportinfo-interface"] }
 nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
 btleplug = { version = "0.13.5", optional = true }
 tokio = { version = "1", features = ["rt", "time", "net", "io-util", "sync", "macros"], optional = true }
 keyring = { version = "3.6.1", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"], optional = true }
 rpassword = { version = "7.5", optional = true }
 uuid = { version = "1", optional = true }
-tempfile = { version = "3", optional = true }
+tempfile = "3"
+sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Threading", "Win32_System_Memory"], optional = true }
