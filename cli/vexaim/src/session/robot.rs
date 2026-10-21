@@ -72,7 +72,7 @@ impl Robot {
         let connected = Instant::now();
         let mut conn = device.connect().await.map_err(failure)?;
         let setup = async {
-            let identity = bluetooth::identity(&conn).await?;
+            let mut identity = bluetooth::identity(&conn).await?;
             bluetooth::authenticate(&mut conn, &id, false).await?;
             // Keep this request alive in the patched backend for the connection.
             let _ = tokio::time::timeout(
@@ -81,6 +81,7 @@ impl Robot {
                     .request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized),
             )
             .await;
+            bluetooth::add_system_versions(&mut conn, &mut identity).await;
             Ok::<_, Fail>(identity)
         }
         .await;
@@ -142,9 +143,10 @@ impl Robot {
                 return Err(error);
             }
         };
+        let device_info = robot.identity.clone();
         Ok((
             robot,
-            json!({"transport":"bluetooth","id":id,"robot_state":state,"keepalive":{"active":keepalive,"period_ms":2000,"method":"system-alive","prevents_sleep":false},"timings":{"discovery_ms":discovery_ms,
+            json!({"transport":"bluetooth","id":id,"device_info":device_info,"robot_state":state,"keepalive":{"active":keepalive,"period_ms":2000,"method":"system-alive","prevents_sleep":false},"timings":{"discovery_ms":discovery_ms,
             "connection_ms":connection_ms,"preparation_ms":prepared.elapsed().as_millis() as u64,
             "startup_ms":all.elapsed().as_millis() as u64}}),
         ))
@@ -230,7 +232,9 @@ impl Robot {
         checked(&result)?;
         let state: Value = serde_json::from_str(result.stdout.trim()).map_err(failure)?;
         self.needs_check = state["stopped"] != true && state["owned_action_active"] != true;
-        Ok(json!({"ok":true,"robot_state":state,"needs_check":self.needs_check}))
+        Ok(
+            json!({"ok":true,"robot_state":state,"device_info":self.identity,"needs_check":self.needs_check}),
+        )
     }
     async fn activate_display(&mut self) -> Result<(), Fail> {
         if !self.repl.connection().inner().is_bluetooth()

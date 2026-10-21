@@ -28,6 +28,10 @@ sensor/motor traffic or displaying a face prevents sleep. Students should use a
 published binary/skill together. Close at actual wrap-up; 30 minutes without
 client work also closes the owner. See the session reference for evidence.
 
+When the user asks for unattended work, arrange physical setup, pairing and a
+rehearsed audible computer cue up front. Do not assume they watch the console.
+Read `references/unattended-work.md`; a disconnected robot cannot sound its cue.
+
 For USB, run `vexaim doctor` initially and after a connection failure. A successful
 check reports `verdict: ready` and battery. For Bluetooth use its transport/name
 options or the existing session; a USB diagnostic cannot diagnose a wireless link.
@@ -125,6 +129,7 @@ robot. Actual coverage: https://github.com/Tingsters/vexaim-cli/blob/main/docs/h
 - `references/examples.md`: short Python examples for creative compositions.
 - `references/device-commands.md`: VEX-style native command catalogue and actions.
 - `references/agent-vision.md`: capture, inspect, decide, act and observe again.
+- `references/unattended-work.md`: front-loaded setup and audible intervention.
 
 For Linux USB only, `linux/install-udev.sh` avoids ModemManager interference.
 Ask before its administrator action and explicitly cue a USB reconnect afterward.

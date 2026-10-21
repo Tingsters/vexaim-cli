@@ -17,7 +17,10 @@ use vex_v5_serial::{
     bluetooth::{self, BluetoothConnection, BluetoothDevice},
     protocol::{
         Version,
-        cdc2::{file::*, system::ScreenCapturePacket},
+        cdc2::{
+            file::*,
+            system::{ScreenCapturePacket, SystemStatusPacket},
+        },
     },
 };
 
@@ -182,7 +185,65 @@ pub(crate) async fn identity(conn: &BluetoothConnection) -> Result<serde_json::V
             "Selected device does not identify as a VEX AIM; no Python or camera command was sent.",
         ));
     }
+    // Preserve the original field: on AIM, 2a26 is a separate application
+    // revision (VEXcode calls it appVersion2), not necessarily the VEXos release.
+    info["gatt_firmware_revision"] = info["firmware"].clone();
+    info["gatt_software_revision"] = serde_json::Value::Null;
+    let software_uuid = Uuid::from_u128(0x00002a28_0000_1000_8000_00805f9b34fb);
+    if let Some(characteristic) = conn
+        .peripheral
+        .characteristics()
+        .into_iter()
+        .find(|c| c.uuid == software_uuid)
+    {
+        match tokio::time::timeout(
+            Duration::from_secs(2),
+            conn.peripheral.read(&characteristic),
+        )
+        .await
+        {
+            Ok(Ok(bytes)) => match String::from_utf8(bytes) {
+                Ok(value) => info["gatt_software_revision"] = json!(value.trim_end_matches('\0')),
+                Err(_) => {
+                    info["software_revision_error"] =
+                        json!("Invalid UTF-8 in optional GATT software revision")
+                }
+            },
+            _ => {
+                info["software_revision_error"] =
+                    json!("Optional GATT software revision unavailable")
+            }
+        }
+    }
     Ok(info)
+}
+
+fn version_text(version: Version) -> String {
+    format!(
+        "{}.{}.{}.b{}",
+        version.major, version.minor, version.build, version.beta
+    )
+}
+
+/// One source-defined SYS_STATUS read, after authentication; never a firmware write.
+pub(crate) async fn add_system_versions<C: Connection>(conn: &mut C, info: &mut serde_json::Value) {
+    for key in ["vexos_version", "cpu0_version", "cpu1_version"] {
+        info[key] = serde_json::Value::Null;
+    }
+    match conn
+        .handshake(SystemStatusPacket {}, Duration::from_secs(2), 0)
+        .await
+    {
+        Ok(Ok(reply)) => {
+            info["vexos_version"] = reply
+                .system_version
+                .map(version_text)
+                .map_or(serde_json::Value::Null, |v| json!(v));
+            info["cpu0_version"] = json!(version_text(reply.cpu0_version));
+            info["cpu1_version"] = json!(version_text(reply.cpu1_version));
+        }
+        _ => info["system_versions_error"] = json!("Optional AIM system version read unavailable"),
+    }
 }
 
 pub(crate) async fn authenticate(

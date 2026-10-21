@@ -1,5 +1,6 @@
 """Test autonomous endurance evidence and its stationary-only command scope."""
 
+import ast
 import importlib.util
 import json
 import subprocess
@@ -27,7 +28,10 @@ class AcceptanceTests(unittest.TestCase):
         reboot = options.pop("reboot", False)
         failed_health = options.pop("failed_health", False)
         frozen_health = options.pop("frozen_health", False)
+        lost_nonce = options.pop("lost_nonce", False)
+        cancel_at = options.pop("cancel_at", None)
         timer_reads = [0]
+        nonce = [None]
         args = SimpleNamespace(
             tool=tool,
             session="test-session",
@@ -63,6 +67,17 @@ class AcceptanceTests(unittest.TestCase):
                     0 if reboot and timer_reads[0] > 1 else 100000 + int(now[0] * 1000)
                 )
                 value = {"value": {"value": uptime}}
+            elif words[:2] == ["exec", "--no-preamble"]:
+                source = words[2]
+                if source.startswith("_va_endurance_nonce = "):
+                    nonce[0] = ast.literal_eval(
+                        source.split(" = ", 1)[1].split(";", 1)[0]
+                    )
+                value = {
+                    "stdout": "changed"
+                    if lost_nonce and timer_reads[0] > 1
+                    else nonce[0]
+                }
             elif words[:2] == ["camera", "observe"]:
                 value = {"control_ready": camera_ready}
             elif words == ["screen", "show-emoji", "HAPPY"]:
@@ -85,6 +100,8 @@ class AcceptanceTests(unittest.TestCase):
 
         def sleep(seconds):
             now[0] += seconds
+            if cancel_at is not None and now[0] >= cancel_at:
+                args.stop_file.touch()
 
         clock = SimpleNamespace(
             monotonic=lambda: now[0], time=lambda: 1700000000 + now[0], sleep=sleep
@@ -115,6 +132,7 @@ class AcceptanceTests(unittest.TestCase):
             self.assertTrue(
                 all(
                     words in (["info"], ["timer", "system"], ["session", "status"])
+                    or words[:2] == ["exec", "--no-preamble"]
                     for _, words in calls
                 )
             )
@@ -124,7 +142,10 @@ class AcceptanceTests(unittest.TestCase):
             code, report, calls = self.run_probe(Path(folder), moving=True)
             self.assertEqual(code, 1)
             self.assertFalse(report["passed"])
-            self.assertEqual([words for _, words in calls], [["info"]])
+            self.assertEqual(calls[-1][1], ["info"])
+            self.assertFalse(
+                any(words[0] in ("move", "turn", "kicker") for _, words in calls)
+            )
 
     def test_camera_with_failed_recovery_cannot_pass(self):
         with TemporaryDirectory() as folder:
@@ -139,7 +160,7 @@ class AcceptanceTests(unittest.TestCase):
         with TemporaryDirectory() as folder:
             code, report, _ = self.run_probe(Path(folder), reboot=True)
             self.assertEqual(code, 1)
-            self.assertIn("uptime", report["error"])
+            self.assertIn("system time", report["error"])
 
     def test_early_handoff_is_distinct_from_a_passing_endurance_run(self):
         with TemporaryDirectory() as folder:
@@ -147,9 +168,11 @@ class AcceptanceTests(unittest.TestCase):
             stop = root / "handoff"
             stop.touch()
             code, report, _ = self.run_probe(root, stop_file=stop)
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 2)
             self.assertTrue(report["handoff_requested"])
             self.assertFalse(report["passed"])
+            self.assertEqual(report["state"], "incomplete")
+            self.assertEqual(report["checks"], [])
 
     def test_invalid_duration_is_rejected_before_robot_io(self):
         with TemporaryDirectory() as folder:
@@ -188,6 +211,37 @@ class AcceptanceTests(unittest.TestCase):
             self.assertIn(["screen", "show-emoji", "HAPPY"], words)
             self.assertEqual(
                 sum(command[:2] == ["camera", "observe"] for command in words), 2
+            )
+
+    def test_interpreter_state_loss_fails_even_with_continuous_system_time(self):
+        with TemporaryDirectory() as folder:
+            code, report, _ = self.run_probe(Path(folder), lost_nonce=True)
+            self.assertEqual(code, 1)
+            self.assertEqual(report["failure_class"], "interpreter_state_lost")
+            self.assertFalse(report["passed"])
+
+    def test_explicit_baseline_can_measure_firmware_without_active_monitor(self):
+        with TemporaryDirectory() as folder:
+            code, report, _ = self.run_probe(
+                Path(folder),
+                quiet_seconds=60,
+                failed_health=True,
+                allow_inactive_monitor=True,
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue(report["passed"])
+
+    def test_handoff_during_quiet_never_runs_camera_or_passes(self):
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            stop = root / "handoff"
+            code, report, calls = self.run_probe(
+                root, stop_file=stop, cancel_at=5, quiet_seconds=20, after_stop_quiet=20
+            )
+            self.assertEqual(code, 2)
+            self.assertFalse(report["passed"])
+            self.assertFalse(
+                any(words[0] in ("camera", "screen") for _, words in calls)
             )
 
 

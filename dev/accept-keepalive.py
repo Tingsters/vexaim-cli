@@ -13,6 +13,12 @@ import time
 import uuid
 from pathlib import Path
 
+from attention import Attention, write_json
+
+
+class Incomplete(RuntimeError):
+    """The requested interval was not completed; this is never a pass."""
+
 
 def main(args):
     tool = str(args.tool.resolve(strict=True))
@@ -26,8 +32,26 @@ def main(args):
         "quiet_seconds": args.quiet_seconds,
         "display_control": args.display,
         "started_at_unix_ms": int(time.time() * 1000),
+        "state": "running",
+        "label": getattr(args, "label", "stationary-endurance"),
+        "phases": [],
     }
     path = output / ("endurance-" + str(uuid.uuid4()) + ".json")
+    nonce = str(uuid.uuid4())
+
+    def save():
+        write_json(path, report)
+
+    def check_cancel():
+        if args.stop_file and args.stop_file.exists():
+            report["handoff_requested"] = True
+            raise Incomplete("Operator requested handoff; interval not completed")
+
+    def phase(name):
+        check_cancel()
+        report["phase"] = name
+        report["phases"].append({"name": name, "elapsed_s": time.monotonic() - start})
+        save()
 
     def call(words):
         result = subprocess.run(
@@ -42,7 +66,7 @@ def main(args):
         rows = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
         value = rows[-1] if rows else {"ok": False, "error": result.stderr}
         report["checks"].append({"command": words, "result": value})
-        path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        save()
         if result.returncode or value.get("ok") is not True:
             raise RuntimeError(value.get("error", "CLI command failed"))
         return value
@@ -51,21 +75,35 @@ def main(args):
         state = call(["info"])["robot_state"]
         if not state["stopped"] or state["imu_calibrating"]:
             raise RuntimeError("Robot is not stationary; endurance check stopped")
-        uptime = call(["timer", "system"])["value"]["value"]
+        system_time = call(["timer", "system"])["value"]["value"]
+        result = call(["exec", "--no-preamble", "print(_va_endurance_nonce)"])
+        if result.get("stdout", "").strip() != nonce:
+            raise RuntimeError(
+                "Persistent REPL nonce changed; interpreter state was lost"
+            )
         report.setdefault("samples", []).append(
-            {"elapsed_s": time.monotonic() - start, "uptime_ms": uptime, **state}
+            {
+                "elapsed_s": time.monotonic() - start,
+                "system_time_ms": system_time,
+                **state,
+            }
         )
-        if uptime < report["samples"][0]["uptime_ms"]:
-            raise RuntimeError("Robot uptime went backwards")
+        if (
+            len(report["samples"]) > 1
+            and system_time < report["samples"][-2]["system_time_ms"]
+        ):
+            raise RuntimeError(
+                "Robot system time went backwards; reset semantics need inspection"
+            )
         report["elapsed_s"] = time.monotonic() - start
-        path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        save()
         print(
             json.dumps(
                 {
                     "elapsed_s": round(time.monotonic() - start),
                     "battery_pct": state["battery_pct"],
                     "stopped": state["stopped"],
-                    "uptime_ms": uptime,
+                    "system_time_ms": system_time,
                 }
             ),
             flush=True,
@@ -76,9 +114,7 @@ def main(args):
         first_count = None
         last_count = None
         while time.monotonic() < deadline:
-            if args.stop_file and args.stop_file.exists():
-                report["handoff_requested"] = True
-                return
+            check_cancel()
             time.sleep(min(5, max(0, deadline - time.monotonic())))
             # Cached IPC only: no radio activity or owner lease renewal.
             health = call(["session", "status"]).get("keepalive", {})
@@ -87,19 +123,25 @@ def main(args):
                 if first_count is None:
                     first_count = count
                 last_count = count
-            if (
-                health.get("active") is False
-                or health.get("consecutive_failures", 0) >= 3
-            ):
+            inactive_allowed = getattr(args, "allow_inactive_monitor", False)
+            if (health.get("active") is False and not inactive_allowed) or health.get(
+                "consecutive_failures", 0
+            ) >= 3:
                 raise RuntimeError(
                     "Background keepalive stopped; inspect cached health"
                 )
             if (
-                health.get("last_confirmed_ms_ago", 0) is not None
+                health.get("active") is True
+                and health.get("last_confirmed_ms_ago", 0) is not None
                 and health.get("last_confirmed_ms_ago", 0) > 12000
             ):
                 raise RuntimeError("Background keepalive acknowledgments are stale")
-        if seconds >= 10 and first_count is not None and last_count <= first_count:
+        if (
+            seconds >= 10
+            and health.get("active") is True
+            and first_count is not None
+            and last_count <= first_count
+        ):
             raise RuntimeError(
                 "Background keepalive acknowledgment count did not advance"
             )
@@ -112,45 +154,85 @@ def main(args):
             raise RuntimeError("Postcapture control is not ready")
 
     start = time.monotonic()
+    exit_code = 1
     try:
-        if args.quiet_seconds > args.duration or args.camera_interval < 0:
+        if (
+            args.quiet_seconds + args.after_stop_quiet > args.duration
+            or args.camera_interval < 0
+        ):
             raise ValueError(
                 "Quiet period must fit the duration; camera interval cannot be negative"
             )
+        phase("preflight")
+        cached = call(["session", "status"])
+        report["context"] = {
+            key: cached.get(key)
+            for key in (
+                "tool_version",
+                "transport",
+                "name",
+                "id",
+                "device_info",
+                "keepalive",
+            )
+        }
+        call(
+            [
+                "exec",
+                "--no-preamble",
+                "_va_endurance_nonce = " + repr(nonce) + "; print(_va_endurance_nonce)",
+            ]
+        )
         if args.display:
             call(["screen", "show-emoji", "HAPPY"])
         sample()
+        phase("quiet_before")
         quiet(args.quiet_seconds)
         if args.quiet_seconds:
             sample()
-        if args.after_stop_quiet and not report.get("handoff_requested"):
+        if args.after_stop_quiet:
+            phase("camera_display_stop")
             camera()
             call(["screen", "show-emoji", "HAPPY"])
             call(["stop"])
             sample()
+            phase("quiet_after_stop")
             quiet(args.after_stop_quiet)
             sample()
             camera()
+        phase("functional_interval")
         deadline = start + args.duration
         next_camera = (
             start + args.camera_interval if args.camera_interval else deadline + 1
         )
         while time.monotonic() < deadline:
-            if args.stop_file and args.stop_file.exists():
-                report["handoff_requested"] = True
-                break
+            check_cancel()
             time.sleep(min(args.interval, max(0, deadline - time.monotonic())))
             sample()
             if time.monotonic() >= next_camera:
                 camera()
                 next_camera = time.monotonic() + args.camera_interval
         report["elapsed_s"] = time.monotonic() - start
+        check_cancel()
+        sample()
         report["passed"] = report["elapsed_s"] >= args.duration
+        report["state"] = "passed" if report["passed"] else "incomplete"
+        exit_code = 0 if report["passed"] else 2
+    except (Incomplete, KeyboardInterrupt) as error:
+        report.update(state="incomplete", error=str(error) or "Interrupted by operator")
+        exit_code = 2
     except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as error:
         report["error"] = str(error)
+        report["state"] = "failed"
+        report["failure_class"] = (
+            "interpreter_state_lost"
+            if "nonce" in str(error)
+            else "command_or_transport_error"
+        )
     finally:
         report["elapsed_s"] = time.monotonic() - start
-        path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        report["finished_at_unix_ms"] = int(time.time() * 1000)
+        save()
         print(
             json.dumps(
                 {
@@ -162,7 +244,22 @@ def main(args):
             ),
             flush=True,
         )
-    return 0 if report["passed"] or report.get("handoff_requested") else 1
+    attention_directory = getattr(args, "attention_dir", None)
+    if exit_code == 1 and attention_directory:
+        report["state"] = "awaiting_user"
+        report["outcome"] = "failed"
+        save()
+        try:
+            report["attention"] = Attention(attention_directory).request(
+                "Return to the computer to review the paused AIM test.",
+                report["error"]
+                + " No actuator command was sent; do not replay any action.",
+            )
+        except (RuntimeError, OSError, ValueError) as error:
+            report["attention"] = {"state": "incomplete", "error": str(error)}
+        report["state"] = "failed"
+        save()
+    return exit_code
 
 
 if __name__ == "__main__":
@@ -184,5 +281,12 @@ if __name__ == "__main__":
         "--after-stop-quiet", type=int, default=0, choices=range(901), metavar="0..900"
     )
     parser.add_argument("--stop-file", type=Path)
+    parser.add_argument("--attention-dir", type=Path)
+    parser.add_argument(
+        "--allow-inactive-monitor",
+        action="store_true",
+        help="Baseline only: firmware with no validated link monitor may still be tested; no sleep claim is inferred",
+    )
+    parser.add_argument("--label", default="stationary-endurance")
     parser.add_argument("--output-dir", type=Path, default=Path(".vexaim/keepalive"))
     sys.exit(main(parser.parse_args()))
