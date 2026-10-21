@@ -33,9 +33,21 @@ needed. Windows captures have been verified; other OS/firmware combinations need
 their own hardware evidence. Snapshot transfers take several seconds and are
 optional; do not insert one as a prerequisite for every movement.
 
-If discovery fails, check robot power and proximity before retrying. The robot can
-sleep while work is idle; a connection does not promise to keep it awake. Give a
-clear power-on cue. After a link failure close/start the session, obtain live
+With 0.3.0-rc.6, an owned Bluetooth session automatically sends and acknowledges
+the existing System Alive request every two seconds on AIM REV1 / BLE 1.0.0.b0.
+This is separate from the display heartbeat: camera/sensor work and idle prompts
+do not need a visible program screen. Startup/live info report `keepalive.active`.
+Unknown firmware reports inactive rather than claiming equivalent verification.
+Stop and the 60-second LCD lease do not end session liveness; close and the
+30-minute owner idle deadline do. Heartbeats do not renew that deadline.
+Cached health reports successful poll counts, acknowledgment age and consecutive
+failures. Only the fixed read-only probe retries, up to three failures; student
+actions are never replayed. After an error, obtain live info before fresh motion.
+
+If discovery fails, check robot power and proximity before retrying. Earlier
+binaries can sleep despite REPL activity, and a keepalive cannot recover an
+already powered-off robot or guarantee battery/radio health. Give a clear
+power-on cue. After a link failure close/start the session, obtain live
 status and confirm stopped state before a new movement. Never replay a movement
 whose outcome is uncertain. Cached status is not proof of a live connection.
 
@@ -44,6 +56,11 @@ Use its ID or close it deliberately. A cancelled camera transfer requires a
 fresh session before another snapshot; live info can restore movement first.
 Wireless stop depends on the connection; a nearby person must be able to use
 the physical switch.
+
+For unattended stationary diagnostics, collect charging, power-on, USB removal
+and VEXcode closure together before starting. Use bounded automated checks; do
+not deliberately exhaust an old keepalive control when recovery would require
+someone who is unavailable to press power. Never move an unattended robot.
 
 Technical protocol evidence, including the Windows notify-versus-indicate fix,
 is recorded at https://github.com/Tingsters/vexaim-cli/blob/main/docs/bluetooth.md.

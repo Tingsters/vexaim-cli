@@ -66,17 +66,17 @@ To pass options without a checkout, use `curl -fsSL <installer-URL> | sh -s --
 above. To review the installer first, open that URL or download it without
 executing it.
 
-To try the device commands, agent camera workflow and Bluetooth display fix in
-**0.3.0-rc.5**, select the prerelease explicitly. Windows PowerShell:
+To try the device commands, agent camera workflow, Bluetooth display and session
+keepalive fixes in **0.3.0-rc.6**, select the prerelease explicitly. Windows PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1))) -Version 0.3.0-rc.5
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1))) -Version 0.3.0-rc.6
 ```
 
 macOS (Apple Silicon or Intel) and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh -s -- --version 0.3.0-rc.5
+curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.sh | sh -s -- --version 0.3.0-rc.6
 ```
 
 Both commands verify the release archive and install its matching basic skill.

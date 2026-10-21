@@ -20,6 +20,12 @@ named session and retain its returned ID across requests. Startup already reads
 live status; do not scan, reconnect and run doctor before every healthy action.
 Cached session status does not prove the robot is still awake.
 
+For sustained Bluetooth work use 0.3.0-rc.6 or newer. On the verified AIM firmware,
+the owner automatically sends acknowledged System Alive requests every two
+seconds, including between prompts and while the LCD is on its menu. Students
+need no keepalive command. Close at actual wrap-up; 30 minutes without client
+work also closes the owner. See the session reference for coverage and recovery.
+
 For USB, run `vexaim doctor` initially and after a connection failure. A successful
 check reports `verdict: ready` and battery. For Bluetooth use its transport/name
 options or the existing session; a USB diagnostic cannot diagnose a wireless link.

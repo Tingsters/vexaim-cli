@@ -1,5 +1,22 @@
 # Hardware evidence
 
+## Session keepalive candidate (2026-10-21)
+
+Two stationary checks exposed why a successful connection is insufficient proof
+of sustained liveness. The rc.5 display-only control reached uptime 316650 ms
+at 91% battery, stopped at (0,0), then lost the link. The next exact-name scan
+found no AIM6518. The first local rc.6 System Alive candidate acknowledged its
+initial request, but a later background probe exceeded its 500 ms total deadline
+and stopped polling permanently. The quiet test failed at 370 seconds; discovery
+again found no robot. Neither run passed endurance. No motors or kicker ran.
+
+The hardened local candidate uses a 3-second total / 2-second reply deadline,
+up to three read-only retries and cached confirmation counts/age. Stop and close
+preempt background polling; the unchanged owner idle deadline still expires.
+Its full quiet/camera/display acceptance is pending another physical power-on.
+Software and installer tests alone do not establish that it prevents sleep.
+See [investigation and autonomous procedure](keepalive-investigation.md).
+
 ## Bluetooth display lifecycle candidate (2026-10-20)
 
 Local Windows 0.3.0-rc.5 now displays named HAPPY, text and shapes over Bluetooth

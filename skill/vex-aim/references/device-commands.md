@@ -80,6 +80,10 @@ firmware's numeric 6 selected a sunglasses face. For text, choose contrasting
 pen and fill colors; white text on white fill appears as a solid white bar.
 Confirm actual visible output rather than treating an API acknowledgment as proof.
 
+From 0.3.0-rc.6, the owned Bluetooth session has a separate acknowledged System
+Alive heartbeat. Returning the LCD to its menu, including through `stop`, does
+not end session liveness. Camera-only work never needs to activate the display.
+
 For maintainer diagnostics, see the
 [stationary display investigation](https://github.com/Tingsters/vexaim-cli/blob/main/docs/display-investigation.md).
 It records protocol provenance and hardware observations. Students do not need

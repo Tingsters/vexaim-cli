@@ -1,13 +1,16 @@
 //! Real local IPC with a fake radio owner: no robot/credentials required.
 use super::*;
-use std::process::Command;
 use std::future::pending;
+use std::process::Command;
 
 #[derive(Clone, Default)]
 struct Counters {
     calls: Rc<Cell<usize>>,
     halts: Rc<Cell<usize>>,
     closes: Rc<Cell<usize>>,
+    idles: Rc<Cell<usize>>,
+    fail_idle: Rc<Cell<bool>>,
+    hold_idle: Rc<Cell<bool>>,
 }
 struct Fake {
     counters: Counters,
@@ -22,7 +25,9 @@ impl Backend for Fake {
     ) -> Result<Value, Fail> {
         if matches!(request, Request::Info | Request::Doctor) {
             self.needs_check = false;
-            return Ok(json!({"ok":true,"needs_check":false,"robot_state":{"stopped":true}}));
+            return Ok(
+                json!({"ok":true,"needs_check":false,"robot_state":{"stopped":true},"keepalive":{"active":true}}),
+            );
         }
         if self.needs_check {
             return Err(failure("info required before fresh motion"));
@@ -46,6 +51,131 @@ impl Backend for Fake {
     async fn close(&mut self) {
         self.counters.closes.set(self.counters.closes.get() + 1);
     }
+    async fn idle(&mut self) -> Result<Option<Value>, Fail> {
+        self.counters.idles.set(self.counters.idles.get() + 1);
+        if self.counters.hold_idle.get() {
+            pending::<()>().await;
+        }
+        if self.counters.fail_idle.replace(false) {
+            self.needs_check = true;
+            return Err(failure("keepalive failed"));
+        }
+        Ok(None)
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn heartbeat_does_not_extend_owner_idle_deadline() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (_normal_tx, normal) = mpsc::unbounded_channel();
+            let (_priority_tx, priority) = mpsc::unbounded_channel();
+            let cache = Rc::new(RefCell::new(json!({"state":"ready"})));
+            let counters = Counters::default();
+            let backend = Fake {
+                counters: counters.clone(),
+                needs_check: false,
+            };
+            tokio::time::timeout(
+                Duration::from_secs(3),
+                actor_with_idle(
+                    backend,
+                    normal,
+                    priority,
+                    cache.clone(),
+                    Rc::new(Cell::new(false)),
+                    Duration::from_millis(350),
+                ),
+            )
+            .await
+            .expect("idle health checks must not renew the owner lease");
+            assert!(counters.idles.get() >= 2);
+            assert_eq!(counters.halts.get(), 1);
+            assert_eq!(counters.closes.get(), 1);
+            assert_eq!(cache.borrow()["state"], "closed");
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn failed_idle_keepalive_requires_live_recovery_without_replaying_actions() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("idle-health").await;
+            counters.fail_idle.set(true);
+            tokio::time::timeout(Duration::from_secs(3), async {
+                while counters.fail_idle.get() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            let status = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(status["needs_check"], true);
+            assert_eq!(status["keepalive"]["healthy"], false);
+            assert!(
+                status["keepalive_error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("keepalive failed")
+            );
+            let turn = Request::Turn {
+                left: true,
+                degrees: 15.0,
+                speed: 30.0,
+            };
+            assert_eq!(client(&id, &turn, false, false).await.unwrap()["ok"], false);
+            assert_eq!(counters.calls.get(), 0);
+            assert_eq!(
+                client(&id, &Request::Info, false, false).await.unwrap()["ok"],
+                true
+            );
+            let status = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(status["keepalive"]["active"], true);
+            assert!(status.get("keepalive_error").is_none());
+            assert_eq!(client(&id, &turn, false, false).await.unwrap()["ok"], true);
+            assert_eq!(counters.calls.get(), 1);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn stop_and_close_preempt_a_pending_background_heartbeat() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("idle-priority").await;
+            counters.hold_idle.set(true);
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while counters.idles.get() == 0 {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            let result = tokio::time::timeout(
+                Duration::from_secs(1),
+                client(&id, &Request::Stop, false, false),
+            )
+            .await
+            .expect("stop must preempt a pending heartbeat")
+            .unwrap();
+            assert_eq!(result["stopped"], true);
+            assert_eq!(counters.calls.get(), 0);
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            tokio::time::timeout(
+                Duration::from_secs(1),
+                client(&id, &Request::Close, false, false),
+            )
+            .await
+            .expect("close must preempt a pending heartbeat")
+            .unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
 }
 
 async fn rig(
@@ -254,33 +384,43 @@ async fn protocol_rejects_oversized_input_before_allocating_body() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn start_waits_for_slow_closing_owner_without_spawning_a_competitor() {
-    tokio::task::LocalSet::new().run_until(async {
-        let name = format!("test-closing-{}", std::process::id());
-        let id = ipc::id_for(&name).unwrap();
-        let mut listener = ipc::Listener::bind(&id).await.unwrap();
-        let cache = Rc::new(RefCell::new(json!({
-            "ok":true,"protocol":PROTOCOL,"name":name,"state":"closing"
-        })));
-        let (normal, _normal_rx) = mpsc::unbounded_channel();
-        let (priority, _priority_rx) = mpsc::unbounded_channel();
-        let listener_cache = cache.clone();
-        let listening = tokio::task::spawn_local(async move {
-            while let Ok(stream) = listener.accept().await {
-                tokio::task::spawn_local(handle(stream, normal.clone(), priority.clone(),
-                    listener_cache.clone(), Rc::new(Cell::new(false))));
-            }
-        });
-        // A legitimate successor becomes ready later than the old fixed 500 ms.
-        let ready = tokio::task::spawn_local(async move {
-            tokio::time::sleep(Duration::from_millis(1100)).await;
-            cache.borrow_mut()["state"] = json!("ready");
-        });
-        let value = tokio::time::timeout(Duration::from_secs(4), start(&name)).await.unwrap().unwrap();
-        assert_eq!(value["state"], "ready");
-        ready.await.unwrap();
-        listening.abort();
-        let _ = listening.await;
-    }).await;
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let name = format!("test-closing-{}", std::process::id());
+            let id = ipc::id_for(&name).unwrap();
+            let mut listener = ipc::Listener::bind(&id).await.unwrap();
+            let cache = Rc::new(RefCell::new(json!({
+                "ok":true,"protocol":PROTOCOL,"name":name,"state":"closing"
+            })));
+            let (normal, _normal_rx) = mpsc::unbounded_channel();
+            let (priority, _priority_rx) = mpsc::unbounded_channel();
+            let listener_cache = cache.clone();
+            let listening = tokio::task::spawn_local(async move {
+                while let Ok(stream) = listener.accept().await {
+                    tokio::task::spawn_local(handle(
+                        stream,
+                        normal.clone(),
+                        priority.clone(),
+                        listener_cache.clone(),
+                        Rc::new(Cell::new(false)),
+                    ));
+                }
+            });
+            // A legitimate successor becomes ready later than the old fixed 500 ms.
+            let ready = tokio::task::spawn_local(async move {
+                tokio::time::sleep(Duration::from_millis(1100)).await;
+                cache.borrow_mut()["state"] = json!("ready");
+            });
+            let value = tokio::time::timeout(Duration::from_secs(4), start(&name))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(value["state"], "ready");
+            ready.await.unwrap();
+            listening.abort();
+            let _ = listening.await;
+        })
+        .await;
 }
 
 #[tokio::test(flavor = "current_thread")]

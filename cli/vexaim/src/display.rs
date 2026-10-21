@@ -1,17 +1,18 @@
-//! One connection owner serializes all display keepalive and ordinary traffic.
+//! One owner serializes session liveness, display keepalive and ordinary traffic.
 use crate::repl::{Fail, is_timeout};
 use serde_json::Value;
 use std::time::{Duration, Instant};
 use vex_v5_serial::{
     Connection, ConnectionType,
     protocol::{
-        cdc::{CdcCommand, CdcReply},
+        cdc::{CdcCommand, CdcReply, SystemAlivePacket, SystemAliveReplyPacket},
         cdc2::aim::{RemoteDisplayPacket, RemoteStatusPacket, ScreenStatusPacket},
     },
 };
 
 const PERIOD: Duration = Duration::from_millis(100);
 const LEASE: Duration = Duration::from_secs(60);
+const ALIVE_PERIOD: Duration = Duration::from_secs(2);
 pub trait DisplayTransport: Connection {
     async fn poll_display(&mut self) -> Result<(), Self::Error> {
         self.send(RemoteStatusPacket).await
@@ -43,6 +44,11 @@ pub struct DisplayConnection<C> {
     active: bool,
     last: Instant,
     idle_deadline: Instant,
+    keepalive: bool,
+    last_alive: Instant,
+    alive_failures: u8,
+    alive_successes: u64,
+    last_alive_ok: Option<Instant>,
 }
 impl<C: DisplayTransport> DisplayConnection<C>
 where
@@ -54,6 +60,11 @@ where
             active: false,
             last: Instant::now(),
             idle_deadline: Instant::now(),
+            keepalive: false,
+            last_alive: Instant::now(),
+            alive_failures: 0,
+            alive_successes: 0,
+            last_alive_ok: None,
         }
     }
     pub fn inner(&self) -> &C {
@@ -64,6 +75,39 @@ where
     }
     pub fn active(&self) -> bool {
         self.active
+    }
+    /// Legacy System Alive is independent of the remote program/LCD lifecycle.
+    /// Only this fixed read-only probe may retry; student commands never replay.
+    pub async fn enable_keepalive(&mut self, identity: &Value) -> Result<bool, Fail> {
+        if !self.inner.connection_type().is_bluetooth()
+            || identity["model"] != "AIM"
+            || identity["hardware"] != "REV1"
+            || identity["firmware"] != "1.0.0.b0"
+        {
+            return Ok(false);
+        }
+        if !self.keepalive || self.alive_failures > 0 {
+            self.keepalive = true;
+            self.alive_failures = 0;
+            self.last_alive = Instant::now() - ALIVE_PERIOD;
+            self.tick()
+                .await
+                .map_err(|e| Fail::Session(format!("Session keepalive failed: {e}")))?;
+        }
+        Ok(true)
+    }
+    pub fn end_keepalive(&mut self) -> bool {
+        std::mem::replace(&mut self.keepalive, false)
+    }
+    pub fn restore_keepalive(&mut self, active: bool) {
+        self.keepalive = active;
+    }
+    pub fn keepalive_status(&self) -> Value {
+        serde_json::json!({"active":self.keepalive,
+            "healthy":self.keepalive && self.alive_failures == 0 && self.last_alive_ok.is_some(),
+            "method":"system-alive","period_ms":ALIVE_PERIOD.as_millis(),
+            "confirmed_polls":self.alive_successes,"consecutive_failures":self.alive_failures,
+            "last_confirmed_ms_ago":self.last_alive_ok.map(|at|at.elapsed().as_millis())})
     }
     fn touch(&mut self) {
         self.idle_deadline = Instant::now() + LEASE;
@@ -147,6 +191,32 @@ where
         .map_err(|_| C::Error::from(vex_v5_serial::protocol::cdc2::Cdc2Ack::Timeout))?
     }
     pub async fn tick(&mut self) -> Result<(), C::Error> {
+        if self.keepalive && self.last_alive.elapsed() >= ALIVE_PERIOD {
+            self.last_alive = Instant::now();
+            let result = tokio::time::timeout(Duration::from_secs(3), async {
+                self.inner.send(SystemAlivePacket {}).await?;
+                self.inner
+                    .recv::<SystemAliveReplyPacket>(Duration::from_secs(2))
+                    .await
+            })
+            .await
+            .unwrap_or_else(|_| {
+                Err(C::Error::from(
+                    vex_v5_serial::protocol::cdc2::Cdc2Ack::Timeout,
+                ))
+            });
+            if let Err(error) = result {
+                self.alive_failures += 1;
+                if self.alive_failures >= 3 {
+                    self.keepalive = false;
+                    self.active = false;
+                }
+                return Err(error);
+            }
+            self.alive_failures = 0;
+            self.alive_successes += 1;
+            self.last_alive_ok = Some(Instant::now());
+        }
         if self.active && self.last.elapsed() >= PERIOD {
             self.last = Instant::now();
             let result =
@@ -166,7 +236,7 @@ where
     }
     pub async fn idle(&mut self) -> Result<(), C::Error> {
         if self.active && Instant::now() >= self.idle_deadline {
-            return self.disable().await;
+            self.disable().await?;
         }
         self.tick().await
     }
@@ -192,14 +262,20 @@ where
             let remaining = deadline.saturating_duration_since(Instant::now());
             let result = self
                 .inner
-                .recv(if self.active {
+                .recv(if self.active || self.keepalive {
                     remaining.min(PERIOD)
                 } else {
                     remaining
                 })
                 .await;
             match result {
-                Err(e) if self.active && is_timeout(&e) && Instant::now() < deadline => continue,
+                Err(e)
+                    if (self.active || self.keepalive)
+                        && is_timeout(&e)
+                        && Instant::now() < deadline =>
+                {
+                    continue;
+                }
                 other => return other,
             }
         }
@@ -232,6 +308,8 @@ mod tests {
         sent: Vec<Vec<u8>>,
         replies: VecDeque<Option<Vec<u8>>>,
         fail_send: bool,
+        auto_alive: bool,
+        user_writes: Vec<Vec<u8>>,
     }
     impl DisplayTransport for Radio {}
     impl Connection for Radio {
@@ -242,6 +320,9 @@ mod tests {
         async fn send(&mut self, p: impl CdcCommand) -> Result<(), Self::Error> {
             let mut bytes = vec![0; p.size()];
             p.encode(&mut bytes);
+            if self.auto_alive && bytes == [0xc9, 0x36, 0xb8, 0x47, 0x21] {
+                self.replies.push_front(Some(alive(1)));
+            }
             self.sent.push(bytes);
             if self.fail_send {
                 return Err(BluetoothError::Timeout.into());
@@ -261,6 +342,7 @@ mod tests {
             Ok(0)
         }
         async fn write_user(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            self.user_writes.push(buf.to_vec());
             Ok(buf.len())
         }
     }
@@ -268,6 +350,9 @@ mod tests {
         let mut bytes = vec![0xaa, 0x55, 0x56, 11, 0x20, 0x76, 4, 6, 17, screen, 5, 9, 32];
         bytes.extend_from_slice(&VEX_CRC16.checksum(&bytes).to_be_bytes());
         bytes
+    }
+    fn alive(count: u8) -> Vec<u8> {
+        vec![0xaa, 0x55, 0x21, 10, 1, 0, 0, 0, 2, 0, 0, 0, 0, count]
     }
     fn identity() -> Value {
         json!({"model":"AIM","hardware":"REV1","firmware":"1.0.0.b0"})
@@ -281,8 +366,127 @@ mod tests {
         c.inner
             .sent
             .iter()
-            .filter(|b| b[4] == family && b[5] == opcode)
+            .filter(|b| b.len() > 5 && b[4] == family && b[5] == opcode)
             .count()
+    }
+    fn alive_count(c: &DisplayConnection<Radio>) -> usize {
+        c.inner
+            .sent
+            .iter()
+            .filter(|b| b.as_slice() == [0xc9, 0x36, 0xb8, 0x47, 0x21])
+            .count()
+    }
+    #[tokio::test]
+    async fn system_alive_keeps_session_without_display_program_or_user_code() {
+        let mut c = DisplayConnection::new(Radio {
+            auto_alive: true,
+            ..Radio::default()
+        });
+        assert!(c.enable_keepalive(&identity()).await.unwrap());
+        assert!(c.keepalive);
+        assert!(!c.active());
+        assert_eq!(alive_count(&c), 1);
+        c.idle().await.unwrap();
+        assert_eq!(alive_count(&c), 1);
+        c.last_alive = Instant::now() - ALIVE_PERIOD;
+        c.idle().await.unwrap();
+        assert_eq!(alive_count(&c), 2);
+        assert_eq!(count(&c, 0x57, 0x7f), 0);
+        assert_eq!(count(&c, 0x57, 0x7e), 0);
+        c.end_keepalive();
+        c.last_alive = Instant::now() - ALIVE_PERIOD;
+        c.idle().await.unwrap();
+        assert_eq!(alive_count(&c), 2);
+    }
+    #[tokio::test]
+    async fn display_lease_and_stop_do_not_end_session_liveness() {
+        let mut c = ready();
+        c.inner.auto_alive = true;
+        c.enable_keepalive(&identity()).await.unwrap();
+        c.enable(&identity()).await.unwrap();
+        c.idle_deadline = Instant::now() - PERIOD;
+        c.last_alive = Instant::now() - ALIVE_PERIOD;
+        c.idle().await.unwrap();
+        assert!(!c.active());
+        assert!(c.keepalive);
+        assert_eq!(alive_count(&c), 2);
+        assert_eq!(count(&c, 0x57, 0x7f), 2);
+        c.pause();
+        c.last_alive = Instant::now() - ALIVE_PERIOD;
+        c.idle().await.unwrap();
+        assert_eq!(alive_count(&c), 3);
+    }
+    #[tokio::test]
+    async fn stop_bytes_are_not_delayed_by_a_due_health_probe() {
+        let mut c = DisplayConnection::new(Radio {
+            auto_alive: true,
+            ..Radio::default()
+        });
+        c.enable_keepalive(&identity()).await.unwrap();
+        c.last_alive = Instant::now() - ALIVE_PERIOD;
+        let active = c.end_keepalive();
+        c.pause();
+        c.write_user(b"stop").await.unwrap();
+        assert_eq!(c.inner.user_writes, [b"stop".to_vec()]);
+        assert_eq!(alive_count(&c), 1);
+        c.restore_keepalive(active);
+        c.idle().await.unwrap();
+        assert_eq!(alive_count(&c), 2);
+    }
+    #[tokio::test]
+    async fn failed_alive_has_bounded_readonly_retries_then_requires_recovery() {
+        let mut c = DisplayConnection::new(Radio {
+            fail_send: true,
+            ..Radio::default()
+        });
+        assert!(c.enable_keepalive(&identity()).await.is_err());
+        assert!(c.keepalive);
+        c.tick().await.unwrap();
+        assert_eq!(alive_count(&c), 1);
+        for _ in 0..2 {
+            c.last_alive = Instant::now() - ALIVE_PERIOD;
+            assert!(c.tick().await.is_err());
+        }
+        assert!(!c.keepalive);
+        c.tick().await.unwrap();
+        assert_eq!(alive_count(&c), 3);
+        c.inner.fail_send = false;
+        c.inner.auto_alive = true;
+        c.enable_keepalive(&identity()).await.unwrap();
+        assert_eq!(alive_count(&c), 4);
+        assert!(c.keepalive);
+        assert_eq!(c.alive_failures, 0);
+        assert_eq!(c.alive_successes, 1);
+    }
+    #[tokio::test]
+    async fn malformed_alive_reply_fails_closed_and_unknown_firmware_is_untouched() {
+        let mut c = ready();
+        c.inner.replies.push_front(Some(vec![0xaa, 0x55, 0x21, 10]));
+        assert!(c.enable_keepalive(&identity()).await.is_err());
+        assert!(!c.keepalive_status()["healthy"].as_bool().unwrap());
+        assert!(!c.active());
+        let mut other = ready();
+        let mut id = identity();
+        id["firmware"] = json!("unknown");
+        assert!(!other.enable_keepalive(&id).await.unwrap());
+        assert!(other.inner.sent.is_empty());
+    }
+    #[tokio::test]
+    async fn pending_image_read_services_alive_without_lcd_activation_or_replay() {
+        let mut c = DisplayConnection::new(Radio {
+            auto_alive: true,
+            ..Radio::default()
+        });
+        c.enable_keepalive(&identity()).await.unwrap();
+        c.send(ScreenStatusPacket).await.unwrap();
+        c.inner.replies.extend((0..23).map(|_| None));
+        c.inner.replies.push_back(Some(status(0)));
+        let reply: Result<vex_v5_serial::protocol::cdc2::aim::ScreenStatusReply, Cdc2Ack> =
+            c.recv(Duration::from_secs(4)).await.unwrap();
+        assert_eq!(reply.unwrap().screen_id, 0);
+        assert!(alive_count(&c) >= 2);
+        assert_eq!(count(&c, 0x56, 0x20), 1);
+        assert_eq!(count(&c, 0x57, 0x7f), 0);
     }
     #[tokio::test]
     async fn activates_once_and_keeps_existing_connection() {
