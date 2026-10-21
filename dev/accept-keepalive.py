@@ -54,6 +54,7 @@ def main(args):
         save()
 
     def call(words):
+        requested_at = time.monotonic()
         result = subprocess.run(
             [tool, "--json", "--session", args.session, *words],
             capture_output=True,
@@ -65,7 +66,14 @@ def main(args):
         )
         rows = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
         value = rows[-1] if rows else {"ok": False, "error": result.stderr}
-        report["checks"].append({"command": words, "result": value})
+        report["checks"].append(
+            {
+                "command": words,
+                "result": value,
+                "requested_elapsed_s": requested_at - start,
+                "completed_elapsed_s": time.monotonic() - start,
+            }
+        )
         save()
         if result.returncode or value.get("ok") is not True:
             raise RuntimeError(value.get("error", "CLI command failed"))
@@ -113,9 +121,16 @@ def main(args):
         deadline = time.monotonic() + seconds
         first_count = None
         last_count = None
+        last_observed = time.monotonic()
         while time.monotonic() < deadline:
             check_cancel()
             time.sleep(min(5, max(0, deadline - time.monotonic())))
+            observed = time.monotonic()
+            if observed - last_observed > 15:
+                raise Incomplete(
+                    "Host monitoring paused; uninterrupted quiet interval not established"
+                )
+            last_observed = observed
             # Cached IPC only: no radio activity or owner lease renewal.
             health = call(["session", "status"]).get("keepalive", {})
             count = health.get("confirmed_polls")

@@ -30,6 +30,7 @@ class AcceptanceTests(unittest.TestCase):
         frozen_health = options.pop("frozen_health", False)
         lost_nonce = options.pop("lost_nonce", False)
         cancel_at = options.pop("cancel_at", None)
+        host_stall = options.pop("host_stall", False)
         timer_reads = [0]
         nonce = [None]
         args = SimpleNamespace(
@@ -99,7 +100,7 @@ class AcceptanceTests(unittest.TestCase):
             )
 
         def sleep(seconds):
-            now[0] += seconds
+            now[0] += seconds + (120 if host_stall else 0)
             if cancel_at is not None and now[0] >= cancel_at:
                 args.stop_file.touch()
 
@@ -243,6 +244,16 @@ class AcceptanceTests(unittest.TestCase):
             self.assertFalse(
                 any(words[0] in ("camera", "screen") for _, words in calls)
             )
+
+    def test_host_sleep_or_stalled_monitoring_cannot_pass_quiet_interval(self):
+        with TemporaryDirectory() as folder:
+            code, report, _ = self.run_probe(
+                Path(folder), quiet_seconds=60, host_stall=True
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(report["state"], "incomplete")
+            self.assertFalse(report["passed"])
+            self.assertIn("Host monitoring paused", report["error"])
 
 
 if __name__ == "__main__":
