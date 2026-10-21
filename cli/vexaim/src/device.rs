@@ -71,7 +71,7 @@ pub fn catalog(group: Option<&str>) -> Value {
 pub fn capability_source() -> String {
     let paths: Vec<_> = specs()
         .map(|s| s[1].to_owned())
-        .filter(|s| !s.starts_with('_'))
+        .filter(|s| !s.starts_with('_') && !s.starts_with("host."))
         .collect();
     format!(
         "{}\n_vx_print(_vx_capabilities({}))\n",
@@ -465,6 +465,11 @@ pub fn parse(words: &[String], session: bool) -> Result<Action, Fail> {
         ));
     }
     let no_wait = options.contains_key("no-wait");
+    if spec[2] == "host" && !options.is_empty() {
+        return Err(fail(
+            "LCD screenshots use a fixed 60-second capture deadline and a positional .png output; native action options do not apply",
+        ));
+    }
     if no_wait && !session {
         return Err(fail("--no-wait requires an owned --session"));
     }

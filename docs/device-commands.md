@@ -15,6 +15,11 @@ storage encoding are verified. The user-supplied capability reference has an
 explicit [coverage matrix](capability-matrix.json), including host operations and
 remote-only exclusions. Implementation coverage is not hardware coverage.
 
+`screen screenshot lcd.png` is a separate 240×240 display PNG with explicit LCD
+source labeling. Camera observations remain native 640×480 JPEGs. The source
+protocol checks the exact LCD buffer size before RGB565 decoding and never
+switches menus or firmware modes to obtain an image.
+
 For a visual task, call `--json --session ID camera observe`, then open its
 absolute `path` with Codex `view_image` or Claude Code `Read`. Decide on a small
 finite action, announce it, wait for completion, then capture and inspect another

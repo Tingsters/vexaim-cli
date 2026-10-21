@@ -29,6 +29,9 @@ pub(super) fn failure(e: impl std::fmt::Display) -> Fail {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Request {
+    Screenshot {
+        output: String,
+    },
     Assets(crate::assets::AssetRequest),
     Native {
         words: Vec<String>,
@@ -67,6 +70,12 @@ pub(super) enum Request {
 impl Request {
     fn validate(&self) -> Result<(), Fail> {
         match self {
+            Self::Screenshot { output }
+                if !std::path::Path::new(output).is_absolute()
+                    || !output.to_lowercase().ends_with(".png") =>
+            {
+                return Err(failure("LCD screenshot needs an absolute .png output path"));
+            }
             Self::Assets(request) => request.validate()?,
             Self::Native { words } => {
                 crate::device::parse(words, true)?;
@@ -591,8 +600,9 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                     .map(|p| p.to_string_lossy().into_owned()),
                 replace: *replace,
             }),
-            Cmd::Native(words) => Request::Native {
-                words: words.clone(),
+            Cmd::Native(words) => {
+                let a=crate::device::parse(words,true)?;
+                if a.command=="screen screenshot" {Request::Screenshot{output:crate::observation::absolute(a.args[0].as_str().unwrap())?.to_string_lossy().into_owned()}}else {Request::Native{words:words.clone()}}
             },
             Cmd::Capabilities { .. } => Request::Capabilities,
             Cmd::Camera {

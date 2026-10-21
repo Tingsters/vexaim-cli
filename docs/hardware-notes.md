@@ -1,5 +1,25 @@
 # Hardware evidence
 
+## Device-command candidate (2026-10-20)
+
+The command expansion's first stationary Windows BLE connection to AIM6518
+completed in 18.636 seconds, including discovery 8.047 s, connection 4.258 s and
+helper preparation 6.330 s. It reported battery 72%, stopped true and gyro not
+calibrating. This development build preceded the prerelease version bump.
+
+The subsequent image and individual-sensor requests found the link down before
+execution. They produced no image or sensor acceptance results; no new movement
+or kicker action ran. A fresh power-on confirmation is pending. The updated
+acceptance harness captures immediately after startup to avoid an idle gap.
+
+The 0.3 candidates have simulated command/runtime/image tests and four-platform
+software checks, independently of hardware evidence. USB sessions, the new native
+action catalogue, separate LCD command, in-motion concurrency/cancellation, real
+vision targets, linked second robot and Codex/Claude image-to-action acceptance
+still need their own supervised checks. Existing 0.2 hardware evidence below
+does not establish acceptance for these new wrappers. Asset upload encoding is
+unverified and remains disabled; independent wheel signs/units are experimental.
+
 ## Standalone Windows Bluetooth smoke test (2026-10-20)
 
 With USB unplugged and physical readiness confirmed, the 0.2.0 candidate reused

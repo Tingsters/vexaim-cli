@@ -21,7 +21,7 @@ pub struct Robot {
 
 fn checked(result: &crate::repl::ExecResult) -> Result<(), Fail> {
     if result.timed_out || !result.stderr.is_empty() {
-        return Err(Fail::Bluetooth(format!(
+        return Err(Fail::Session(format!(
             "Robot Python failed or timed out; no action was retried. {}",
             result.stderr.trim()
         )));
@@ -163,6 +163,11 @@ impl Robot {
         Ok(json!({"ok":value["rejected"]!=true,"rejected":value["rejected"]==true,"value":value}))
     }
     async fn capture(&mut self, camera_index: Option<u32>) -> Result<Vec<u8>, Fail> {
+        if !self.camera_usable {
+            return Err(failure(
+                "Previous capture was interrupted; close/start the session before another image transfer",
+            ));
+        }
         match self.repl.connection_mut() {
             GenericConnection::Bluetooth(conn) => {
                 bluetooth::require_camera_firmware(&self.identity)?;
@@ -227,6 +232,38 @@ impl Backend for Robot {
             return Err(failure(
                 "Previous operation was interrupted or uncertain. Read info to verify the robot is stopped before issuing a fresh action. No movement was replayed.",
             ));
+        }
+        if let Request::Screenshot { output } = request {
+            if !self.camera_usable {
+                return Err(failure(
+                    "Capture interrupted; close/start session before another display capture",
+                ));
+            }
+            let before = self.state().await?;
+            if before["robot_state"]["stopped"] != true {
+                return Ok(
+                    json!({"ok":false,"rejected":true,"error":"Finish movement before LCD capture"}),
+                );
+            }
+            if matches!(self.repl.connection(), GenericConnection::Bluetooth(_)) {
+                bluetooth::require_camera_firmware(&self.identity)?;
+            }
+            let bytes = tokio::time::timeout(
+                Duration::from_secs(60),
+                bluetooth::capture_lcd(self.repl.connection_mut()),
+            )
+            .await
+            .map_err(|_| failure("LCD capture timed out"))??;
+            let png = crate::observation::lcd_png(&bytes)?;
+            crate::observation::save_bytes(Path::new(output), &png)?;
+            let after = self.state().await;
+            let ready = after
+                .as_ref()
+                .is_ok_and(|s| s["robot_state"]["stopped"] == true);
+            self.needs_check = !ready;
+            return Ok(
+                json!({"ok":true,"path":output,"mime_type":"image/png","width":240,"height":240,"bytes":png.len(),"source":"LCD screenshot, not the camera","control_ready":ready,"needs_check":!ready}),
+            );
         }
         if let Request::Native { words } = request {
             return self.native(words).await;
@@ -443,7 +480,10 @@ impl Backend for Robot {
     fn interrupted(&mut self, request: &Request) {
         self.repl.invalidate();
         self.needs_check = true;
-        if matches!(request, Request::Snap { .. } | Request::Observe { .. }) {
+        if matches!(
+            request,
+            Request::Snap { .. } | Request::Observe { .. } | Request::Screenshot { .. }
+        ) {
             self.camera_usable = false;
         }
     }

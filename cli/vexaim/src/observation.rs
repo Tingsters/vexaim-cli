@@ -45,6 +45,9 @@ pub fn validate(bytes: &[u8]) -> Result<(u32, u32), Fail> {
 }
 pub fn save(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
     validate(bytes)?;
+    save_bytes(path, bytes)
+}
+pub fn save_bytes(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -54,6 +57,27 @@ pub fn save(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
     file.as_file().sync_all().map_err(fail)?;
     file.persist(path).map_err(fail)?;
     Ok(())
+}
+#[cfg(feature = "bluetooth")]
+pub fn lcd_png(bytes: &[u8]) -> Result<Vec<u8>, Fail> {
+    if bytes.len() != 240 * 240 * 2 {
+        return Err(fail("LCD buffer must be exactly 240x240 RGB565"));
+    }
+    let mut image = image::RgbImage::new(240, 240);
+    for (pixel, bytes) in image.pixels_mut().zip(bytes.chunks_exact(2)) {
+        let rgb = u16::from_le_bytes([bytes[0], bytes[1]]);
+        let (r, g, b) = ((rgb >> 11) & 31, (rgb >> 5) & 63, rgb & 31);
+        *pixel = image::Rgb([
+            ((r * 255 + 15) / 31) as u8,
+            ((g * 255 + 31) / 63) as u8,
+            ((b * 255 + 15) / 31) as u8,
+        ]);
+    }
+    let mut out = std::io::Cursor::new(Vec::new());
+    image
+        .write_to(&mut out, image::ImageFormat::Png)
+        .map_err(fail)?;
+    Ok(out.into_inner())
 }
 pub fn store(
     dir: &Path,
@@ -91,6 +115,20 @@ pub fn store(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "bluetooth")]
+    #[test]
+    fn lcd_has_independent_dimensions_and_rgb565_colors() {
+        let mut raw = vec![0; 240 * 240 * 2];
+        raw[..6].copy_from_slice(&[0, 248, 224, 7, 31, 0]);
+        let png = lcd_png(&raw).unwrap();
+        let image = image::load_from_memory(&png).unwrap().into_rgb8();
+        assert_eq!(image.dimensions(), (240, 240));
+        assert_eq!(image.get_pixel(0, 0).0, [255, 0, 0]);
+        assert_eq!(image.get_pixel(1, 0).0, [0, 255, 0]);
+        assert_eq!(image.get_pixel(2, 0).0, [0, 0, 255]);
+        assert!(lcd_png(&raw[..raw.len() - 1]).is_err());
+        assert!(validate(&png).is_err());
+    }
     fn jpeg() -> Vec<u8> {
         let image = image::RgbImage::new(640, 480);
         let mut bytes = Vec::new();

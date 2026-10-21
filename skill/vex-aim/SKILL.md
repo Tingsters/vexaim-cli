@@ -1,6 +1,6 @@
 ---
 name: vex-aim
-description: Control a VEX AIM robot over USB or Bluetooth using vexaim. Run Python, read sensors, move, stop, set lights and sounds, and capture camera photographs from ordinary requests.
+description: Control a VEX AIM over USB or Bluetooth with vexaim. Use native device commands, run Python, read sensors, move, set effects, and capture images for the agent to inspect and act on from ordinary requests.
 ---
 
 # Control a VEX AIM robot
@@ -59,7 +59,7 @@ vexaim snap -o photo.jpg
 vexaim stop
 ```
 
-For a Bluetooth session, include `--session ID` before the subcommand. See the
+For an owned USB or Bluetooth connection, include `--session ID` before the subcommand. See the
 session reference for progress/result JSON and responsive `turn`/`move` calls.
 Print small summaries: bursts above roughly 2 KB can lose console output.
 Default execution timeout is 30 seconds; errors return a traceback and failure.

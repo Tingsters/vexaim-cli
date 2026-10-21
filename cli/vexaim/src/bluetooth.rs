@@ -330,14 +330,22 @@ pub(crate) fn require_camera_firmware(info: &serde_json::Value) -> Result<(), Fa
 }
 
 pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u8>, Fail> {
-    conn.handshake(
-        ScreenCapturePacket { layer: Some(8) },
-        Duration::from_secs(3),
-        0,
-    )
-    .await
-    .map_err(io)?
-    .map_err(io)?;
+    capture_buffer(conn, Some(8), true).await
+}
+
+pub(crate) async fn capture_lcd<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
+    capture_buffer(conn, None, false).await
+}
+
+async fn capture_buffer<C: Connection>(
+    conn: &mut C,
+    layer: Option<u8>,
+    jpeg: bool,
+) -> Result<Vec<u8>, Fail> {
+    conn.handshake(ScreenCapturePacket { layer }, Duration::from_secs(3), 0)
+        .await
+        .map_err(io)?
+        .map_err(io)?;
     let init = conn
         .handshake(
             FileTransferInitializePacket {
@@ -371,6 +379,11 @@ pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u
     if size == 0 || size > 1024 * 1024 {
         return Err(fail("Camera buffer is empty or exceeds the 1 MiB limit."));
     }
+    if !jpeg && size != 240 * 240 * 2 {
+        return Err(fail(
+            "Unsupported AIM LCD buffer layout; expected 240x240 RGB565, no alternate layer was tried",
+        ));
+    }
     let chunk = usize::from(init.window_size.saturating_sub(14)).min(216) / 4 * 4;
     if chunk == 0 {
         return Err(fail("Camera receive window is too small."));
@@ -403,13 +416,15 @@ pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u
             .map_err(io)?
             .map_err(io)?;
         append_block(&mut bytes, size, address, requested, &reply)?;
-        if address == 0 && !bytes.starts_with(&[0xff, 0xd8]) {
+        if jpeg && address == 0 && !bytes.starts_with(&[0xff, 0xd8]) {
             return Err(fail(
                 "Camera layer did not return JPEG; no other layer or menu action was attempted.",
             ));
         }
     }
-    jpeg_dimensions(&bytes)?;
+    if jpeg {
+        jpeg_dimensions(&bytes)?;
+    }
     // Read-only downloads have no FILE_EXIT/program-upload completion command.
     Ok(bytes)
 }

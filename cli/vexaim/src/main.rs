@@ -198,6 +198,15 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
     }
     if let Cmd::Native(words) = &cli.cmd {
         let action = device::parse(words, cli.session.is_some())?;
+        if action.kind == "host"
+            && (cli.emit_python
+                || words.iter().any(|w| w == "--emit-python")
+                || cli.session.is_none())
+        {
+            return Err(device::fail(
+                "LCD screenshot is a host operation and requires --session; no VEX Python equivalent",
+            ));
+        }
         if cli.emit_python || words.iter().any(|w| w == "--emit-python") {
             println!(
                 "from vex import *\nfrom vex_globals import *\nrobot = Robot()\n{}",

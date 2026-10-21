@@ -2,12 +2,14 @@
 
 Ordinary requests such as "spin in a circle" use finite helpers and a reusable
 connection. The helpers need no calibration targets, surface selection or extra
-runtime dependencies. Target navigation is a separate future capability.
+runtime dependencies. Native vision macros and agent image decisions are
+optional compositions; they do not enable default automatic visual correction.
 
 ## Implementation and current limits
 
-The CLI (`0.2.0`) adds persistent Bluetooth sessions and bounded
-turn/move helpers. The earlier workshop release `0.1.1` was USB-only. Install the release
+CLI 0.2 added persistent Bluetooth sessions and bounded turn/move helpers;
+the 0.3 candidate adds USB sessions and native catalogue actions. The earlier
+workshop release 0.1.1 was USB-only. Install the release
 bundle's executable and matching skill together; source edits alone do not update
 installed agents. The installer copies the complete skill, including
 `references/sessions-and-motion.md`, into both supported skill locations.
@@ -25,13 +27,18 @@ exits after 30 minutes. Bluetooth does not promise to prevent the robot sleeping
 Cached session status is not a fresh battery or power measurement.
 
 Helpers run finite native movements with polling and `finally` stopping, a maximum
-20-second robot-side deadline, and limits of 360 degrees / 500 mm per action.
+20-second robot-side deadline for legacy helpers. The legacy turn limit remains
+360 degrees, and the 500 mm distance cap is removed. New native catalogue
+actions default to a private 30-second deadline (explicit maximum 120 seconds);
+continuous/vector movements require a duration. Both use native VEX methods.
 There is no preliminary 15-degree turn on every student request. Custom Python
 remains available for creative compositions; it does not inherit helper limits.
 
 The current default stays **30 DPS**, with explicit developer test options of
 60/90 DPS, until independent surface tests support promoting a general default.
-Move default is 80 mm/s, within a 40..100 mm/s helper range. These are software
+Move default is 80 mm/s. Native ceilings are 200 mm/s and 150 degrees/s, or
+100 percent with explicit velocity units. Session velocity setters affect later
+native operations unless explicitly overridden. These are software
 bounds, not evidence that every permitted speed/surface has passed hardware tests.
 Normal robot gyro startup initialization is used. No additional calibration or
 automatic correction is enabled, and no floor-specific correction is assumed to
@@ -100,6 +107,15 @@ low-pile carpet where available. The default five samples cover both directions,
 90/180/360 degrees and 30/60/90 DPS. Begin new higher-speed hardware acceptance
 with a small supervised movement first; the batch harness is for after that check.
 An error stops the batch without replay; the partial report is retained locally.
+
+`dev/accept-device.py TOOL --transport bluetooth --name NAME` runs the expanded
+stationary API/camera sweep and saves a local report under `.vexaim/acceptance`.
+It captures immediately after connection and does not move wheels/kicker by
+default. `--motion-ready`, `--kicker-ready` and `--effects-ready` require the
+operator's separate physical readiness; each enabled action is announced. See
+`--help` for exact small movements. The script uses developer Python only;
+students need the prebuilt executable and skill. It does not establish visual
+recognition: the agent must open the returned camera path in its own turn.
 
 Measure actual signed, unwrapped turn angles independently, using external video
 or a physical angle reference. Do not use the robot's IMU/odometry as ground truth.

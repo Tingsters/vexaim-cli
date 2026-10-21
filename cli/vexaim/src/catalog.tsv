@@ -91,6 +91,7 @@ screen show-emoji|robot.screen.show_emoji|write|emoji:emoji look:enum(LOOK_FORWA
 screen hide-emoji|robot.screen.hide_emoji|write|
 screen show-aivision|robot.screen.show_aivision|write|
 screen hide-aivision|robot.screen.hide_aivision|write|
+screen screenshot|host.screen_capture|host|output:text
 sound play|robot.sound.play|write|sound:sound volume:percent=50
 sound play-file|robot.sound.play_file|write|slot:sound-slot volume:percent=50
 sound play-note|robot.sound.play_note|write|note:note length:milliseconds volume:percent=50

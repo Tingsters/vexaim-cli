@@ -58,6 +58,11 @@ Other command groups:
 | events | watch source --duration 2s; bounded callback buffer with dropped count |
 | macro | all 20 named toolbox behaviors, adapted with finite deadlines; these may move, emotions included |
 
+`screen screenshot lcd.png` is a separate host operation that downloads the
+240×240 RGB565 LCD buffer and atomically saves a PNG, with `source` labeling it
+as LCD content and a postcapture `control_ready` check. It requires a session and
+stopped wheels. It is not a camera observation, and never changes display modes.
+
 Read sources can be sampled with `--duration 2s --sample-ms 100` (50..60000 ms,
 at most 256 samples). Use global `--jsonl` to emit one sample/callback per line
 and a final result with counts instead of repeating arrays.

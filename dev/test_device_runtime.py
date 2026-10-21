@@ -186,4 +186,12 @@ class DeviceRuntime(unittest.TestCase):
         self.assertFalse(self.ns['_vx_busy']())
         self.assertEqual(self.calls,[])
 
+    def test_direction_and_acceleration_constants_do_not_resolve_as_sounds(self):
+        del self.ns['LEFT']
+        self.ns['TurnType']=SimpleNamespace(LEFT='turn-left')
+        self.ns['AccelerationType']=SimpleNamespace(FORWARD='acceleration-forward')
+        self.ns['SoundType']=SimpleNamespace(LEFT='sound-left',FORWARD='sound-forward')
+        self.assertEqual(self.ns['_vx_arg']({'constant':'LEFT'}),'turn-left')
+        self.assertEqual(self.ns['_vx_arg']({'constant':'FORWARD'}),'acceleration-forward')
+
 if __name__=='__main__': unittest.main()
