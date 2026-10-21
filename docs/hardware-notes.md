@@ -1,5 +1,43 @@
 # Hardware evidence
 
+## Session keepalive candidate (2026-10-21)
+
+Two stationary checks exposed why a successful connection is insufficient proof
+of sustained liveness. The rc.5 display-only control reached uptime 316650 ms
+at 91% battery, stopped at (0,0), then lost the link. The next exact-name scan
+found no AIM6518. The first local rc.6 System Alive candidate acknowledged its
+initial request, but a later background probe exceeded its 500 ms total deadline
+and stopped polling permanently. The quiet test failed at 370 seconds; discovery
+again found no robot. Neither run passed endurance. No motors or kicker ran.
+
+The hardened local candidate uses a 3-second total / 2-second reply deadline,
+up to three read-only retries and cached confirmation counts/age. Stop and close
+preempt background polling; the unchanged owner idle deadline still expires.
+The checksum-verified CI Windows candidate connected at 86% battery and stopped
+at (0,0). It completed 92 acknowledged System Alive polls, with zero recorded
+failures until the link disappeared around 333 seconds of robot uptime. Three
+subsequent bounded probes failed; cached health correctly changed to unhealthy
+and the harness failed after 187 seconds, before its first quiet interval ended.
+Live info confirmed the link was down, and discovery found no AIM6518. This
+rules out a merely unserviced or over-short heartbeat deadline as the explanation
+for this run: System Alive acknowledgments alone do not prevent the observed
+shutdown. No camera/display acceptance or second quiet interval ran. No motors
+or kicker ran. Do not publish rc.6 as a verified sleep fix.
+
+Further investigation compares the existing AIM native flags/status queries
+(`0x56/0x20` and `0x56/0x22`) independently of legacy System Alive. The developer
+probe uses one BLE owner, existing vault authentication and no menu inputs.
+Software and installer tests alone do not establish that any probe prevents sleep.
+Subsequent home-Back controls also failed to sustain their status-only links,
+including a Rust control beginning at system time 372988 ms. The CLI reconnected
+without a further power-on, distinguishing these short errors from shutdown.
+Adding only the two known AIM status notification subscriptions to System Alive
+also failed: 87 polls through 178.52 seconds from system time 523308 ms, followed
+by link loss and no exact-name discovery match. The combined System Alive plus
+home-only Back control and read-only power-API inspection are prepared but not
+verified. All these controls were stationary; no wheel or kicker command ran.
+See [investigation and autonomous procedure](keepalive-investigation.md).
+
 ## Bluetooth display lifecycle candidate (2026-10-20)
 
 Local Windows 0.3.0-rc.5 now displays named HAPPY, text and shapes over Bluetooth

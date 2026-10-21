@@ -646,3 +646,6 @@ fn main() {
         }
     }
 }
+#[cfg(all(test, feature = "bluetooth"))]
+#[path = "../../../dev/aim-idle-rust.rs"]
+mod aim_idle_probe;

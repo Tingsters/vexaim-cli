@@ -130,9 +130,21 @@ impl Robot {
                 return Err(failure(error));
             }
         };
+        let keepalive = match robot
+            .repl
+            .connection_mut()
+            .enable_keepalive(&robot.identity)
+            .await
+        {
+            Ok(active) => active,
+            Err(error) => {
+                robot.close().await;
+                return Err(error);
+            }
+        };
         Ok((
             robot,
-            json!({"transport":"bluetooth","id":id,"robot_state":state,"timings":{"discovery_ms":discovery_ms,
+            json!({"transport":"bluetooth","id":id,"robot_state":state,"keepalive":{"active":keepalive,"period_ms":2000,"method":"system-alive","prevents_sleep":false},"timings":{"discovery_ms":discovery_ms,
             "connection_ms":connection_ms,"preparation_ms":prepared.elapsed().as_millis() as u64,
             "startup_ms":all.elapsed().as_millis() as u64}}),
         ))
@@ -252,6 +264,13 @@ impl Backend for Robot {
         }
         if matches!(request, Request::Info | Request::Doctor) {
             let mut state = self.state().await?;
+            // An explicit live read can re-establish failed read-only liveness;
+            // background failures never restart or replay a student action.
+            self.repl
+                .connection_mut()
+                .enable_keepalive(&self.identity)
+                .await?;
+            state["keepalive"] = self.repl.connection().keepalive_status();
             if matches!(request, Request::Doctor) {
                 state["verdict"] = json!("ready");
             }
@@ -526,8 +545,9 @@ impl Backend for Robot {
     }
 
     async fn halt(&mut self) -> Result<Value, Fail> {
-        // Stop keepalive first, even when the link has already failed.
+        // Stop bytes take priority over both display and liveness traffic.
         let display_active = self.repl.connection_mut().pause();
+        let session_alive = self.repl.connection_mut().end_keepalive();
         if !self.connected().await {
             return Err(failure(
                 "Robot link unavailable; stopped state cannot be confirmed. Use the physical switch if needed.",
@@ -547,6 +567,7 @@ impl Backend for Robot {
                 "Stop was sent but stopped state was not confirmed; use the physical switch",
             ));
         }
+        self.repl.connection_mut().restore_keepalive(session_alive);
         if display_active {
             self.repl
                 .connection_mut()
@@ -558,18 +579,19 @@ impl Backend for Robot {
     }
 
     async fn close(&mut self) {
+        self.repl.connection_mut().end_keepalive();
         let _ = self.halt().await;
         self.repl.close().await;
         if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
             let _ = conn.close().await;
         }
     }
-    async fn idle(&mut self) -> Result<(), Fail> {
+    async fn idle(&mut self) -> Result<Option<Value>, Fail> {
         if let Err(error) = self.repl.connection_mut().idle().await {
             self.needs_check = true;
             self.repl.invalidate();
             return Err(failure(error));
         }
-        Ok(())
+        Ok(Some(self.repl.connection().keepalive_status()))
     }
 }

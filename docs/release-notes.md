@@ -1,5 +1,17 @@
 VEX AIM device commands and agent camera observations — prerelease.
 
+- Unreleased 0.3.0-rc.6 investigates session liveness separately from display
+  ownership. Hardware acceptance failed: 92 acknowledged System Alive polls
+  did not prevent the observed shutdown. Do not publish as a sleep fix.
+  The candidate sends the
+  existing System Alive request every two seconds and validates its reply through
+  the single Bluetooth owner, including while idle and during camera transfers.
+  No LCD activation, motor movement, saved project or student setup is needed.
+  Stop/display expiry preserve liveness; close and the unchanged 30-minute client
+  idle deadline end it. Failures require live recovery and never replay actions.
+  A stationary endurance harness and simulated recovery/deadline regressions are
+  included. See hardware notes for measured Windows coverage.
+
 - Shared VEX-style catalogue and argument validation across USB and Bluetooth.
 - USB sessions, holonomic strafing/vector operations, bounded asynchronous actions,
   sensors, AI Vision, cargo, LEDs, kicker, screen, sound, One Stick, link and timer.
@@ -37,8 +49,8 @@ experimental. Custom asset uploads are disabled until firmware storage encoding
 is verified; the official uploader remains supported. macOS hardware, two-robot
 link acceptance and broader motion accuracy are not certified by CI.
 
-All four bundles contain a matching binary and generic skill. Stable one-line
-installers keep selecting the latest stable release. Select this prerelease
-explicitly with `--version 0.3.0-rc.5` / `-Version 0.3.0-rc.5` or its extracted
-bundle. Start a new agent session after installation. Keep images local and
+When published, all four bundles contain a matching binary and generic skill.
+The rc.6 candidate is currently held for failed hardware acceptance; use a local
+CI bundle only for investigation. Stable one-line installers keep selecting the
+latest stable release. Start a new agent session after installation. Keep images local and
 supervise movement. No robot firmware or saved project changes are required.

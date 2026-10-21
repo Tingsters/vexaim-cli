@@ -20,6 +20,14 @@ named session and retain its returned ID across requests. Startup already reads
 live status; do not scan, reconnect and run doctor before every healthy action.
 Cached session status does not prove the robot is still awake.
 
+The unreleased rc.6 candidate probes Bluetooth link health with acknowledged
+System Alive requests every two seconds. Hardware testing showed that the AIM
+still shut down despite successful replies: `keepalive.active` and `healthy`
+do not establish sleep prevention (`prevents_sleep:false`). Do not promise that
+sensor/motor traffic or displaying a face prevents sleep. Students should use a
+published binary/skill together. Close at actual wrap-up; 30 minutes without
+client work also closes the owner. See the session reference for evidence.
+
 For USB, run `vexaim doctor` initially and after a connection failure. A successful
 check reports `verdict: ready` and battery. For Bluetooth use its transport/name
 options or the existing session; a USB diagnostic cannot diagnose a wireless link.

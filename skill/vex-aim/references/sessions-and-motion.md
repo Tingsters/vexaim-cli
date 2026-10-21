@@ -37,7 +37,21 @@ commands refuse to take over an active session; use its ID instead.
 No separate doctor/info before each movement when the current session is healthy.
 Never call session close at the end of every prompt. Close when robot work is
 finished or before a fresh connection after sleep/failure. Idle owners close after
-30 minutes; a connection does not promise to keep the robot awake.
+30 minutes without client work. The unreleased 0.3.0-rc.6 candidate sends
+acknowledged System Alive requests every two seconds, independently of
+the LCD and without renewing this 30-minute deadline. Stop releases display and
+movement but preserves session liveness. Close ends both. This does not extend a
+robot-side movement deadline or replay an action after an interruption.
+
+Hardware testing showed sleep/link loss despite successful replies. This
+candidate is not a verified sleep fix: `prevents_sleep:false` distinguishes its
+link health checks from power management. Do not infer sleep prevention from
+`active` or `healthy`.
+
+Startup/live info include `keepalive.active`, `method` and `period_ms`. Unknown
+firmware reports inactive. A failed heartbeat marks `needs_check`; an explicit
+live info can re-establish the read-only heartbeat, while lost links require a
+fresh session. Power loss still needs a person to switch the AIM on.
 
 ## Translate ideas into actions
 

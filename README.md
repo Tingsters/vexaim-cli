@@ -66,8 +66,8 @@ To pass options without a checkout, use `curl -fsSL <installer-URL> | sh -s --
 above. To review the installer first, open that URL or download it without
 executing it.
 
-To try the device commands, agent camera workflow and Bluetooth display fix in
-**0.3.0-rc.5**, select the prerelease explicitly. Windows PowerShell:
+To try the device commands, agent camera workflow and Bluetooth display in
+**0.3.0-rc.5**, select the published prerelease explicitly. Windows PowerShell:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.ps1))) -Version 0.3.0-rc.5
@@ -82,6 +82,11 @@ curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/main/install.s
 Both commands verify the release archive and install its matching basic skill.
 The [hardware notes](docs/hardware-notes.md) distinguish Windows robot checks
 from CI coverage. Unversioned installers continue to select the stable release.
+
+The rc.6 keepalive investigation remains unreleased: acknowledged link probes
+did not prevent shutdown on hardware. See the
+[investigation](docs/keepalive-investigation.md); do not treat its successful
+poll counts as proof that the AIM will stay awake.
 
 Start a **new agent session** so it discovers the skill, then try:
 

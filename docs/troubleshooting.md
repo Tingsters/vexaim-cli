@@ -39,6 +39,18 @@ A USB doctor failure does not diagnose a wireless link. Check power when scans
 find nothing; the AIM can sleep while idle. A cached session status is not a
 fresh live check. Pairing codes belong in a masked local terminal, not chat.
 
+Sleep during active Bluetooth REPL work is still under investigation. The
+unreleased rc.6 candidate sends acknowledged System Alive requests every two
+seconds, but hardware still lost the link around five minutes despite 92
+successful polls. Neither that probe nor the earlier display-only heartbeat is
+a verified sleep fix. `keepalive.active` and `healthy` describe link monitoring;
+`prevents_sleep:false` makes the limitation explicit. Unknown firmware reports
+inactive. Once the
+robot has powered off, Bluetooth cannot turn it back on. The display's 60-second
+lease only returns to the menu; the host owner closes after 30 minutes of client
+inactivity. Neither timer is a power-off command. See the
+[keepalive investigation](keepalive-investigation.md) for evidence and limits.
+
 After a failed/interrupted operation, obtain live status and confirm stopped
 state before a new movement. Never replay uncertain movement. Close/start after
 link failure, and before another snapshot if a camera transfer was cancelled.

@@ -80,6 +80,11 @@ firmware's numeric 6 selected a sunglasses face. For text, choose contrasting
 pen and fill colors; white text on white fill appears as a solid white bar.
 Confirm actual visible output rather than treating an API acknowledgment as proof.
 
+The unreleased rc.6 candidate adds separate System Alive link probes. Hardware
+still lost the robot despite acknowledged replies; `prevents_sleep:false` means
+this is not a verified sleep fix. Returning the LCD to its menu through `stop` does
+not end session liveness. Camera-only work never needs to activate the display.
+
 For maintainer diagnostics, see the
 [stationary display investigation](https://github.com/Tingsters/vexaim-cli/blob/main/docs/display-investigation.md).
 It records protocol provenance and hardware observations. Students do not need

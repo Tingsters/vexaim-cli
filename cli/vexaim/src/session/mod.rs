@@ -137,8 +137,8 @@ pub(super) trait Backend {
     fn interrupted(&mut self, request: &Request);
     async fn halt(&mut self) -> Result<Value, Fail>;
     async fn close(&mut self);
-    async fn idle(&mut self) -> Result<(), Fail> {
-        Ok(())
+    async fn idle(&mut self) -> Result<Option<Value>, Fail> {
+        Ok(None)
     }
 }
 
@@ -267,27 +267,58 @@ enum Outcome {
 }
 
 async fn actor<B: Backend>(
+    backend: B,
+    normal: mpsc::UnboundedReceiver<Job>,
+    priority: mpsc::UnboundedReceiver<Job>,
+    cache: Cache,
+    busy: Rc<Cell<bool>>,
+) {
+    actor_with_idle(backend, normal, priority, cache, busy, IDLE).await;
+}
+
+async fn actor_with_idle<B: Backend>(
     mut backend: B,
     mut normal: mpsc::UnboundedReceiver<Job>,
     mut priority: mpsc::UnboundedReceiver<Job>,
     cache: Cache,
     busy: Rc<Cell<bool>>,
+    idle_timeout: Duration,
 ) {
-    let mut idle_deadline = tokio::time::Instant::now() + IDLE;
+    let mut idle_deadline = tokio::time::Instant::now() + idle_timeout;
     loop {
         let job = tokio::select! { biased;
             job = priority.recv() => job,
             job = normal.recv() => job,
             _ = tokio::time::sleep_until(idle_deadline) => { let _ = backend.halt().await; break; }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                if let Err(e)=backend.idle().await {
-                    cache.borrow_mut()["needs_check"]=json!(true);
-                    cache.borrow_mut()["display_error"]=json!(e.to_string());
+                let health = backend.idle();
+                tokio::pin!(health);
+                // A slow read-only health probe must not hold up stop or close.
+                tokio::select! { biased;
+                    job = priority.recv() => job,
+                    job = normal.recv() => job,
+                    _ = tokio::time::sleep_until(idle_deadline) => { continue; }
+                    result = &mut health => {
+                        match result {
+                            Err(e) => {
+                                cache.borrow_mut()["needs_check"]=json!(true);
+                                cache.borrow_mut()["keepalive_error"]=json!(e.to_string());
+                                cache.borrow_mut()["keepalive"]["healthy"]=json!(false);
+                            }
+                            Ok(Some(health)) => {
+                                if health["healthy"] == true {
+                                    cache.borrow_mut().as_object_mut().unwrap().remove("keepalive_error");
+                                }
+                                cache.borrow_mut()["keepalive"] = health;
+                            }
+                            Ok(None) => {}
+                        }
+                        continue;
+                    }
                 }
-                continue;
             }
         };
-        idle_deadline = tokio::time::Instant::now() + IDLE;
+        idle_deadline = tokio::time::Instant::now() + idle_timeout;
         let Some(job) = job else { break };
         busy.set(true);
         cache.borrow_mut()["busy"] = json!(true);
@@ -335,6 +366,14 @@ async fn actor<B: Backend>(
                 }
                 if let Some(state) = value.get("robot_state") {
                     cache.borrow_mut()["robot_state"] = state.clone();
+                }
+                if let Some(keepalive) = value.get("keepalive") {
+                    cache.borrow_mut()["keepalive"] = keepalive.clone();
+                    cache
+                        .borrow_mut()
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("keepalive_error");
                 }
                 cache.borrow_mut()["needs_check"] = json!(value["needs_check"] == true);
                 result(&job.events, value, job.received);
