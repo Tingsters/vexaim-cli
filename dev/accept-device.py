@@ -27,6 +27,16 @@ parser.add_argument('--kicker-ready',action='store_true',help='Operator confirms
 parser.add_argument('--effects-ready',action='store_true',help='Allow brief blue LEDs, quiet chirp, emoji and drawing')
 parser.add_argument('--keep-session',action='store_true')
 
+def check_outcome(check):
+    value=check['result']
+    if check['exit_code']==0 and value.get('ok') is True:
+        return 'passed'
+    nested=value.get('value')
+    detail=value.get('error') or (nested.get('error','') if isinstance(nested,dict) else '')
+    if value.get('rejected') is True and detail.startswith('unsupported_firmware:'):
+        return 'unsupported'
+    return 'failed'
+
 def main(args):
     tool=args.tool.resolve(strict=True)
     output=args.output_dir.resolve()
@@ -83,9 +93,17 @@ def main(args):
                 if not state['robot_state']['stopped']:raise RuntimeError('Stopped state not confirmed')
         if args.effects_ready:
             print('Effects: blue LEDs, a quiet chirp, happy emoji and a circle; no wheels/kicker.',file=sys.stderr)
-            for words in [['led','on','all','blue'],['sound','play','chirp','10'],['screen','show-emoji','happy'],['screen','draw-circle','120','120','20']]:require(call(words,session))
-            time.sleep(.3)
-            for words in [['led','off','all'],['screen','hide-emoji'],['sound','stop']]:require(call(words,session))
+            try:
+                for words in [['led','on','all','blue'],['sound','play','chirp','10'],['screen','show-emoji','happy'],['screen','draw-circle','120','120','20']]:require(call(words,session))
+                time.sleep(.3)
+            finally:
+                # Cleanup every effect even when another command is unsupported.
+                for words in [['led','off','all'],['screen','hide-emoji'],['sound','stop']]:
+                    try:
+                        value=call(words,session)
+                        if not value.get('ok'):report.setdefault('cleanup_errors',[]).append(str(value))
+                    except Exception as error:report.setdefault('cleanup_errors',[]).append(str(error))
+            if report.get('cleanup_errors'):raise RuntimeError('Some effects could not be cleaned up; inspect cleanup_errors')
         if args.motion_ready:
             actions=[['motion','turn-for','right','15'],['forward','50'],['strafe','left','20'],['motion','move-with-vectors','0','10','0','--duration','300ms']]
             for words in actions:
@@ -97,16 +115,23 @@ def main(args):
             print('Actuator: one SOFT kick, then place; keep the front clear.',file=sys.stderr)
             require(call(['kicker','kick','soft'],session));require(call(['kicker','place'],session))
         report['completed']=True
-        report['unsupported_or_failed_commands']=[c['command'] for c in report['checks'] if c['result'].get('ok') is False]
     except Exception as error:
         report['completed']=False;report['error']=str(error)
     finally:
         if session and not args.session and not args.keep_session:
             try:call(['session','close'],session)
             except Exception as error:report['close_error']=str(error)
+        report['summary']={key:0 for key in ('passed','unsupported','failed')}
+        for check in report['checks']:
+            check['outcome']=check_outcome(check)
+            report['summary'][check['outcome']]+=1
+        report['unsupported_or_failed_commands']=[c['command'] for c in report['checks'] if c['outcome']!='passed']
+        report['passed']=bool(report.get('completed') and not report['summary']['failed']
+                              and not report.get('cleanup_errors') and not report.get('close_error'))
         path=output/('device-'+str(uuid.uuid4())+'.json')
         path.write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding='utf-8')
-        print(json.dumps({'ok':report.get('completed',False),'report':str(path),'session':session}))
-    return 0 if report.get('completed') else 1
+        print(json.dumps({'ok':report['passed'],'completed':report.get('completed',False),
+                          'summary':report['summary'],'report':str(path),'session':session}))
+    return 0 if report['passed'] else 1
 
 if __name__=='__main__':sys.exit(main(parser.parse_args()))

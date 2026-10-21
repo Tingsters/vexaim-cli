@@ -4,6 +4,11 @@ Names only; the firmware exposes no signatures. Signatures below the lists are f
 (https://api.vex.com/aim/home/python/) and are marked with what has actually been run on this robot.
 
 Preamble (vexaim exec adds it automatically): `from vex import *`, `from vex_globals import *`, `robot = Robot()`.
+API imports are refreshed even if a robot instance already exists; that instance
+and student variables are preserved. `--no-preamble` opts out. On the tested AIM
+firmware, emoji classes are exported as `Emoji` and `EmojiLook`, so explicit
+Python can use `Emoji.HAPPY` and `EmojiLook.LOOK_FORWARD`. The CLI resolves these
+aliases as well as SDK class names.
 
 ## `robot` and its parts
 

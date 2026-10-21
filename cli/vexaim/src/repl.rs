@@ -11,7 +11,9 @@ pub const CTRL_B: u8 = 0x02; // leave raw REPL
 pub const CTRL_C: u8 = 0x03; // interrupt
 pub const CTRL_D: u8 = 0x04; // execute (raw REPL)
 
-pub const PREAMBLE: &str = "try:\n    robot\nexcept NameError:\n    from vex import *\n    from vex_globals import *\n    robot = Robot()\n";
+// An existing robot does not imply constants were imported in this REPL.
+// Refresh API names on every prepared exec, but preserve the robot instance.
+pub const PREAMBLE: &str = "from vex import *\nfrom vex_globals import *\ntry:\n    robot\nexcept NameError:\n    robot = Robot()\n";
 
 #[derive(Debug)]
 pub enum Fail {

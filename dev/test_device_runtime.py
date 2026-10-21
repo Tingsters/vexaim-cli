@@ -2,9 +2,12 @@
 import contextlib
 import io
 import json
+import re
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 RUNTIME = Path(__file__).resolve().parents[1] / 'cli/vexaim/src/device.py'
 
@@ -205,6 +208,17 @@ class DeviceRuntime(unittest.TestCase):
         result=self.dispatch(self.action('onestick.is_connected',[],'read'))
         self.assertEqual(result,{'value':True})
 
+    def test_emoji_uses_firmware_exported_aliases(self):
+        happy = object()
+        forward = object()
+        self.ns['Emoji'] = SimpleNamespace(HAPPY=happy)
+        self.ns['EmojiLook'] = SimpleNamespace(LOOK_FORWARD=forward)
+        self.ns['robot'].screen.show_emoji = lambda emoji, look:self.calls.append(('emoji',emoji,look))
+        result = self.dispatch(self.action('robot.screen.show_emoji',
+            [{'constant':'HAPPY'},{'constant':'LOOK_FORWARD'}], 'write'))
+        self.assertEqual(result,{'value':None})
+        self.assertEqual(self.calls,[('emoji',happy,forward)])
+
     def test_timer_watch_rearms_and_deactivates_callbacks(self):
         pending=[]
         self.ns['robot'].timer.event=lambda callback,delay:pending.append((self.t+delay,callback))
@@ -239,5 +253,38 @@ class DeviceRuntime(unittest.TestCase):
         self.ns['SoundType']=SimpleNamespace(LEFT='sound-left',FORWARD='sound-forward')
         self.assertEqual(self.ns['_vx_arg']({'constant':'LEFT'}),'turn-left')
         self.assertEqual(self.ns['_vx_arg']({'constant':'FORWARD'}),'acceleration-forward')
+
+class ReplPreamble(unittest.TestCase):
+    def test_existing_robot_does_not_skip_missing_api_imports(self):
+        self.check_preamble(existing=True)
+
+    def test_new_robot_is_constructed_only_once_across_prepared_calls(self):
+        self.check_preamble(existing=False)
+
+    def check_preamble(self, existing):
+        rust=RUNTIME.with_name('repl.rs').read_text()
+        literal=re.search(r'pub const PREAMBLE: &str = ("(?:\\.|[^"\\])*");',rust).group(1)
+        preamble=json.loads(literal)
+        constructors=[]
+        robot=object()
+        vex=ModuleType('vex')
+        def construct():
+            constructors.append(True)
+            return robot
+        vex.Robot=construct
+        constants=ModuleType('vex_globals')
+        constants.ALL_LEDS=6;constants.HAPPY=object()
+        namespace={'student_value':42}
+        if existing:namespace['robot']=robot
+        with patch.dict(sys.modules,{'vex':vex,'vex_globals':constants}):
+            exec(preamble,namespace)
+            # Simulate a retained robot with API globals removed between calls.
+            del namespace['ALL_LEDS']
+            exec(preamble,namespace)
+        self.assertIs(namespace['robot'],robot)
+        self.assertEqual(namespace['ALL_LEDS'],6)
+        self.assertIs(namespace['HAPPY'],constants.HAPPY)
+        self.assertEqual(namespace['student_value'],42)
+        self.assertEqual(len(constructors),0 if existing else 1)
 
 if __name__=='__main__': unittest.main()

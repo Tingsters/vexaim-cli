@@ -2,6 +2,55 @@
 
 ## Device-command candidate (2026-10-20)
 
+### Published rc.3 stationary follow-up
+
+The unmodified, checksum-verified CI Windows 0.3.0-rc.3 binary connected to
+AIM6518 in 18.794 seconds at battery 64%, stopped true. Its native camera
+observation returned a 21,441-byte 640x480 JPEG in 7.976 seconds, with control
+ready and stopped before/after. Codex opened the image in the same turn and
+recognized the white VEX controller.
+
+The acceptance run recorded 52 checks: 48 succeeded; robot-name and two link
+queries were explicitly unsupported, and the happy emoji was rejected because
+the dispatcher did not search the firmware's `Emoji` / `EmojiLook` aliases.
+The read-only sweep included every acceleration/gyro axis, orientation, vision,
+cargo, One Stick axes/buttons/battery, touchscreen coordinates/cursor, battery
+and timer. Disconnected-controller and empty-cargo results do not verify real
+button presses or loaded cargo. The live capability report transferred intact.
+
+Adding the two emoji aliases to the transient helper made the native CLI
+`screen show-emoji happy` return successfully. LCD screenshots after a circle
+and happy emoji both remained the home menu (240x240 PNG, 13,296 bytes; 38.654 s
+and 39.885 s). After a later reconnect, a six-second transient Python sequence
+set blue LEDs, played CHIRP at volume 25, requested a happy emoji for three
+seconds, then hid it and requested a white circle for three seconds. The user
+confirmed blue lights and audible chirp, but the LCD stayed on its menu even
+during execution. Lights/sound were cleaned up and live info confirmed stopped
+at battery 60%. Visible display output remains unresolved in this REPL workflow;
+the API acknowledgement alone is not acceptance. No wheel or kicker movement ran
+during those stationary checks.
+
+After fresh physical readiness on a clear floor, the published rc.3 owner ran
+exactly one 15-degree right turn, 50 mm forward move, 20 mm left strafe, a
+300 ms `(0,10,0)` native vector move, one SOFT kick and place. All six commands
+completed successfully; stopped state was confirmed after each drive action
+and at the end. Drive action times, including cleanup, were 893, 1,058, 629 and
+533 ms respectively. The turn's gyro delta was about +15.30 degrees. The user
+confirmed the movements and kicker looked right. This confirms the requested
+directions and visible actuator behavior, not independently measured distances
+or accuracy. Final battery was 55%. No failed movement was replayed.
+
+The retry also exposed a preamble defect: a retained `robot` caused API imports
+to be skipped, leaving ALL_LEDS/HAPPY undefined. Explicit imports restored both
+on the live robot. The fix always refreshes VEX API imports while constructing
+Robot only when absent. Tests cover both retained and newly constructed robots.
+The acceptance harness now cleans up every effect in a finally block, reports
+cleanup failures, distinguishes unsupported from failed checks, and cannot
+report a completed sweep as passing when a read failed. These changes and the
+emoji aliases are in rc.4; live evidence above uses rc.3 and transient fixes.
+
+### Earlier rc.2 checks
+
 The published CI-built 0.3.0-rc.2 Windows candidate connected to AIM6518 over
 Bluetooth in 18.207 seconds (discovery 8.039 s, connection 3.691 s, preparation
 6.476 s), reporting battery 71% and stopped true. Windows showed no present AIM
@@ -54,12 +103,11 @@ or kicker action ran. A fresh power-on confirmation was then requested. The upda
 acceptance harness captures immediately after startup to avoid an idle gap.
 
 The 0.3 candidates have simulated command/runtime/image tests and four-platform
-software checks, independently of hardware evidence. USB sessions, the new native
-action catalogue, separate LCD command, in-motion concurrency/cancellation, real
-vision targets, linked second robot and Codex/Claude image-to-action acceptance
-still need their own supervised checks. Existing 0.2 hardware evidence below
-does not establish acceptance for these new wrappers. Asset upload encoding is
-unverified and remains disabled; independent wheel signs/units are experimental.
+software checks, independently of hardware evidence. USB sessions, catalogue
+operations beyond the checks above, in-motion concurrency/cancellation, real
+vision targets, linked second robot and closed-loop visual action acceptance
+still need their own supervised checks. Asset upload encoding is unverified
+and remains disabled; independent wheel signs/units are experimental.
 
 ## Standalone Windows Bluetooth smoke test (2026-10-20)
 

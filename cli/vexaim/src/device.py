@@ -66,7 +66,7 @@ def _vx_arg(value):
         if name in ('ALL_AIOBJS', 'ALL_AIOBJECTS', 'ALL_OBJECTS', 'ALL_TAGS', 'ALL_COLORS', 'ALL_CODES') and hasattr(robot.vision, name):
             return getattr(robot.vision, name)
         # Constants share names between Color/TurnType/SoundType. Keep namespaces.
-        for typename in ('Color', 'FontType', 'AxisType', 'OrientationType', 'AccelerationType', 'SensitivityType', 'KickType', 'TurnType', 'LightType', 'EmojiType', 'EmojiLookType', 'VoltageUnits', 'CurrentUnits', 'SoundType'):
+        for typename in ('Color', 'FontType', 'AxisType', 'OrientationType', 'AccelerationType', 'SensitivityType', 'KickType', 'TurnType', 'LightType', 'Emoji', 'EmojiLook', 'EmojiType', 'EmojiLookType', 'VoltageUnits', 'CurrentUnits', 'SoundType'):
             cls = globals().get(typename)
             if cls is not None and hasattr(cls, name):
                 return getattr(cls, name)

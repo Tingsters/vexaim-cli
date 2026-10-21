@@ -63,6 +63,12 @@ Other command groups:
 as LCD content and a postcapture `control_ready` check. It requires a session and
 stopped wheels. It is not a camera observation, and never changes display modes.
 
+On AIM REV1 / BLE firmware 1.0.0.b0, emoji and drawing calls returned without
+error while LCD captures and a person watching still saw the home menu. Visible
+display output from this REPL workflow remains unresolved. An API acknowledgement
+does not verify a visible effect; do not promise the student saw it. Camera
+photographs work independently of this display limitation.
+
 Read sources can be sampled with `--duration 2s --sample-ms 100` (50..60000 ms,
 at most 256 samples). Native results are limited to 16 KiB; shorten a sample run
 or request fewer objects if it exceeds that limit. Larger results transfer in
