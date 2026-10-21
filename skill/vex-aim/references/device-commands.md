@@ -64,8 +64,13 @@ as LCD content and a postcapture `control_ready` check. It requires a session an
 stopped wheels. It is not a camera observation, and never changes display modes.
 
 Read sources can be sampled with `--duration 2s --sample-ms 100` (50..60000 ms,
-at most 256 samples). Use global `--jsonl` to emit one sample/callback per line
-and a final result with counts instead of repeating arrays.
+at most 256 samples). Native results are limited to 16 KiB; shorten a sample run
+or request fewer objects if it exceeds that limit. Larger results transfer in
+paced chunks, so result delivery can take up to about 13 seconds after the robot
+action finishes; this does not extend its motion deadline. Use global `--jsonl`
+to emit one sample/callback per line and a final result with counts instead of
+repeating arrays. Samples are collected before delivery, rather than streamed
+live as they occur.
 `events watch screen.pressed --duration 5s --no-wait`
 retains its own action and bounded event buffer; callbacks are disabled after
 the watch. Inspect action output for events and dropped count. `events watch

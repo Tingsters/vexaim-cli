@@ -33,6 +33,13 @@ buffer pacing, image decoding/atomic persistence, IPC and Windows process
 ownership. CI builds four OS targets and USB-only configurations using fake
 devices; it cannot certify physical precision or unsupported firmware.
 
+Live Windows BLE testing caught AIM MicroPython rejecting tuple arguments to
+`str.endswith`, which desktop Python accepts, and truncating larger reports at
+the original print rate. Vision dispatch uses single-string suffixes. Results
+now use 128-byte chunks at 100 ms intervals, with no delay for small replies,
+a 16 KiB result bound and a separate host allowance for delivery. Robot action
+deadlines stay unchanged. See [hardware evidence](hardware-notes.md).
+
 Hardware acceptance requires supervised USB/Bluetooth checks across command
 groups, a second prelinked AIM for messages, and independent measurements for
 motion across surfaces. Defaults remain 80 mm/s and 30 degrees/s. Students need

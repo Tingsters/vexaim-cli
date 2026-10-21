@@ -15,11 +15,21 @@ except NameError:
 
 
 def _vx_print(value):
-    # AIM's console buffer is about 2 KB. Pace chunks even for many detections.
-    text = _vx_json.dumps(value)
-    for offset in range(0, len(text), 256):
-        print(text[offset:offset + 256], end='')
-        wait(35, MSEC)
+    # Verified over AIM BLE: 256 bytes/35 ms loses long reports. Keep small
+    # replies immediate, then pace larger ones below the console drain rate.
+    text = _vx_json.dumps(value).encode('utf-8')
+    if len(text) > 16384:
+        raise RuntimeError('Result exceeds 16 KiB; shorten samples or request fewer objects')
+    offset = 0
+    while offset < len(text):
+        end = min(offset + 128, len(text))
+        # Count bytes, preserving UTF-8 characters at chunk boundaries.
+        while end < len(text) and text[end] & 0xc0 == 0x80:
+            end -= 1
+        if offset:
+            wait(100, MSEC)
+        print(text[offset:end].decode('utf-8'), end='')
+        offset = end
     print()
 
 
@@ -250,7 +260,8 @@ def _vx_execute(a, job):
             samples.append({'robot_elapsed_ms': job['clock'].time(MSEC), 'value': _vx_plain(fn(*args))})
             wait(a['sample_ms'], MSEC)
         return {'samples': samples}
-    if kind == 'vision' and method.endswith(('.get_data', '.take_snapshot')):
+    # AIM MicroPython accepts one suffix; CPython's tuple overload raises here.
+    if kind == 'vision' and (method.endswith('.get_data') or method.endswith('.take_snapshot')):
         return [obj for obj in fn(*args) if getattr(obj, 'exists', False)]
     return fn(*args)
 

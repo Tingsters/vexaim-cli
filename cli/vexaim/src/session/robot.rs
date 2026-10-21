@@ -156,7 +156,10 @@ impl Robot {
         );
         let result = self
             .repl
-            .exec(&source, Duration::from_secs(a.timeout + 2))
+            .exec(
+                &source,
+                Duration::from_secs(a.timeout + crate::device::RESULT_TIMEOUT_SECS),
+            )
             .await?;
         checked(&result)?;
         let value: Value = serde_json::from_str(result.stdout.trim()).map_err(failure)?;

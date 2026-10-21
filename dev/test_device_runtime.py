@@ -105,6 +105,23 @@ class DeviceRuntime(unittest.TestCase):
         result = self.dispatch(self.action('robot.vision.get_data',[{'constant':'ALL_AIOBJS'},8],'vision'))
         self.assertEqual(result, {'value': []})
 
+    def test_vision_dispatch_with_aim_micropython_string_semantics(self):
+        # Live AIM core 1.22.0 rejects tuple suffixes, unlike desktop Python.
+        class AimString(str):
+            def endswith(self, suffix):
+                if not isinstance(suffix, str):
+                    raise TypeError("can't convert 'tuple' object to str implicitly")
+                return super().endswith(suffix)
+        objects = [SimpleNamespace(exists=False), SimpleNamespace(exists=True, width=42)]
+        self.ns['robot'].vision.get_data = lambda target, count: objects
+        self.ns['robot'].vision.take_snapshot = lambda target, count: objects
+        for method in ('get_data', 'take_snapshot'):
+            with self.subTest(method=method):
+                result = self.dispatch(self.action(AimString('robot.vision.' + method),
+                                                   [{'constant':'ALL_AIOBJS'},8], 'vision'))
+                self.assertEqual(len(result['value']), 1)
+                self.assertEqual(result['value'][0]['width'], 42)
+
     def test_vision_properties_and_missing_firmware(self):
         self.assertEqual(self.ns['_vx_plain'](SimpleNamespace(exists=True,width=42))['width'],42)
         result=self.dispatch(self.action('robot.link.is_connected', [], 'read'))
@@ -121,6 +138,35 @@ class DeviceRuntime(unittest.TestCase):
         with contextlib.redirect_stdout(out): self.ns['_vx_print'](value)
         self.assertEqual(json.loads(out.getvalue()),value)
         self.assertGreater(self.t,100)
+
+    def test_small_results_have_no_pacing_delay(self):
+        out=io.StringIO()
+        with contextlib.redirect_stdout(out): self.ns['_vx_print']({'value':1})
+        self.assertEqual(json.loads(out.getvalue()),{'value':1})
+        self.assertEqual(self.t,0)
+
+    def test_oversized_result_rejected_before_partial_output(self):
+        out=io.StringIO()
+        with contextlib.redirect_stdout(out):
+            with self.assertRaisesRegex(RuntimeError,'16 KiB'):
+                self.ns['_vx_print']({'items':'x'*16384})
+        self.assertEqual(out.getvalue(),'')
+
+    def test_result_limit_and_chunk_boundaries_count_utf8_bytes(self):
+        self.ns['_vx_json'] = SimpleNamespace(dumps=lambda value:json.dumps(value,ensure_ascii=False))
+        class Output(io.StringIO):
+            def write(self, text):
+                self_max = len(text.encode('utf-8'))
+                if self_max > 128:
+                    raise AssertionError('Console write exceeds byte budget')
+                return super().write(text)
+        out = Output()
+        value = {'text': '\U0001f642\u673a\u5668\u4eba' * 100}
+        with contextlib.redirect_stdout(out): self.ns['_vx_print'](value)
+        self.assertEqual(json.loads(out.getvalue()),value)
+        with contextlib.redirect_stdout(out):
+            with self.assertRaisesRegex(RuntimeError,'16 KiB'):
+                self.ns['_vx_print']({'text':'\U0001f642'*5000})
 
     def test_cancel_before_dispatch_never_starts_motors(self):
         result=self.dispatch(self.action())

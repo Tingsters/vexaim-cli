@@ -2,6 +2,47 @@
 
 ## Device-command candidate (2026-10-20)
 
+The published CI-built 0.3.0-rc.2 Windows candidate connected to AIM6518 over
+Bluetooth in 18.207 seconds (discovery 8.039 s, connection 3.691 s, preparation
+6.476 s), reporting battery 71% and stopped true. Windows showed no present AIM
+USB serial endpoints. Two native camera observations returned fully decoded
+640x480 JPEGs: 21,970 bytes in 8.015 s and 21,443 bytes in 8.066 s. Both were
+opened in Codex's image reader within the turn and visibly showed the white VEX
+controller. Both confirmed control ready and stopped before/after; the second
+included a successful empty native detection result. Agent recognition does not
+depend on the robot's limited object classes.
+
+The test exposed two defects missed by desktop simulation: AIM MicroPython's
+`str.endswith` rejects a tuple, breaking vision commands, and 256-byte/35 ms
+printing truncated the live capability report. After refreshing only the
+transient helpers with the source fixes, get-data returned an empty list,
+largest-object returned null for an empty scene, and take-snapshot returned an
+object with all 12 fields. That detection is not a verified classification of
+the controller. A 6,000-character patterned payload transferred exactly with
+128-byte/100 ms pacing (5.053 s), and a complete 4,064-character capability report
+followed (4.218 s). Of 118 unique native methods, six were absent: robot.get_name
+and the five robot.link methods. These remain unsupported, never fabricated.
+
+Orientation, acceleration on all three axes, Z turn rate, all four cargo
+predicates, native vision count, controller connection/axis, touchscreen pressed
+state and cursor row/column, battery voltage/current and timer reads returned
+successfully. The controller was disconnected and cargo predicates were false;
+this does not verify button handling or detection of real cargo. A two-second
+heading sample run delivered ten JSON Lines records and a one-second timer
+watch delivered one callback with zero dropped events. Live info then confirmed
+stopped, battery 66%. These checks used rc.2 plus the transient helper fixes,
+rather than an unchanged released rc.3 binary.
+
+A subsequent close/start revealed a teardown race, addressed by publishing the
+closing state before its acknowledgement and waiting for endpoint release.
+The locally rebuilt owner reconnected in 18.967 s at battery 65%, but the next
+camera attempt failed with Windows HRESULT 0x800704C7 and a following info call
+reported the link down. No image or effects results came from that attempt.
+No shutdown, reset, wheel or kicker command was sent. The disconnect's cause
+is unresolved; screen/power confirmation and further checks remain pending.
+
+The following paragraph records the earlier, separate first attempt:
+
 The command expansion's first stationary Windows BLE connection to AIM6518
 completed in 18.636 seconds, including discovery 8.047 s, connection 4.258 s and
 helper preparation 6.330 s. It reported battery 72%, stopped true and gyro not
@@ -9,7 +50,7 @@ calibrating. This development build preceded the prerelease version bump.
 
 The subsequent image and individual-sensor requests found the link down before
 execution. They produced no image or sensor acceptance results; no new movement
-or kicker action ran. A fresh power-on confirmation is pending. The updated
+or kicker action ran. A fresh power-on confirmation was then requested. The updated
 acceptance harness captures immediately after startup to avoid an idle gap.
 
 The 0.3 candidates have simulated command/runtime/image tests and four-platform

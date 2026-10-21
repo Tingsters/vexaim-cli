@@ -280,6 +280,9 @@ async fn actor<B: Backend>(
         busy.set(true);
         cache.borrow_mut()["busy"] = json!(true);
         if job.request.priority() {
+            if matches!(job.request, Request::Close) {
+                cache.borrow_mut()["state"] = json!("closing");
+            }
             backend.interrupted(&job.request);
             cache.borrow_mut()["needs_check"] = json!(true);
             // Stop also cancels an accepted action that the actor has not started yet.
@@ -344,6 +347,9 @@ async fn actor<B: Backend>(
                 result(&job.events, cancelled, job.received);
                 if let Outcome::Stop(stop) = other {
                     close = matches!(stop.request, Request::Close);
+                    if close {
+                        cache.borrow_mut()["state"] = json!("closing");
+                    }
                     result(&stop.events, halted, stop.received);
                 }
             }
@@ -419,7 +425,7 @@ async fn client(
         let response_timeout = if matches!(request, Request::Status) {
             2
         } else {
-            130
+            165
         };
         let value = tokio::time::timeout(
             Duration::from_secs(response_timeout),
@@ -457,7 +463,8 @@ async fn client(
 async fn start(name: &str) -> Result<Value, Fail> {
     let id = ipc::id_for(name)?;
     let mut connecting = false;
-    if let Ok(value) = client(&id, &Request::Status, false, false).await {
+    let closing_deadline = Instant::now() + Duration::from_secs(15);
+    while let Ok(value) = client(&id, &Request::Status, false, false).await {
         if value["name"] != name || value["protocol"] != PROTOCOL {
             return Err(failure("Existing session identity/protocol mismatch"));
         }
@@ -471,10 +478,18 @@ async fn start(name: &str) -> Result<Value, Fail> {
                     .unwrap_or("Session initialization failed"),
             ));
         }
-        connecting = value["state"] == "connecting";
         if value["state"] == "closed" || value["state"] == "closing" {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            // A close acknowledgement confirms stopped state before BLE teardown.
+            // Wait for the owner to release its endpoint, rather than racing a
+            // new process against the old named pipe/socket after a fixed sleep.
+            if Instant::now() >= closing_deadline {
+                return Err(failure("Previous session is still closing; no new owner was started"));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            continue;
         }
+        connecting = value["state"] == "connecting";
+        break;
     }
     let arguments = [
         "--json",

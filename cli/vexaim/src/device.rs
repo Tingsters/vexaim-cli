@@ -5,6 +5,9 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub const RUNTIME: &str = include_str!("device.py");
+// Result pacing is outside the robot action deadline (16 KiB at 128 B/100 ms).
+// Include helper upload and final cleanup when used without a persistent owner.
+pub const RESULT_TIMEOUT_SECS: u64 = 25;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Action {
     pub command: String,

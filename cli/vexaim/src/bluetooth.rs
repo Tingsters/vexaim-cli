@@ -301,7 +301,7 @@ async fn run_python(
             Cmd::Turn { direction, degrees, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::turn_source(*direction, *degrees, *speed)?), 23, true),
             Cmd::Move { distance, angle, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::move_source(*distance, *angle, *speed)?), 23, true),
             Cmd::Capabilities {..} => (crate::device::capability_source(),30,true),
-            Cmd::Native(words) => { let a=crate::device::parse(words,false)?; (crate::device::standalone(&a),a.timeout+5,true) },
+            Cmd::Native(words) => { let a=crate::device::parse(words,false)?; (crate::device::standalone(&a),a.timeout+crate::device::RESULT_TIMEOUT_SECS,true) },
             _ => return Err(fail("Unsupported Bluetooth command.")),
         };
         if preamble {
