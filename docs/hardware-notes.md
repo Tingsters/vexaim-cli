@@ -38,7 +38,7 @@ closing state before its acknowledgement and waiting for endpoint release.
 The locally rebuilt owner reconnected in 18.967 s at battery 65%, but the next
 camera attempt failed with Windows HRESULT 0x800704C7 and a following info call
 reported the link down. No image or effects results came from that attempt.
-No shutdown, reset, wheel or kicker command was sent. The disconnect's cause
+No shutdown/reset command or wheel/kicker movement was requested. The disconnect's cause
 is unresolved; screen/power confirmation and further checks remain pending.
 
 The following paragraph records the earlier, separate first attempt:
