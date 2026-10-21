@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import importlib.util
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -46,6 +47,21 @@ async def run(args, report, save):
     if len(found) != 1:
         raise RuntimeError("Expected exactly one named AIM")
     async with helper.BleakClient(found[0], timeout=15, pair=False) as client:
+        connection_request = None
+        if sys.platform == "win32":
+            try:
+                from winrt.windows.devices.bluetooth import (
+                    BluetoothLEPreferredConnectionParameters,
+                )
+
+                connection_request = (
+                    client._backend._requester.request_preferred_connection_parameters(
+                        BluetoothLEPreferredConnectionParameters.throughput_optimized
+                    )
+                )
+                report["throughput_request_status"] = str(connection_request.status)
+            except (AttributeError, OSError, ImportError, RuntimeError) as error:
+                report["throughput_request_error"] = type(error).__name__
         identity = {}
         for field, short in [
             ("model", "2a24"),
@@ -99,6 +115,16 @@ async def run(args, report, save):
                 # Official VEXcom: _v5_SystemStatus (0x20 flags) and
                 # _v5_BrainStatus (0x22 versions/system status). Both are reads.
                 try:
+                    # Match ordinary CLI traffic, including its GATT auth read.
+                    # Never save or print authentication bytes in the report.
+                    current_auth = bytes(await client.read_gatt_char(helper.PAIRING))
+                    if len(current_auth) != 4 or any(
+                        digit > 9 for digit in current_auth
+                    ):
+                        raise RuntimeError(
+                            "Bluetooth authentication is no longer valid"
+                        )
+                    current_auth = None
                     flags = await system.status() if args.probe != "status" else None
                     status = (
                         await system.exchange(display.packet(0x56, 0x22))

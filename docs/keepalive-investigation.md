@@ -90,6 +90,56 @@ confirms home screen zero. It never selects a menu tile or sends input on an
 unknown/program screen. Input ACK loss aborts instead of replaying it. This is
 an opt-in diagnostic control, not a student workaround or runtime behavior.
 Tests cover the nonhome-screen guard and refusal to replay a lost input.
+
+### Follow-up controls, same power-on
+
+The operator powered AIM6518 on once for the home-Back control. Python attempts
+acknowledged a Back input at system times about 42, 104 and 209 seconds, but their
+status-only links failed within seconds. Adding the ordinary GATT authentication
+read and retaining a Windows throughput request did not make those links stable.
+The Rust CLI could reconnect each time without another physical power-on.
+
+A separate ignored Rust hardware control, using the CLI's transport and native
+vault, read stopped state at system time 372988 ms, battery 77%, position (0,0).
+It acknowledged Back on confirmed home screen zero; its last successful flags
+poll was at 2.28 seconds and a later request failed. This is a failed control, not seven-minute
+acceptance. The early failures do not establish robot power-off or prove that
+Back caused disconnection; status-only polling also failed in earlier controls.
+
+A passive-notification control subscribed only to the previously enumerated AIM
+status characteristics `6c7851a0-adf7-4de6-881d-1ce2cd0fecc9` and
+`6c7851a0-adf7-4de6-881d-1ce2cd0fecf9`, then sent acknowledged System Alive reads
+every two seconds. It sent no Back, menu input or actuator command. It began at
+system time 523308 ms, stopped at (0,0), battery 76%, and recorded 87 successful
+polls through 178.52 seconds before losing the link. A subsequent named discovery
+found no robot. Passive status subscriptions are therefore not a verified fix.
+The raw timing is consistent with Back refreshing an inactivity timer, but that
+is an inference, not an isolated causal result.
+
+The next Rust control combines System Alive with home-only Back. Earlier Back
+controls omitted System Alive, so their brief link failures do not isolate the
+input's effect. The tool requires an explicit stationary readiness string,
+uses fixed source-derived packets, validates ACK framing/CRC, refuses to replay
+input, and requires seven acknowledged home-Back inputs plus a full 420 seconds
+and final stopped/system-time checks before passing. It has no production CLI
+entry point. No diagnostic menu input or extra status subscription was added to
+the runtime. A read-only MicroPython name inspection is also prepared; it calls
+no possible power-management method.
+
+From PowerShell in the CLI checkout, with all ordinary owners closed:
+
+```powershell
+$env:VEXAIM_HARDWARE_READY='stationary-bluetooth-no-actuators'
+$env:VEXAIM_HARDWARE_NAME='AIM6518'
+$env:VEXAIM_IDLE_MODE='back+alive'
+$env:VEXAIM_IDLE_OUTPUT="$PWD/.vexaim/keepalive/aim-back-alive-rust.json"
+cargo test --locked --manifest-path cli/Cargo.toml -p vexaim stationary_idle_control -- --ignored --nocapture
+```
+
+Developer modes `flags-back` and `telemetry` reproduce the failed controls;
+do not repeat them when someone is unavailable to recover power. No student
+needs Rust, Python packages, environment variables or these diagnostic commands.
+
 The official VEXcode web page/download endpoints returned a Cloudflare challenge
 to both normal HTTP and a fresh browser; no challenge automation was attempted.
 

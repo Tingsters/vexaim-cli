@@ -28,6 +28,14 @@ Further investigation compares the existing AIM native flags/status queries
 (`0x56/0x20` and `0x56/0x22`) independently of legacy System Alive. The developer
 probe uses one BLE owner, existing vault authentication and no menu inputs.
 Software and installer tests alone do not establish that any probe prevents sleep.
+Subsequent home-Back controls also failed to sustain their status-only links,
+including a Rust control beginning at system time 372988 ms. The CLI reconnected
+without a further power-on, distinguishing these short errors from shutdown.
+Adding only the two known AIM status notification subscriptions to System Alive
+also failed: 87 polls through 178.52 seconds from system time 523308 ms, followed
+by link loss and no exact-name discovery match. The combined System Alive plus
+home-only Back control and read-only power-API inspection are prepared but not
+verified. All these controls were stationary; no wheel or kicker command ran.
 See [investigation and autonomous procedure](keepalive-investigation.md).
 
 ## Bluetooth display lifecycle candidate (2026-10-20)
