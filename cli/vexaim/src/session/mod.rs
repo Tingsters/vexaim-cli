@@ -137,6 +137,9 @@ pub(super) trait Backend {
     fn interrupted(&mut self, request: &Request);
     async fn halt(&mut self) -> Result<Value, Fail>;
     async fn close(&mut self);
+    async fn idle(&mut self) -> Result<(), Fail> {
+        Ok(())
+    }
 }
 
 struct Job {
@@ -270,12 +273,21 @@ async fn actor<B: Backend>(
     cache: Cache,
     busy: Rc<Cell<bool>>,
 ) {
+    let mut idle_deadline = tokio::time::Instant::now() + IDLE;
     loop {
         let job = tokio::select! { biased;
             job = priority.recv() => job,
             job = normal.recv() => job,
-            _ = tokio::time::sleep(IDLE) => { let _ = backend.halt().await; break; }
+            _ = tokio::time::sleep_until(idle_deadline) => { let _ = backend.halt().await; break; }
+            _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                if let Err(e)=backend.idle().await {
+                    cache.borrow_mut()["needs_check"]=json!(true);
+                    cache.borrow_mut()["display_error"]=json!(e.to_string());
+                }
+                continue;
+            }
         };
+        idle_deadline = tokio::time::Instant::now() + IDLE;
         let Some(job) = job else { break };
         busy.set(true);
         cache.borrow_mut()["busy"] = json!(true);
@@ -483,7 +495,9 @@ async fn start(name: &str) -> Result<Value, Fail> {
             // Wait for the owner to release its endpoint, rather than racing a
             // new process against the old named pipe/socket after a fixed sleep.
             if Instant::now() >= closing_deadline {
-                return Err(failure("Previous session is still closing; no new owner was started"));
+                return Err(failure(
+                    "Previous session is still closing; no new owner was started",
+                ));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
             continue;

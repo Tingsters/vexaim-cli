@@ -291,7 +291,7 @@ async fn run_python(
     conn: &mut BluetoothConnection,
     info: &serde_json::Value,
 ) -> Result<i32, Fail> {
-    let mut repl = Repl::from_connection(conn);
+    let mut repl = Repl::from_connection(crate::display::DisplayConnection::new(conn));
     let operation = async {
         let (source, timeout, preamble) = match &cli.cmd {
             Cmd::Doctor => (STATUS.to_string(),10,true),
@@ -308,6 +308,14 @@ async fn run_python(
             let setup = repl.exec(PREAMBLE,Duration::from_secs(10)).await?;
             if setup.timed_out || !setup.stderr.is_empty() { return Err(fail("Python robot initialization failed or timed out.")); }
         }
+        let display = (preamble && matches!(cli.cmd, Cmd::Exec {..}) && crate::display::program_uses_display(&source)) || matches!(&cli.cmd, Cmd::Native(words) if words.first().is_some_and(|w|w=="screen") && crate::device::parse(words,false).is_ok_and(|a|a.kind!="read"));
+        if display {
+            let state=repl.exec(STATE,Duration::from_secs(5)).await?;
+            if state.timed_out || !state.stderr.is_empty() || serde_json::from_str::<serde_json::Value>(state.stdout.trim()).map_err(io)?["stopped"]!=true {
+                return Err(fail("Finish movement before the first display program"));
+            }
+            repl.connection_mut().enable(info).await?;
+        }
         let result = repl.exec(&source,Duration::from_secs(timeout)).await?;
         if matches!(cli.cmd,Cmd::Doctor) {
             crate::validate_status(&result).map_err(fail)?;
@@ -316,7 +324,9 @@ async fn run_python(
         }
         Ok(print_exec(cli,&result,timeout))
     }.await;
+    let cleanup = repl.connection_mut().disable().await.map_err(io);
     repl.close().await;
+    cleanup?;
     operation
 }
 
@@ -329,7 +339,7 @@ pub(crate) fn require_camera_firmware(info: &serde_json::Value) -> Result<(), Fa
     Ok(())
 }
 
-pub(crate) async fn capture_jpeg(conn: &mut BluetoothConnection) -> Result<Vec<u8>, Fail> {
+pub(crate) async fn capture_jpeg<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
     capture_buffer(conn, Some(8), true).await
 }
 
@@ -388,13 +398,15 @@ async fn capture_buffer<C: Connection>(
     if chunk == 0 {
         return Err(fail("Camera receive window is too small."));
     }
-    let deadline = Instant::now() + Duration::from_secs(45);
+    let seconds = if jpeg { 45 } else { 55 };
+    let deadline = Instant::now() + Duration::from_secs(seconds);
     let mut bytes = Vec::with_capacity(size);
     while bytes.len() < size {
         if Instant::now() >= deadline {
-            return Err(fail(
-                "Camera transfer exceeded 45 seconds; existing output was preserved.",
-            ));
+            return Err(fail(format!(
+                "{} transfer exceeded {seconds} seconds; existing output was preserved.",
+                if jpeg { "Camera" } else { "LCD" }
+            )));
         }
         let requested = if bytes.is_empty() {
             128.min(chunk)

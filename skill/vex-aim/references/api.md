@@ -79,7 +79,7 @@ Legend: RAN = executed on the test robot without error; DOC = from VEX docs, not
 |---|---|---|
 | `robot.get_battery_level()` | 0-100 % | RAN |
 | `robot.led.on(LED, COLOR)` / `robot.led.off(LED)` | LED = `ALL_LEDS`, `LED1`..`LED6` or a tuple | RAN (no error; light not visually confirmed) |
-| `robot.screen.show_emoji(EMOJI[, LOOK_*])` / `hide_emoji()` | | RAN (no error; screen not visually confirmed) |
+| `robot.screen.show_emoji(EMOJI[, LOOK_*])` / `hide_emoji()` | Use named constants and 0.3.0-rc.5 display lifecycle | Visible HAPPY and hide/show confirmed over Windows Bluetooth on AIM REV1 / BLE 1.0.0.b0 |
 | `robot.sound.play(SOUND[, volume])`, `play_note("D6", ms[, volume])`, `stop()`, `is_active()` | non-blocking | RAN (no error; audio not confirmed) |
 | `robot.move_for(distance_mm, angle_deg, velocity, units)` | angle 0 = forward, 90 = right; blocks until done | RAN: `move_for(50, 0, 40, MMPS)` moved ~49 mm |
 | `robot.move_at(angle[, velocity, units])`, `move_with_vectors(fwd, right, rot)`, `spin_wheels(...)` | continuous | DOC |

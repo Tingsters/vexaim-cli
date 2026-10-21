@@ -1,5 +1,55 @@
 # Hardware evidence
 
+## Bluetooth display lifecycle candidate (2026-10-20)
+
+Local Windows 0.3.0-rc.5 now displays named HAPPY, text and shapes over Bluetooth
+on AIM6518 (AIM REV1 / BLE 1.0.0.b0), without USB, saved projects or firmware
+changes. This is local candidate evidence, not a published release or CI hardware
+certification. See [protocol provenance and investigation](display-investigation.md).
+
+Normalized Python drawing alone left the LCD on its menu. Source-derived remote
+start briefly showed a default face/chirp, but the program display disappeared
+before drawing when the probe waited three seconds for an ACK. No 0x57 ACKs
+arrived, despite the physical effect. Inspection of official VEXcom's delay
+function revealed read-only remote-status polls every 100 ms. With that keepalive,
+both start-before-REPL and start-after-REPL variants displayed the drawing and
+emoji. The operator confirmed blue background, white circle, readable LCD TEST,
+HAPPY and restoration of the drawing after hide. Numeric emoji 6 produced a
+sunglasses face in the probe; named firmware constants produced HAPPY. White
+text on white fill had independently caused a solid white bar.
+
+The static-CRT portable Windows binary passed its PE dependency check (15 OS
+imports; no Visual C++ runtime DLLs) and 33 installer assertions under PowerShell
+5.1. Its normal screen command held HAPPY on the physical LCD. A local 240x240
+LCD PNG (10,013 bytes) completed in 41.625 seconds with control ready. The first
+integrated transfer had exceeded 45 seconds because every heartbeat also read
+the pairing characteristic; the fixed read-only keepalive avoids that overhead.
+Ordinary commands still check authentication. LCD transfers have a separate
+55-second budget; native JPEG transfers retain 45 seconds.
+
+Three connections with the final portable implementation passed display checks,
+including a user-confirmed fresh boot and a manually selected Dashboard/AI Vision
+camera view. HAPPY replaced that view, then the blue LCD TEST drawing appeared;
+the operator confirmed both. Two further reconnects repeated HAPPY, drawing,
+stop and live info successfully. HAPPY commands took about 0.54-0.56 seconds;
+reconnect startup remained about 18.5-18.8 seconds. Reuse a session for ordinary
+prompts. The original Robot object and marker 6518 survived activation and drawing.
+
+During active display, native 640x480 JPEGs completed in 6.489 seconds (17,359
+bytes) and 7.805 seconds (21,170 bytes), with control ready. The agent opened the
+images and recognized the VEX controller/desk scene. Native heading, forward
+acceleration, cargo and vision queries passed. Camera capture after stop also
+passed in 6.500 seconds (17,503 bytes), after the required live info recovery
+check. The first acceptance script omitted that recovery step and was correctly
+rejected; a corrected follow-up passed. Photos/reports stay local and ignored.
+
+Position stayed (0,0); heading changed only by about 0.007 degrees across the
+clean-boot display/camera sequence, with no calibration. Final repeated checks
+reported stopped at battery 27%, heading about 1.094 degrees and position (0,0).
+No wheel or kicker commands ran. All sessions were explicitly closed. Menu-exit
+reactivation, idle expiry, disconnects and no-replay behavior also have simulated
+regressions; the physical takeover test used AI Vision as its starting screen.
+
 ## Device-command candidate (2026-10-20)
 
 ### Published rc.3 stationary follow-up

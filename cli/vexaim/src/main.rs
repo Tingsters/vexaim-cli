@@ -3,6 +3,8 @@ mod assets;
 #[cfg(feature = "bluetooth")]
 mod bluetooth;
 mod device;
+#[cfg(feature = "bluetooth")]
+mod display;
 mod motion;
 mod observation;
 mod repl;
@@ -251,7 +253,12 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
         Cmd::Capabilities { .. } => run_exec(cli, &device::capability_source(), 30, true),
         Cmd::Native(words) => {
             let a = device::parse(words, false)?;
-            run_exec(cli, &device::standalone(&a), a.timeout + device::RESULT_TIMEOUT_SECS, true)
+            run_exec(
+                cli,
+                &device::standalone(&a),
+                a.timeout + device::RESULT_TIMEOUT_SECS,
+                true,
+            )
         }
         Cmd::Camera { .. } => Err(device::fail(
             "Camera observe requires an owned session; start a USB or Bluetooth session first",

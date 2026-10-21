@@ -39,6 +39,11 @@ assets and actions. Use native commands where applicable and compose actions for
 ideas; arbitrary Python is available. Do not require surface labels, targets or
 calibration before ordinary movement.
 
+For faces, messages and drawings over Bluetooth, use 0.3.0-rc.5 or newer and a
+reusable session. Screen writes activate the program display automatically;
+named emoji constants match the firmware. Stop/close or 60 seconds without
+activity returns to the menu. See the device-command reference for display limits.
+
 Announce movement and establish a clear, level area with a person near the power
 switch. Preserve readiness within the current interaction rather than asking
 again before every action. Motion helpers have finite bounds and a robot-side

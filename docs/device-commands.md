@@ -20,6 +20,13 @@ source labeling. Camera observations remain native 640×480 JPEGs. The source
 protocol checks the exact LCD buffer size before RGB565 decoding and never
 switches menus or firmware modes to obtain an image.
 
+The 0.3.0-rc.5 candidate fixes hidden Bluetooth display output on AIM REV1 / BLE
+1.0.0.b0. Screen writes activate the program display and maintain its required
+keepalive through the existing owner. Reuse a session; no stored project or USB
+is needed. Stop/close or 60 seconds without traffic returns to the menu. Native
+camera capture does not activate this display mode. See the
+[investigation and protocol evidence](display-investigation.md).
+
 For a visual task, call `--json --session ID camera observe`, then open its
 absolute `path` with Codex `view_image` or Claude Code `Read`. Decide on a small
 finite action, announce it, wait for completion, then capture and inspect another

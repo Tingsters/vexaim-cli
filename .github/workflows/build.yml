@@ -75,6 +75,7 @@ jobs:
         run: |
           python -m pip install bleak==3.0.2 keyring==25.7.0
           python -m unittest discover -s dev -p test_ble_feasibility.py -v
+          python -m unittest discover -s dev -p test_display_probe.py -v
 
       - name: Test robot motion helpers and independent benchmark evaluation (no hardware)
         run: |

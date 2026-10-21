@@ -1,6 +1,8 @@
 use super::{Backend, Request, failure};
 use crate::{
-    bluetooth, motion,
+    bluetooth,
+    display::DisplayConnection,
+    motion,
     repl::{Fail, PREAMBLE, Repl},
 };
 use btleplug::api::{ConnectionParameterPreset, Peripheral as _};
@@ -13,7 +15,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use vex_v5_serial::generic::GenericConnection;
 
 pub struct Robot {
-    repl: Repl<GenericConnection>,
+    repl: Repl<DisplayConnection<GenericConnection>>,
     identity: Value,
     needs_check: bool,
     camera_usable: bool,
@@ -31,7 +33,7 @@ fn checked(result: &crate::repl::ExecResult) -> Result<(), Fail> {
 
 impl Robot {
     async fn connected(&self) -> bool {
-        let GenericConnection::Bluetooth(conn) = self.repl.connection() else {
+        let GenericConnection::Bluetooth(conn) = self.repl.connection().inner() else {
             return true;
         };
         // Cached OS connection state, not a GATT round trip or another scan.
@@ -50,7 +52,9 @@ impl Robot {
                 })?;
             let conn = dev.connect(Duration::from_millis(100)).map_err(failure)?;
             let mut robot = Self {
-                repl: Repl::from_connection(GenericConnection::Serial(conn)),
+                repl: Repl::from_connection(DisplayConnection::new(GenericConnection::Serial(
+                    conn,
+                ))),
                 identity: json!({"transport":"usb","system_port":port}),
                 needs_check: false,
                 camera_usable: true,
@@ -92,7 +96,7 @@ impl Robot {
         let connection_ms = connected.elapsed().as_millis() as u64;
         let prepared = Instant::now();
         let mut robot = Self {
-            repl: Repl::from_connection(GenericConnection::Bluetooth(conn)),
+            repl: Repl::from_connection(DisplayConnection::new(GenericConnection::Bluetooth(conn))),
             identity,
             needs_check: false,
             camera_usable: true,
@@ -150,6 +154,9 @@ impl Robot {
     }
     async fn native(&mut self, words: &[String]) -> Result<Value, Fail> {
         let a = crate::device::parse(words, true)?;
+        if a.command.starts_with("screen ") && a.kind != "read" {
+            self.activate_display().await?;
+        }
         let source = format!(
             "_vx_print(_vx_dispatch({}))\n",
             crate::device::python_json(&serde_json::to_value(&a).unwrap())
@@ -171,12 +178,15 @@ impl Robot {
                 "Previous capture was interrupted; close/start the session before another image transfer",
             ));
         }
-        match self.repl.connection_mut() {
-            GenericConnection::Bluetooth(conn) => {
+        match self.repl.connection().inner() {
+            GenericConnection::Bluetooth(_) => {
                 bluetooth::require_camera_firmware(&self.identity)?;
-                tokio::time::timeout(Duration::from_secs(60), bluetooth::capture_jpeg(conn))
-                    .await
-                    .map_err(|_| failure("Camera capture timed out; no stale artifact returned"))?
+                tokio::time::timeout(
+                    Duration::from_secs(60),
+                    bluetooth::capture_jpeg(self.repl.connection_mut()),
+                )
+                .await
+                .map_err(|_| failure("Camera capture timed out; no stale artifact returned"))?
             }
             GenericConnection::Serial(_) => {
                 tokio::task::spawn_blocking(move || crate::snap::capture(camera_index))
@@ -209,6 +219,22 @@ impl Robot {
         let state: Value = serde_json::from_str(result.stdout.trim()).map_err(failure)?;
         self.needs_check = state["stopped"] != true && state["owned_action_active"] != true;
         Ok(json!({"ok":true,"robot_state":state,"needs_check":self.needs_check}))
+    }
+    async fn activate_display(&mut self) -> Result<(), Fail> {
+        if !self.repl.connection().inner().is_bluetooth()
+            || self.repl.connection_mut().foreground().await?
+        {
+            return Ok(());
+        }
+        let state = self.state().await?;
+        if state["robot_state"]["stopped"] != true
+            || state["robot_state"]["imu_calibrating"] == true
+        {
+            return Err(failure(
+                "Finish movement/calibration before the first display program; nothing was replayed",
+            ));
+        }
+        self.repl.connection_mut().enable(&self.identity).await
     }
 }
 
@@ -248,7 +274,10 @@ impl Backend for Robot {
                     json!({"ok":false,"rejected":true,"error":"Finish movement before LCD capture"}),
                 );
             }
-            if matches!(self.repl.connection(), GenericConnection::Bluetooth(_)) {
+            if matches!(
+                self.repl.connection().inner(),
+                GenericConnection::Bluetooth(_)
+            ) {
                 bluetooth::require_camera_firmware(&self.identity)?;
             }
             let bytes = tokio::time::timeout(
@@ -359,11 +388,12 @@ impl Backend for Robot {
                 None
             };
             self.needs_check = !ready;
-            let transport = if matches!(self.repl.connection(), GenericConnection::Serial(_)) {
-                "usb"
-            } else {
-                "bluetooth"
-            };
+            let transport =
+                if matches!(self.repl.connection().inner(), GenericConnection::Serial(_)) {
+                    "usb"
+                } else {
+                    "bluetooth"
+                };
             let mut artifact = crate::observation::store(
                 Path::new(output_dir),
                 &bytes,
@@ -392,6 +422,10 @@ impl Backend for Robot {
             return Ok(
                 json!({"ok":true,"path":output,"width":width,"height":height,"bytes":image.len()}),
             );
+        }
+        if matches!(request, Request::Exec {source,..} if crate::display::program_uses_display(source))
+        {
+            self.activate_display().await?;
         }
         let (source, timeout) = match request {
             Request::Turn {
@@ -492,6 +526,8 @@ impl Backend for Robot {
     }
 
     async fn halt(&mut self) -> Result<Value, Fail> {
+        // Stop keepalive first, even when the link has already failed.
+        let display_active = self.repl.connection_mut().pause();
         if !self.connected().await {
             return Err(failure(
                 "Robot link unavailable; stopped state cannot be confirmed. Use the physical switch if needed.",
@@ -511,14 +547,29 @@ impl Backend for Robot {
                 "Stop was sent but stopped state was not confirmed; use the physical switch",
             ));
         }
+        if display_active {
+            self.repl
+                .connection_mut()
+                .finish_stop()
+                .await
+                .map_err(failure)?;
+        }
         Ok(json!({"ok":true,"stopped":true}))
     }
 
     async fn close(&mut self) {
         let _ = self.halt().await;
         self.repl.close().await;
-        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut() {
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
             let _ = conn.close().await;
         }
+    }
+    async fn idle(&mut self) -> Result<(), Fail> {
+        if let Err(error) = self.repl.connection_mut().idle().await {
+            self.needs_check = true;
+            self.repl.invalidate();
+            return Err(failure(error));
+        }
+        Ok(())
     }
 }

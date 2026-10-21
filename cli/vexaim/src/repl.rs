@@ -131,7 +131,7 @@ pub struct ExecResult {
     pub elapsed: Duration,
 }
 
-fn is_timeout(e: &(dyn std::error::Error + 'static)) -> bool {
+pub(crate) fn is_timeout(e: &(dyn std::error::Error + 'static)) -> bool {
     #[cfg(feature = "bluetooth")]
     if let Some(inner) = e.downcast_ref::<vex_v5_serial::generic::GenericError>() {
         return match inner {

@@ -5,7 +5,7 @@
 taken from upstream commit `b3a712a16c9c6819b69faacfee2284826a138070` (2026-09-22) with the patches
 `0001-aim-user-port-and-write-all.patch`, `0002-serial-windows-capable-async-layer.patch`, and
 `0003-windows-aim-dtr.patch`, `0004-aim-bluetooth-transport.patch` and
-`0005-validated-camera-download.patch` applied. They are
+`0005-validated-camera-download.patch` and `0006-aim-display-lifecycle.patch` applied. They are
 vendored so the repository builds with no network access to anything but crates.io, and so students never depend
 on an unreleased upstream branch.
 
@@ -102,13 +102,25 @@ listed Windows behavior, not hardware support on macOS/Linux.
 
 ## Provenance and upstreaming
 
+The local 0.3.0-rc.5 display fix additionally adds AIM-only remote lifecycle/status
+packets to `vex-cdc` and a fixed read-only keepalive method to `vex-v5-serial`.
+The method is for an already authenticated owner; normal writes keep their
+authentication checks. This avoids re-reading the pairing characteristic every
+100 ms during image transfers. Source/protocol provenance and live evidence:
+`docs/display-investigation.md`. These additions are submitted in the existing
+upstream Bluetooth PR #23 (commit `9011c56`); they remain vendored until an
+equivalent upstream release is available.
+`0006-aim-display-lifecycle.patch` reproduces them on the preceding vendored tree.
+
 Reproduce the vendored tree: clone upstream, check out the commit above, `git am 0001-*.patch 0002-*.patch`,
-then `git apply 0003-windows-aim-dtr.patch 0004-aim-bluetooth-transport.patch 0005-validated-camera-download.patch`,
+then `git apply 0003-windows-aim-dtr.patch 0004-aim-bluetooth-transport.patch 0005-validated-camera-download.patch 0006-aim-display-lifecycle.patch`,
 and compare `packages/vex-v5-serial` and `packages/vex-cdc` with these directories. These changes are small and
 self-contained. Submitted upstream:
 
-- [vex-v5-serial #22](https://github.com/vexide/vex-v5-serial/pull/22): earlier AIM USB interface and complete-write fix.
-- [vex-v5-serial #23](https://github.com/vexide/vex-v5-serial/pull/23): AIM BLE transport, borrowed connections and validated file-read replies (upstream commit `589cc01`).
+- [vex-v5-serial #22](https://github.com/vexide/vex-v5-serial/pull/22): AIM USB interface discovery.
+- [vex-v5-serial #24](https://github.com/vexide/vex-v5-serial/pull/24): complete user-port writes, split from #22 for independent review.
+- [vex-v5-serial #23](https://github.com/vexide/vex-v5-serial/pull/23): AIM BLE transport, borrowed connections and AIM display lifecycle/status packets with read-only keepalive polling.
+- [vex-v5-serial #25](https://github.com/vexide/vex-v5-serial/pull/25): file-read CRC/length validation, split from #23 for independent review.
 - [btleplug #505](https://github.com/deviceplug/btleplug/pull/505): Windows notification preference, preferred-parameter request lifetime and GATT error propagation (upstream commit `ac01379`).
 
 PR #23 ports the BLE/protocol changes without our separate Windows serial adapter

@@ -63,11 +63,27 @@ Other command groups:
 as LCD content and a postcapture `control_ready` check. It requires a session and
 stopped wheels. It is not a camera observation, and never changes display modes.
 
-On AIM REV1 / BLE firmware 1.0.0.b0, emoji and drawing calls returned without
-error while LCD captures and a person watching still saw the home menu. Visible
-display output from this REPL workflow remains unresolved. An API acknowledgement
-does not verify a visible effect; do not promise the student saw it. Camera
-photographs work independently of this display limitation.
+With 0.3.0-rc.5, Bluetooth screen writes automatically activate the program
+display and maintain its required status keepalive. This fixes the earlier
+successful-but-hidden REPL drawing on AIM REV1 / BLE firmware 1.0.0.b0. The first
+screen write may briefly show the firmware's startup face and chirp. Activation
+requires stopped wheels and no calibration; it preserves heading and position.
+An ordinary camera photograph never activates the display.
+
+Reuse a session so emojis/drawings remain visible across agent turns. Stop/close
+ends the display program; after 60 seconds without traffic it returns to the
+menu. One-shot commands clean up when they finish. `exec` also activates display
+for scripts referring to `.screen`; prefer native screen commands for dynamic
+Python that does not contain that reference. No stored project or USB is needed.
+Use named emoji constants (HAPPY/LOOK_FORWARD), not numeric IDs: the observed
+firmware's numeric 6 selected a sunglasses face. For text, choose contrasting
+pen and fill colors; white text on white fill appears as a solid white bar.
+Confirm actual visible output rather than treating an API acknowledgment as proof.
+
+For maintainer diagnostics, see the
+[stationary display investigation](https://github.com/Tingsters/vexaim-cli/blob/main/docs/display-investigation.md).
+It records protocol provenance and hardware observations. Students do not need
+this developer probe or its Python packages.
 
 Read sources can be sampled with `--duration 2s --sample-ms 100` (50..60000 ms,
 at most 256 samples). Native results are limited to 16 KiB; shorten a sample run
