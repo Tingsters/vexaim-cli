@@ -78,6 +78,7 @@ jobs:
 
       - name: Test robot motion helpers and independent benchmark evaluation (no hardware)
         run: |
+          python -m unittest discover -s dev -p test_device_runtime.py -v
           python -m unittest discover -s dev -p test_motion_helpers.py -v
           python -m unittest discover -s dev -p test_motion_benchmark.py -v
 

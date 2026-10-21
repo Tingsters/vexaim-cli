@@ -254,7 +254,7 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                 ).await, Ok(Ok(())));
                 let started = Instant::now();
                 let image = tokio::time::timeout(Duration::from_secs(60), capture_jpeg(&mut conn)).await.map_err(|_| fail("Camera capture timed out; existing output was preserved."))??;
-                let (width,height) = jpeg_dimensions(&image)?;
+                let (width,height) = crate::observation::validate(&image)?;
                 let path = crate::snap::output_path(output.as_deref());
                 save_atomic(Path::new(&path), &image)?;
                 let elapsed = started.elapsed();
@@ -297,9 +297,11 @@ async fn run_python(
             Cmd::Doctor => (STATUS.to_string(),10,true),
             Cmd::Info => (STATE.to_string(),10,true),
             Cmd::Stop => (crate::STOP_CODE.to_string(),5,true),
-            Cmd::Exec { code,file,timeout,no_preamble } => (crate::exec_source(code,file)?,*timeout,!*no_preamble),
+            Cmd::Exec { code,inputs,file,timeout,no_preamble } => (crate::with_inputs(crate::exec_source(code,file)?,inputs)?,*timeout,!*no_preamble),
             Cmd::Turn { direction, degrees, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::turn_source(*direction, *degrees, *speed)?), 23, true),
             Cmd::Move { distance, angle, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::move_source(*distance, *angle, *speed)?), 23, true),
+            Cmd::Capabilities {..} => (crate::device::capability_source(),30,true),
+            Cmd::Native(words) => { let a=crate::device::parse(words,false)?; (crate::device::standalone(&a),a.timeout+5,true) },
             _ => return Err(fail("Unsupported Bluetooth command.")),
         };
         if preamble {

@@ -1,19 +1,26 @@
-Standalone vexaim CLI with a matching general-purpose vex-aim agent skill.
+VEX AIM device commands and agent camera observations — prerelease.
 
-- USB and Bluetooth Python console access, native camera snapshots and reusable wireless sessions.
-- Finite turn/move helpers, private local IPC, explicit stop and recovery without automatic movement replay.
-- Complete Windows x86_64, Linux x86_64, macOS Apple Silicon and macOS Intel bundles.
-- Checksummed installers; no Rust or Python packages required for normal use.
-- Windows release links its C runtime statically; no Visual C++ redistributable installation is needed.
-- Windows session owners do not inherit PowerShell capture pipes; captured startup JSON returns while the owner stays connected.
-- Stop confirmation tolerates the firmware's asynchronous stopped flag with a bounded poll and no movement replay.
+- Shared VEX-style catalogue and argument validation across USB and Bluetooth.
+- USB sessions, holonomic strafing/vector operations, bounded asynchronous actions,
+  sensors, AI Vision, cargo, LEDs, kicker, screen, sound, One Stick, link and timer.
+- Bounded events/sampling and adaptations of the 20 official toolbox macros.
+- `camera observe`: fresh validated native JPEG, immutable absolute artifact path,
+  checksum, timing/state metadata and separate postcapture control readiness.
+- Matching Codex/Claude instructions open the actual image within an agent turn;
+  no additional paid image API account, SDK or key is needed.
+- Explicit Python input answers and standalone VEX Python emission.
+- Preserved installers, native credentials, Windows process ownership and original
+  command forms. Close old sessions with their matching binary before updating
+  because this candidate uses session protocol 2.
 
-Download, extract and run install.ps1 (Windows) or install.sh (macOS/Linux), then
-start a new agent session. See https://tingsters.github.io/vexaim-cli/.
+This is a hardware-validation candidate. New runtime commands have simulated
+tests; API presence is firmware-dependent. Independent wheel units/signs remain
+experimental. Custom asset uploads are disabled until firmware storage encoding
+is verified; the official uploader remains supported. macOS hardware, two-robot
+link acceptance and broader motion accuracy are not certified by CI.
 
-All four platforms have software/build/installation checks. Existing hardware
-evidence covers Windows USB/BLE and Linux USB, including a new Windows small-turn,
-stop/session and camera smoke test. macOS hardware, broader physical accuracy and
-in-motion interruption remain unverified. Turn default remains
-30 DPS. Automatic visual correction is disabled. No robot firmware or saved
-project changes are required. Supervise movement and keep camera images local.
+All four bundles contain a matching binary and generic skill. Stable one-line
+installers keep selecting the latest stable release. Select this prerelease
+explicitly with `--version 0.3.0-rc.1` / `-Version 0.3.0-rc.1` or its extracted
+bundle. Start a new agent session after installation. Keep images local and
+supervise movement. No robot firmware or saved project changes are required.

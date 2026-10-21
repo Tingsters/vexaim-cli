@@ -11,6 +11,7 @@ def _va_state():
         'y_mm': robot.get_y_position(),
         'stopped': robot.is_stopped(),
         'imu_calibrating': robot.inertial.is_calibrating(),
+        'owned_action_active': any(j.get('state') == 'running' and j.get('resource') == 'motion' for j in globals().get('_vx_jobs', {}).values()),
     }
 
 
@@ -18,9 +19,9 @@ def _va_motion(kind, value, angle, speed):
     # Validate on the robot too: arbitrary exec callers can invoke this function.
     if kind not in ('turn', 'move'):
         raise ValueError('Unknown movement')
-    if not (0.1 <= abs(value) <= (360 if kind == 'turn' else 500)):
+    if not (0.1 <= abs(value) <= (360 if kind == 'turn' else 1000000000)):
         raise ValueError('Movement exceeds workshop helper limits')
-    if not ((30 <= speed <= 90) if kind == 'turn' else (40 <= speed <= 100)):
+    if not ((0.1 <= speed <= 150) if kind == 'turn' else (0.1 <= speed <= 200)):
         raise ValueError('Speed exceeds workshop helper limits')
     if not (-360 <= angle <= 360) or (kind == 'move' and value < 0):
         raise ValueError('Invalid movement angle or distance')
@@ -29,7 +30,8 @@ def _va_motion(kind, value, angle, speed):
         raise RuntimeError('Robot already moving; action not started')
     if before['imu_calibrating']:
         raise RuntimeError('Robot gyro initializing; action not started')
-    started = robot.timer.time(MSEC)
+    clock = Timer()
+    started = clock.time(MSEC)
     deadline_ms = min(20000, max(4000, int(abs(value) / speed * 1500 + 2000)))
     try:
         if kind == 'turn':
@@ -37,10 +39,10 @@ def _va_motion(kind, value, angle, speed):
         else:
             robot.move_for(value, angle, speed, MMPS, False)
         print('__VEXAIM_EVENT__' + _va_json.dumps({
-            'event': 'started', 'kind': kind, 'robot_ms': robot.timer.time(MSEC)}))
+            'event': 'started', 'kind': kind, 'robot_ms': clock.time(MSEC)}))
         wait(100, MSEC)
         while robot.is_turn_active() or robot.is_move_active():
-            if robot.timer.time(MSEC) - started >= deadline_ms:
+            if clock.time(MSEC) - started >= deadline_ms:
                 raise RuntimeError('Movement deadline reached; stopped without retry')
             wait(20, MSEC)
     finally:
@@ -53,7 +55,7 @@ def _va_motion(kind, value, angle, speed):
         'heading_before': before['heading'], 'heading_after': after['heading'],
         'x_before_mm': before['x_mm'], 'y_before_mm': before['y_mm'],
         'x_after_mm': after['x_mm'], 'y_after_mm': after['y_mm'],
-        'motion_ms': robot.timer.time(MSEC) - started,
+        'motion_ms': clock.time(MSEC) - started,
         'stopped': after['stopped'], 'battery_pct': after['battery_pct'],
         'verification_source': 'robot_sensors', 'physical_accuracy_verified': False,
     }

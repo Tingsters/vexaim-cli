@@ -1,6 +1,10 @@
 #[cfg(feature = "bluetooth")]
+mod assets;
+#[cfg(feature = "bluetooth")]
 mod bluetooth;
+mod device;
 mod motion;
+mod observation;
 mod repl;
 #[cfg(feature = "bluetooth")]
 mod session;
@@ -19,6 +23,9 @@ use std::time::Duration;
     about = "Run MicroPython and save camera frames from a VEX AIM over USB or Bluetooth. USB is the default; Bluetooth must be selected explicitly."
 )]
 struct Cli {
+    /// Print standalone VEX Python instead of connecting
+    #[arg(long, global = true)]
+    emit_python: bool,
     /// Machine-readable JSON output
     #[arg(long, global = true)]
     json: bool,
@@ -58,6 +65,33 @@ const STOP_CODE: &str = "robot.stop_all_movement()\ntry:\n    robot.sound.stop()
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Manage AIM image/sound slots; requires an owned connection
+    Assets {
+        kind: String,
+        operation: String,
+        slot: Option<u8>,
+        #[arg(long)]
+        file: Option<String>,
+        #[arg(long)]
+        output: Option<String>,
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Discover device commands and their native Python equivalents offline
+    Catalog { group: Option<String> },
+    /// Read native API availability from the selected robot
+    Capabilities {
+        #[arg(long)]
+        live: bool,
+    },
+    /// Fresh camera observations for an agent's image reader
+    Camera {
+        #[command(subcommand)]
+        command: CameraCmd,
+    },
+    /// VEX-style commands; use `catalog GROUP` for parameters and units
+    #[command(external_subcommand)]
+    Native(Vec<String>),
     /// Agent-facing persistent Bluetooth connection management
     Session {
         #[command(subcommand)]
@@ -89,6 +123,9 @@ enum Cmd {
     /// Run Python on the robot. CODE, or -f FILE, or "-" for stdin. State (variables, `robot`) persists between calls.
     Exec {
         code: Option<String>,
+        /// Supply one answer per input() call without an interactive terminal
+        #[arg(long = "input")]
+        inputs: Vec<String>,
         #[arg(short, long)]
         file: Option<String>,
         /// Seconds before the program is interrupted (Ctrl-C)
@@ -125,6 +162,20 @@ enum SessionCmd {
     },
 }
 
+#[derive(Subcommand)]
+enum CameraCmd {
+    /// Save a validated native image with absolute path and control readiness
+    Observe {
+        #[arg(long, default_value = ".vexaim/captures")]
+        output_dir: String,
+        #[arg(long)]
+        with_detections: bool,
+        /// Explicit UVC binding when several AIMs are connected
+        #[arg(long)]
+        camera_index: Option<u32>,
+    },
+}
+
 fn out(cli_json: bool, v: serde_json::Value, human: impl FnOnce() -> String) {
     if cli_json {
         println!("{v}")
@@ -134,6 +185,28 @@ fn out(cli_json: bool, v: serde_json::Value, human: impl FnOnce() -> String) {
 }
 
 fn run(cli: &Cli) -> Result<i32, Fail> {
+    if let Cmd::Catalog { group } = &cli.cmd {
+        println!("{}", device::catalog(group.as_deref()));
+        return Ok(0);
+    }
+    if let Cmd::Capabilities { live: false } = cli.cmd {
+        println!("{}", device::catalog(None));
+        return Ok(0);
+    }
+    if let Cmd::Native(words) = &cli.cmd {
+        let action = device::parse(words, cli.session.is_some())?;
+        if cli.emit_python || words.iter().any(|w| w == "--emit-python") {
+            println!(
+                "from vex import *\nfrom vex_globals import *\nrobot = Robot()\n{}",
+                device::standalone(&action)
+            );
+            return Ok(0);
+        }
+    } else if cli.emit_python {
+        return Err(device::fail(
+            "--emit-python is available for native catalogue commands",
+        ));
+    }
     if cli.session.is_some() || matches!(cli.cmd, Cmd::Session { .. }) {
         #[cfg(feature = "bluetooth")]
         return session::run(cli);
@@ -161,6 +234,16 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
         ));
     }
     match &cli.cmd {
+        Cmd::Assets { .. } => Err(device::fail("Assets require an owned --session")),
+        Cmd::Catalog { .. } => unreachable!(),
+        Cmd::Capabilities { .. } => run_exec(cli, &device::capability_source(), 30, true),
+        Cmd::Native(words) => {
+            let a = device::parse(words, false)?;
+            run_exec(cli, &device::standalone(&a), a.timeout + 5, true)
+        }
+        Cmd::Camera { .. } => Err(device::fail(
+            "Camera observe requires an owned session; start a USB or Bluetooth session first",
+        )),
         Cmd::Session { .. } => unreachable!(),
         Cmd::Turn {
             direction,
@@ -222,11 +305,12 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
         }
         Cmd::Exec {
             code,
+            inputs,
             file,
             timeout,
             no_preamble,
         } => {
-            let src = exec_source(code, file)?;
+            let src = with_inputs(exec_source(code, file)?, inputs)?;
             run_exec(cli, &src, *timeout, !*no_preamble)
         }
     }
@@ -245,6 +329,20 @@ fn exec_source(code: &Option<String>, file: &Option<String>) -> Result<String, F
         (None, Some(f)) => std::fs::read_to_string(f).map_err(|e| Fail::Io(format!("{f}: {e}"))),
         _ => Err(Fail::Io("give CODE, or -f FILE, or '-' for stdin".into())),
     }
+}
+
+fn with_inputs(source: String, inputs: &[String]) -> Result<String, Fail> {
+    if inputs.is_empty() {
+        return Ok(source);
+    }
+    if inputs.len() > 32 || inputs.iter().any(|s| s.len() > 512) {
+        return Err(device::fail("At most 32 input answers of 512 bytes each"));
+    }
+    Ok(format!(
+        "import json as _vx_input_json\n_vx_original_input = input\n_vx_input_answers = iter(_vx_input_json.loads({}))\ndef input(prompt=''):\n    print(prompt, end='')\n    try:\n        return next(_vx_input_answers)\n    except StopIteration:\n        raise RuntimeError('No supplied answer for input(); add --input TEXT')\ntry:\n    exec({})\nfinally:\n    input = _vx_original_input\n",
+        serde_json::to_string(&serde_json::to_string(inputs).unwrap()).unwrap(),
+        serde_json::to_string(&source).unwrap()
+    ))
 }
 
 fn run_exec(cli: &Cli, src: &str, timeout: u64, preamble: bool) -> Result<i32, Fail> {
@@ -266,10 +364,11 @@ fn run_exec(cli: &Cli, src: &str, timeout: u64, preamble: bool) -> Result<i32, F
 }
 
 fn print_exec(cli: &Cli, res: &repl::ExecResult, timeout: u64) -> i32 {
-    let ok = res.stderr.is_empty() && !res.timed_out;
+    let value=if matches!(cli.cmd,Cmd::Native(_)|Cmd::Capabilities{..}) {serde_json::from_str::<serde_json::Value>(res.stdout.trim()).ok()} else {None};
+    let ok = res.stderr.is_empty() && !res.timed_out && value.as_ref().is_none_or(|v|v["rejected"]!=true && v["state"]!="failed" && v["state"]!="cancelled");
     out(
         cli.json,
-        json!({"ok": ok, "stdout": res.stdout, "stderr": res.stderr, "timed_out": res.timed_out, "possible_output_truncation": res.timed_out && res.stdout.len() >= 1500, "elapsed_ms": res.elapsed.as_millis() as u64}),
+        json!({"ok": ok, "stdout": res.stdout, "stderr": res.stderr, "timed_out": res.timed_out, "possible_output_truncation": res.timed_out && res.stdout.len() >= 1500, "elapsed_ms": res.elapsed.as_millis() as u64,"value":value}),
         || {
             let mut s = res.stdout.replace("\r\n", "\n");
             if res.timed_out {

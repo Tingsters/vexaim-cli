@@ -1,0 +1,41 @@
+# VEX AIM command expansion
+
+Use `vexaim catalog [GROUP]` offline to discover commands and parameters. Native
+commands map to AIM Python APIs rather than WebSocket-library defaults. The
+shared catalogue in `cli/vexaim/src/catalog.tsv` drives Rust validation and
+transient robot dispatch over USB and Bluetooth. No saved robot project,
+firmware modification or student Python installation is needed.
+[Command guide](../skill/vex-aim/references/device-commands.md).
+
+The candidate adds motion, inertial sensing, AI Vision and cargo, kicker, LEDs,
+screen, sound, One Stick, robot links, timer, events and bounded adaptations of
+the 20 official toolbox macros. Firmware support varies. Independent wheels
+require `--experimental`; asset upload stays disabled until slot mapping and
+storage encoding are verified. The user-supplied capability reference has an
+explicit [coverage matrix](capability-matrix.json), including host operations and
+remote-only exclusions. Implementation coverage is not hardware coverage.
+
+For a visual task, call `--json --session ID camera observe`, then open its
+absolute `path` with Codex `view_image` or Claude Code `Read`. Decide on a small
+finite action, announce it, wait for completion, then capture and inspect another
+image. Each complete native JPEG has decoder validation, an immutable local path,
+checksum, host timing, pose metadata and separate control readiness. There is no
+extra image API client/account. [Image workflow](../skill/vex-aim/references/agent-vision.md).
+
+Tests cover typed validation, metric units, native signatures, background actions,
+resource conflicts, private watchdogs, delayed stop confirmation, empty vision,
+buffer pacing, image decoding/atomic persistence, IPC and Windows process
+ownership. CI builds four OS targets and USB-only configurations using fake
+devices; it cannot certify physical precision or unsupported firmware.
+
+Hardware acceptance requires supervised USB/Bluetooth checks across command
+groups, a second prelinked AIM for messages, and independent measurements for
+motion across surfaces. Defaults remain 80 mm/s and 30 degrees/s. Students need
+no calibration routine. Sparse camera observations inform decisions; they do not
+establish real-time servo control or uncalibrated metric geometry.
+
+Asset code restricts transfers to AIM image/sound vendor IDs. Input validation,
+explicit replacement, CRC/readback and partial-failure reporting are implemented.
+The public upload path is gated for unverified storage encodings; the official
+asset uploader remains the supported route for those versions. No run-after-upload,
+firmware/user program, erase-all or format command is exposed.

@@ -128,6 +128,14 @@ pub struct ExecResult {
 }
 
 fn is_timeout(e: &(dyn std::error::Error + 'static)) -> bool {
+    #[cfg(feature = "bluetooth")]
+    if let Some(inner) = e.downcast_ref::<vex_v5_serial::generic::GenericError>() {
+        return match inner {
+            vex_v5_serial::generic::GenericError::SerialError(e) => is_timeout(e),
+            vex_v5_serial::generic::GenericError::BluetoothError(e) => is_timeout(e),
+            _ => false,
+        };
+    }
     if let Some(SerialError::IoError(io)) = e.downcast_ref::<SerialError>() {
         return io.kind() == std::io::ErrorKind::TimedOut;
     }

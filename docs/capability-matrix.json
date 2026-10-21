@@ -1,0 +1,437 @@
+{
+  "schema_version": 1,
+  "model": "VEX AIM",
+  "source": "VEX_AIM_Software_Capability_Reference.html (user supplied)",
+  "note": "Command presence is implementation coverage, not hardware verification; consult hardware-notes.md",
+  "api": [
+    {
+      "api": "robot.get_battery_capacity",
+      "disposition": "unsupported",
+      "detail": "Remote-library alias; on-robot canonical getter is get_battery_level"
+    },
+    {
+      "api": "robot.get_battery_level",
+      "disposition": "command",
+      "detail": "robot battery"
+    },
+    {
+      "api": "robot.get_name",
+      "disposition": "command",
+      "detail": "robot name"
+    },
+    {
+      "api": "robot.has_any_barrel",
+      "disposition": "command",
+      "detail": "cargo has-any-barrel maps robot.vision.has_any_barrel"
+    },
+    {
+      "api": "robot.has_blue_barrel",
+      "disposition": "command",
+      "detail": "cargo has-blue-barrel maps robot.vision.has_blue_barrel"
+    },
+    {
+      "api": "robot.has_orange_barrel",
+      "disposition": "command",
+      "detail": "cargo has-orange-barrel maps robot.vision.has_orange_barrel"
+    },
+    {
+      "api": "robot.has_sports_ball",
+      "disposition": "command",
+      "detail": "cargo has-sports-ball maps robot.vision.has_sports_ball"
+    },
+    {
+      "api": "robot.inertial.calibrate",
+      "disposition": "command",
+      "detail": "inertial calibrate"
+    },
+    {
+      "api": "robot.inertial.crashed",
+      "disposition": "event",
+      "detail": "events watch inertial.crashed"
+    },
+    {
+      "api": "robot.inertial.get_acceleration",
+      "disposition": "command",
+      "detail": "inertial get-acceleration"
+    },
+    {
+      "api": "robot.inertial.get_heading",
+      "disposition": "command",
+      "detail": "inertial get-heading"
+    },
+    {
+      "api": "robot.inertial.get_pitch",
+      "disposition": "command",
+      "detail": "inertial get-pitch"
+    },
+    {
+      "api": "robot.inertial.get_roll",
+      "disposition": "command",
+      "detail": "inertial get-roll"
+    },
+    {
+      "api": "robot.inertial.get_rotation",
+      "disposition": "command",
+      "detail": "inertial get-rotation"
+    },
+    {
+      "api": "robot.inertial.get_turn_rate",
+      "disposition": "command",
+      "detail": "inertial get-turn-rate"
+    },
+    {
+      "api": "robot.inertial.get_yaw",
+      "disposition": "command",
+      "detail": "inertial get-yaw"
+    },
+    {
+      "api": "robot.inertial.is_calibrating",
+      "disposition": "command",
+      "detail": "inertial is-calibrating"
+    },
+    {
+      "api": "robot.inertial.reset_heading",
+      "disposition": "command",
+      "detail": "inertial reset-heading"
+    },
+    {
+      "api": "robot.inertial.reset_rotation",
+      "disposition": "command",
+      "detail": "inertial reset-rotation"
+    },
+    {
+      "api": "robot.inertial.set_crash_sensitivity",
+      "disposition": "command",
+      "detail": "inertial set-crash-sensitivity"
+    },
+    {
+      "api": "robot.inertial.set_heading",
+      "disposition": "command",
+      "detail": "inertial set-heading"
+    },
+    {
+      "api": "robot.kicker.kick",
+      "disposition": "command",
+      "detail": "kicker kick"
+    },
+    {
+      "api": "robot.kicker.place",
+      "disposition": "command",
+      "detail": "kicker place"
+    },
+    {
+      "api": "robot.led.off",
+      "disposition": "command",
+      "detail": "led off"
+    },
+    {
+      "api": "robot.led.on",
+      "disposition": "command",
+      "detail": "led on"
+    },
+    {
+      "api": "robot.link",
+      "disposition": "prerequisite",
+      "detail": "Two AIMs manually linked in Settings; missing on older firmware"
+    },
+    {
+      "api": "robot.link.connected",
+      "disposition": "event",
+      "detail": "events watch link.connected"
+    },
+    {
+      "api": "robot.link.disconnected",
+      "disposition": "event",
+      "detail": "events watch link.disconnected"
+    },
+    {
+      "api": "robot.link.get_message",
+      "disposition": "command",
+      "detail": "link get-message"
+    },
+    {
+      "api": "robot.link.get_message_and_data",
+      "disposition": "command",
+      "detail": "link get-message-and-data"
+    },
+    {
+      "api": "robot.link.get_name",
+      "disposition": "unsupported",
+      "detail": "Remote extension not established in on-robot SDK"
+    },
+    {
+      "api": "robot.link.handle_message",
+      "disposition": "event",
+      "detail": "events watch link.handle_message"
+    },
+    {
+      "api": "robot.link.is_connected",
+      "disposition": "command",
+      "detail": "link is-connected"
+    },
+    {
+      "api": "robot.link.is_message_available",
+      "disposition": "command",
+      "detail": "link is-message-available"
+    },
+    {
+      "api": "robot.link.send_message",
+      "disposition": "command",
+      "detail": "link send-message"
+    },
+    {
+      "api": "robot.robot_send",
+      "disposition": "unsupported",
+      "detail": "Remote WebSocket transport internals; outside USB/BLE scope"
+    },
+    {
+      "api": "robot.screen.clear_row",
+      "disposition": "command",
+      "detail": "screen clear-row"
+    },
+    {
+      "api": "robot.screen.clear_screen",
+      "disposition": "command",
+      "detail": "screen clear-screen"
+    },
+    {
+      "api": "robot.screen.draw_circle",
+      "disposition": "command",
+      "detail": "screen draw-circle"
+    },
+    {
+      "api": "robot.screen.draw_line",
+      "disposition": "command",
+      "detail": "screen draw-line"
+    },
+    {
+      "api": "robot.screen.draw_pixel",
+      "disposition": "command",
+      "detail": "screen draw-pixel"
+    },
+    {
+      "api": "robot.screen.draw_rectangle",
+      "disposition": "command",
+      "detail": "screen draw-rectangle"
+    },
+    {
+      "api": "robot.screen.get_column",
+      "disposition": "command",
+      "detail": "screen get-column"
+    },
+    {
+      "api": "robot.screen.get_row",
+      "disposition": "command",
+      "detail": "screen get-row"
+    },
+    {
+      "api": "robot.screen.hide_aivision",
+      "disposition": "command",
+      "detail": "screen hide-aivision"
+    },
+    {
+      "api": "robot.screen.hide_emoji",
+      "disposition": "command",
+      "detail": "screen hide-emoji"
+    },
+    {
+      "api": "robot.screen.next_row",
+      "disposition": "command",
+      "detail": "screen next-row"
+    },
+    {
+      "api": "robot.screen.pressed",
+      "disposition": "event",
+      "detail": "events watch screen.pressed"
+    },
+    {
+      "api": "robot.screen.pressing",
+      "disposition": "command",
+      "detail": "screen pressing"
+    },
+    {
+      "api": "robot.screen.print",
+      "disposition": "command",
+      "detail": "screen print"
+    },
+    {
+      "api": "robot.screen.print_at",
+      "disposition": "command",
+      "detail": "screen print-at"
+    },
+    {
+      "api": "robot.screen.released",
+      "disposition": "event",
+      "detail": "events watch screen.released"
+    },
+    {
+      "api": "robot.screen.set_clip_region",
+      "disposition": "command",
+      "detail": "screen set-clip-region"
+    },
+    {
+      "api": "robot.screen.set_cursor",
+      "disposition": "command",
+      "detail": "screen set-cursor"
+    },
+    {
+      "api": "robot.screen.set_fill_color",
+      "disposition": "command",
+      "detail": "screen set-fill-color"
+    },
+    {
+      "api": "robot.screen.set_font",
+      "disposition": "command",
+      "detail": "screen set-font"
+    },
+    {
+      "api": "robot.screen.set_origin",
+      "disposition": "command",
+      "detail": "screen set-origin"
+    },
+    {
+      "api": "robot.screen.set_pen_color",
+      "disposition": "command",
+      "detail": "screen set-pen-color"
+    },
+    {
+      "api": "robot.screen.set_pen_width",
+      "disposition": "command",
+      "detail": "screen set-pen-width"
+    },
+    {
+      "api": "robot.screen.show_aivision",
+      "disposition": "command",
+      "detail": "screen show-aivision"
+    },
+    {
+      "api": "robot.screen.show_emoji",
+      "disposition": "command",
+      "detail": "screen show-emoji"
+    },
+    {
+      "api": "robot.screen.show_file",
+      "disposition": "command",
+      "detail": "screen show-file"
+    },
+    {
+      "api": "robot.screen.x_position",
+      "disposition": "command",
+      "detail": "screen x-position"
+    },
+    {
+      "api": "robot.screen.y_position",
+      "disposition": "command",
+      "detail": "screen y-position"
+    },
+    {
+      "api": "robot.sound.is_active",
+      "disposition": "command",
+      "detail": "sound is-active"
+    },
+    {
+      "api": "robot.sound.play",
+      "disposition": "command",
+      "detail": "sound play"
+    },
+    {
+      "api": "robot.sound.play_file",
+      "disposition": "command",
+      "detail": "sound play-file"
+    },
+    {
+      "api": "robot.sound.play_local_file",
+      "disposition": "host-only",
+      "detail": "assets sound upload is encoding-gated; sound play-file handles playback"
+    },
+    {
+      "api": "robot.sound.play_note",
+      "disposition": "command",
+      "detail": "sound play-note"
+    },
+    {
+      "api": "robot.sound.stop",
+      "disposition": "command",
+      "detail": "sound stop"
+    },
+    {
+      "api": "robot.spin_wheels",
+      "disposition": "command",
+      "detail": "motion spin-wheels"
+    },
+    {
+      "api": "robot.status",
+      "disposition": "host-only",
+      "detail": "info/capabilities live status; no remote WebSocket cache"
+    },
+    {
+      "api": "robot.stop_program",
+      "disposition": "unsupported",
+      "detail": "Saved program control excluded; stop bounds transient helpers"
+    },
+    {
+      "api": "robot.vision.code_description",
+      "disposition": "command",
+      "detail": "vision code-description"
+    },
+    {
+      "api": "robot.vision.color_description",
+      "disposition": "command",
+      "detail": "vision color-description"
+    },
+    {
+      "api": "robot.vision.get_camera_image",
+      "disposition": "host-only",
+      "detail": "camera observe; native camera bytes plus artifact metadata"
+    },
+    {
+      "api": "robot.vision.get_data",
+      "disposition": "command",
+      "detail": "vision get-data"
+    },
+    {
+      "api": "robot.vision.tag_detection",
+      "disposition": "command",
+      "detail": "vision tag-detection"
+    }
+  ],
+  "python_features": [
+    "conditions",
+    "loops",
+    "variables",
+    "functions",
+    "Thread",
+    "Timer.event",
+    "math",
+    "random",
+    "time",
+    "json",
+    "sys",
+    "gc",
+    "micropython",
+    "array",
+    "struct",
+    "collections",
+    "io",
+    "errno",
+    "os",
+    "re"
+  ],
+  "blocks": "Block control/math/logic constructs use standard Python via exec; runtime device blocks map to catalogue groups",
+  "host_operations": [
+    "pairing",
+    "sessions",
+    "camera observe",
+    "snap",
+    "asset slots"
+  ],
+  "exclusions": [
+    "firmware updates",
+    "saved programs",
+    "other VEX models",
+    "Wi-Fi",
+    "raw encoders",
+    "microphone capture",
+    "custom neural training"
+  ]
+}

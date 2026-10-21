@@ -76,7 +76,10 @@ class Robot:
 class MotionHelpers(unittest.TestCase):
     def setUp(self):
         self.robot = Robot()
-        self.namespace = dict(robot=self.robot, wait=self.robot.wait, MSEC=0, LEFT=-1, RIGHT=1, DPS=0, MMPS=0)
+        def timer():
+            start=self.robot.clock
+            return types.SimpleNamespace(time=lambda unit:self.robot.clock-start)
+        self.namespace = dict(robot=self.robot, Timer=timer, wait=self.robot.wait, MSEC=0, LEFT=-1, RIGHT=1, DPS=0, MMPS=0)
         exec(compile(STOP_HELPER.read_text() + '\n' + HELPERS.read_text(), str(HELPERS), "exec"), self.namespace)
         self.motion = self.namespace["_va_motion"]
 

@@ -19,7 +19,7 @@ use tokio::{
 };
 
 const LIMIT: usize = 64 * 1024;
-const PROTOCOL: u32 = 1;
+const PROTOCOL: u32 = 2;
 const IDLE: Duration = Duration::from_secs(30 * 60);
 
 pub(super) fn failure(e: impl std::fmt::Display) -> Fail {
@@ -29,6 +29,16 @@ pub(super) fn failure(e: impl std::fmt::Display) -> Fail {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Request {
+    Assets(crate::assets::AssetRequest),
+    Native {
+        words: Vec<String>,
+    },
+    Capabilities,
+    Observe {
+        output_dir: String,
+        with_detections: bool,
+        camera_index: Option<u32>,
+    },
     Status,
     Info,
     Doctor,
@@ -57,6 +67,13 @@ pub(super) enum Request {
 impl Request {
     fn validate(&self) -> Result<(), Fail> {
         match self {
+            Self::Assets(request) => request.validate()?,
+            Self::Native { words } => {
+                crate::device::parse(words, true)?;
+            }
+            Self::Observe { output_dir, .. } if !std::path::Path::new(output_dir).is_absolute() => {
+                return Err(failure("Observation directory must be absolute"));
+            }
             Self::Turn {
                 left,
                 degrees,
@@ -192,7 +209,8 @@ async fn handle(
         .await;
         return;
     }
-    if !request.priority() && busy.replace(true) {
+    let concurrent_device=matches!(&request,Request::Native{words} if crate::device::parse(words,true).is_ok_and(|a|matches!(a.kind.as_str(),"read"|"write"|"vision"|"setting"|"actions")));
+    if !request.priority() && busy.replace(true) && !concurrent_device {
         let _ = write_frame(
             &mut stream,
             &error(
@@ -285,7 +303,7 @@ async fn actor<B: Backend>(
         let mut close = false;
         match outcome {
             Outcome::Complete(Ok(mut value)) => {
-                if value["ok"] == false {
+                if value["ok"] == false && value["rejected"] != true {
                     backend.interrupted(&job.request);
                     let stopped = backend.halt().await;
                     value["needs_check"] = json!(true);
@@ -450,16 +468,16 @@ async fn start(name: &str) -> Result<Value, Fail> {
         }
     }
     let arguments = [
-            "--json",
-            "--transport",
-            "bluetooth",
-            "--name",
-            name,
-            "session",
-            "serve",
-            "--id",
-            &id,
-        ];
+        "--json",
+        "--transport",
+        "bluetooth",
+        "--name",
+        name,
+        "session",
+        "serve",
+        "--id",
+        &id,
+    ];
     let mut child = if connecting {
         None
     } else {
@@ -514,11 +532,16 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             if cli.session.is_some() {
                 return Err(failure("Use --name for session start"));
             }
-            let name = cli
-                .name
-                .as_deref()
-                .ok_or_else(|| failure("Select the robot with --name NAME"))?;
-            let value = start(name).await?;
+            let name = if let Some(name) = &cli.name {
+                name.clone()
+            } else {
+                if cli.transport == crate::Transport::Bluetooth {
+                    return Err(failure("Select Bluetooth robot with --name NAME"));
+                }
+                let dev = crate::repl::pick(crate::repl::devices()?, cli.device)?;
+                format!("usb:{}", dev.system_port().port_info.port_name)
+            };
+            let value = start(&name).await?;
             crate::out(cli.json, value.clone(), || {
                 format!(
                     "Connected to {name}; session {}",
@@ -544,7 +567,48 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
         if !ipc::valid_id(id) {
             return Err(failure("Invalid session ID"));
         }
-        let request = match &cli.cmd {
+        let mut request = match &cli.cmd {
+            Cmd::Assets {
+                kind,
+                operation,
+                slot,
+                file,
+                output,
+                replace,
+            } => Request::Assets(crate::assets::AssetRequest {
+                kind: kind.clone(),
+                operation: operation.clone(),
+                slot: *slot,
+                file: file
+                    .as_ref()
+                    .map(crate::observation::absolute)
+                    .transpose()?
+                    .map(|p| p.to_string_lossy().into_owned()),
+                output: output
+                    .as_ref()
+                    .map(crate::observation::absolute)
+                    .transpose()?
+                    .map(|p| p.to_string_lossy().into_owned()),
+                replace: *replace,
+            }),
+            Cmd::Native(words) => Request::Native {
+                words: words.clone(),
+            },
+            Cmd::Capabilities { .. } => Request::Capabilities,
+            Cmd::Camera {
+                command:
+                    crate::CameraCmd::Observe {
+                        output_dir,
+                        with_detections,
+                        camera_index,
+                    },
+            } => Request::Observe {
+                output_dir: crate::observation::absolute(output_dir)?
+                    .to_string_lossy()
+                    .into_owned(),
+                with_detections: *with_detections,
+                camera_index: *camera_index,
+            },
             Cmd::Session {
                 command: SessionCmd::Status,
             } => Request::Status,
@@ -574,11 +638,12 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             },
             Cmd::Exec {
                 code,
+                inputs,
                 file,
                 timeout,
                 no_preamble,
             } => Request::Exec {
-                source: crate::exec_source(code, file)?,
+                source: crate::with_inputs(crate::exec_source(code, file)?, inputs)?,
                 timeout: *timeout,
                 preamble: !*no_preamble,
             },
@@ -607,7 +672,48 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                 ));
             }
         }
-        let value = client(id, &request, cli.json, true).await?;
+        let native = if let Request::Native { words } = &request {
+            Some(crate::device::parse(words, true)?)
+        } else {
+            None
+        };
+        let foreground = native.as_ref().is_some_and(|a| !a.no_wait);
+        let wait_id=native.as_ref().filter(|a|a.command=="actions wait").and_then(|a|a.args[0].as_str()).map(str::to_owned);
+        if let Some(id)=&wait_id {request=Request::Native{words:vec!["actions".into(),"status".into(),id.clone()]};}
+        let mut value = client(id, &request, cli.json, !foreground).await?;
+        if foreground {
+            if let Some(action_id) = value["value"]["action"]["id"].as_str().map(str::to_owned).or(wait_id) {
+                let started = Instant::now();
+                loop {
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                    let status = client(
+                        id,
+                        &Request::Native {
+                            words: vec!["actions".into(), "status".into(), action_id.clone()],
+                        },
+                        false,
+                        false,
+                    )
+                    .await?;
+                    if status["ok"] != true {
+                        value = status;
+                        break;
+                    }
+                    let action = &status["value"]["value"];
+                    if action["state"] != "running" {
+                        value = json!({"ok":action["state"]=="completed","action":action});
+                        break;
+                    }
+                    if started.elapsed().as_secs() > native.as_ref().unwrap().timeout + 3 {
+                        if native.as_ref().unwrap().command!="actions wait" {let _ = client(id, &Request::Stop, false, false).await;}
+                        return Err(failure(
+                            "Foreground wait exceeded its deadline; no action replayed. Check live state before further motion.",
+                        ));
+                    }
+                }
+            }
+            crate::out(cli.json, value.clone(), || value.to_string());
+        }
         Ok(if value["ok"] == true { 0 } else { 1 })
     });
     runtime.shutdown_timeout(Duration::from_millis(100));

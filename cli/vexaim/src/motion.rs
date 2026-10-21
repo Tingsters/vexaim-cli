@@ -26,7 +26,7 @@ fn number(value: f64, min: f64, max: f64, name: &str) -> Result<(), Fail> {
 
 pub fn turn_source(direction: Direction, degrees: f64, speed: f64) -> Result<String, Fail> {
     number(degrees, 0.1, 360.0, "turn degrees")?;
-    number(speed, 30.0, 90.0, "turn speed (DPS)")?;
+    number(speed, 0.1, 150.0, "turn speed (DPS)")?;
     let signed = if matches!(direction, Direction::Left) {
         -degrees
     } else {
@@ -36,9 +36,9 @@ pub fn turn_source(direction: Direction, degrees: f64, speed: f64) -> Result<Str
 }
 
 pub fn move_source(distance: f64, angle: f64, speed: f64) -> Result<String, Fail> {
-    number(distance, 0.1, 500.0, "distance (mm)")?;
+    number(distance, 0.1, 1000000000.0, "distance (mm)")?;
     number(angle, -360.0, 360.0, "movement angle")?;
-    number(speed, 40.0, 100.0, "movement speed (mm/s)")?;
+    number(speed, 0.1, 200.0, "movement speed (mm/s)")?;
     Ok(format!(
         "_va_motion('move', {distance}, {angle}, {speed})\n"
     ))
@@ -52,10 +52,10 @@ mod tests {
         for n in [f64::NAN, f64::INFINITY, -1.0, 0.0, 361.0] {
             assert!(turn_source(Direction::Left, n, 30.0).is_err());
         }
-        assert!(turn_source(Direction::Left, 360.0, 91.0).is_err());
-        assert!(move_source(501.0, 0.0, 80.0).is_err());
+        assert!(turn_source(Direction::Left, 360.0, 151.0).is_err());
+        assert!(move_source(501.0, 0.0, 80.0).is_ok());
         assert!(move_source(100.0, f64::NAN, 80.0).is_err());
-        assert!(move_source(500.0, 0.0, 39.0).is_err());
+        assert!(move_source(500.0, 0.0, 201.0).is_err());
         assert!(
             turn_source(Direction::Left, 360.0, 60.0)
                 .unwrap()

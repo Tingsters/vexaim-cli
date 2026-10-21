@@ -10,10 +10,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
-use vex_v5_serial::bluetooth::BluetoothConnection;
+use vex_v5_serial::generic::GenericConnection;
 
 pub struct Robot {
-    repl: Repl<BluetoothConnection>,
+    repl: Repl<GenericConnection>,
     identity: Value,
     needs_check: bool,
     camera_usable: bool,
@@ -31,17 +31,37 @@ fn checked(result: &crate::repl::ExecResult) -> Result<(), Fail> {
 
 impl Robot {
     async fn connected(&self) -> bool {
+        let GenericConnection::Bluetooth(conn) = self.repl.connection() else {
+            return true;
+        };
         // Cached OS connection state, not a GATT round trip or another scan.
         matches!(
-            tokio::time::timeout(
-                Duration::from_millis(500),
-                self.repl.connection().peripheral.is_connected()
-            )
-            .await,
+            tokio::time::timeout(Duration::from_millis(500), conn.peripheral.is_connected()).await,
             Ok(Ok(true))
         )
     }
     pub async fn open(name: &str) -> Result<(Self, Value), Fail> {
+        if let Some(port) = name.strip_prefix("usb:") {
+            let dev = crate::repl::devices()?
+                .into_iter()
+                .find(|d| d.system_port().port_info.port_name == port)
+                .ok_or_else(|| {
+                    failure("Selected USB robot is no longer present; no other robot was selected")
+                })?;
+            let conn = dev.connect(Duration::from_millis(100)).map_err(failure)?;
+            let mut robot = Self {
+                repl: Repl::from_connection(GenericConnection::Serial(conn)),
+                identity: json!({"transport":"usb","system_port":port}),
+                needs_check: false,
+                camera_usable: true,
+            };
+            robot.prepare().await?;
+            let details = robot.state().await?;
+            return Ok((
+                robot,
+                json!({"transport":"usb","id":name,"robot_state":details["robot_state"]}),
+            ));
+        }
         let all = Instant::now();
         let (id, device) = bluetooth::select(name).await?;
         let discovery_ms = all.elapsed().as_millis() as u64;
@@ -60,17 +80,19 @@ impl Robot {
             Ok::<_, Fail>(identity)
         }
         .await;
-        let identity = match setup {
+        let mut identity = match setup {
             Ok(info) => info,
             Err(error) => {
                 let _ = conn.close().await;
                 return Err(error);
             }
         };
+        identity["name"]=json!(name);
+        identity["id"]=json!(id);
         let connection_ms = connected.elapsed().as_millis() as u64;
         let prepared = Instant::now();
         let mut robot = Self {
-            repl: Repl::from_connection(conn),
+            repl: Repl::from_connection(GenericConnection::Bluetooth(conn)),
             identity,
             needs_check: false,
             camera_usable: true,
@@ -79,8 +101,9 @@ impl Robot {
             .repl
             .exec(
                 &format!(
-                    "{PREAMBLE}{}\nprint(_va_json.dumps(_va_state()))\n",
-                    motion::helpers()
+                    "{PREAMBLE}{}\n{}\nprint(_va_json.dumps(_va_state()))\n",
+                    motion::helpers(),
+                    crate::device::RUNTIME
                 ),
                 Duration::from_secs(15),
             )
@@ -105,10 +128,55 @@ impl Robot {
         };
         Ok((
             robot,
-            json!({"id":id,"robot_state":state,"timings":{"discovery_ms":discovery_ms,
+            json!({"transport":"bluetooth","id":id,"robot_state":state,"timings":{"discovery_ms":discovery_ms,
             "connection_ms":connection_ms,"preparation_ms":prepared.elapsed().as_millis() as u64,
             "startup_ms":all.elapsed().as_millis() as u64}}),
         ))
+    }
+
+    async fn prepare(&mut self) -> Result<(), Fail> {
+        let result = self
+            .repl
+            .exec(
+                &format!(
+                    "{PREAMBLE}{}\n{}",
+                    motion::helpers(),
+                    crate::device::RUNTIME
+                ),
+                Duration::from_secs(25),
+            )
+            .await?;
+        checked(&result)
+    }
+    async fn native(&mut self, words: &[String]) -> Result<Value, Fail> {
+        let a = crate::device::parse(words, true)?;
+        let source = format!(
+            "_vx_print(_vx_dispatch({}))\n",
+            crate::device::python_json(&serde_json::to_value(&a).unwrap())
+        );
+        let result = self
+            .repl
+            .exec(&source, Duration::from_secs(a.timeout + 2))
+            .await?;
+        checked(&result)?;
+        let value: Value = serde_json::from_str(result.stdout.trim()).map_err(failure)?;
+        Ok(json!({"ok":value["rejected"]!=true,"rejected":value["rejected"]==true,"value":value}))
+    }
+    async fn capture(&mut self, camera_index: Option<u32>) -> Result<Vec<u8>, Fail> {
+        match self.repl.connection_mut() {
+            GenericConnection::Bluetooth(conn) => {
+                bluetooth::require_camera_firmware(&self.identity)?;
+                tokio::time::timeout(Duration::from_secs(60), bluetooth::capture_jpeg(conn))
+                    .await
+                    .map_err(|_| failure("Camera capture timed out; no stale artifact returned"))?
+            }
+            GenericConnection::Serial(_) => {
+                tokio::task::spawn_blocking(move || crate::snap::capture(camera_index))
+                    .await
+                    .map_err(failure)?
+                    .map_err(failure)
+            }
+        }
     }
 
     async fn state(&mut self) -> Result<Value, Fail> {
@@ -117,6 +185,7 @@ impl Robot {
         let mut result = self.repl.exec(query, Duration::from_secs(5)).await?;
         checked(&result)?;
         if result.stdout.trim() == "__VEXAIM_REINITIALIZE__" {
+            self.prepare().await?;
             result = self
                 .repl
                 .exec(
@@ -130,7 +199,7 @@ impl Robot {
         }
         checked(&result)?;
         let state: Value = serde_json::from_str(result.stdout.trim()).map_err(failure)?;
-        self.needs_check = state["stopped"] != true;
+        self.needs_check = state["stopped"] != true && state["owned_action_active"] != true;
         Ok(json!({"ok":true,"robot_state":state,"needs_check":self.needs_check}))
     }
 }
@@ -159,21 +228,122 @@ impl Backend for Robot {
                 "Previous operation was interrupted or uncertain. Read info to verify the robot is stopped before issuing a fresh action. No movement was replayed.",
             ));
         }
+        if let Request::Native { words } = request {
+            return self.native(words).await;
+        }
+        if let Request::Assets(asset) = request {
+            let state = self.state().await?;
+            if state["robot_state"]["stopped"] != true {
+                return Ok(
+                    json!({"ok":false,"rejected":true,"error":"Finish movement before an asset transfer"}),
+                );
+            }
+            if asset.operation == "list" {
+                let value = crate::assets::list(self.repl.connection_mut(), &asset.kind).await?;
+                return Ok(json!({"ok":true,"assets":value}));
+            }
+            let constant = format!(
+                "{}{}",
+                if asset.kind == "image" {
+                    "IMAGE"
+                } else {
+                    "SOUND"
+                },
+                asset.slot.unwrap()
+            );
+            let result = self
+                .repl
+                .exec(
+                    &format!(
+                        "_vx_print(_vx_plain(_vx_arg({})))\n",
+                        crate::device::python_json(&json!({"constant":constant}))
+                    ),
+                    Duration::from_secs(5),
+                )
+                .await?;
+            if !result.stderr.is_empty() {
+                return Ok(
+                    json!({"ok":false,"rejected":true,"error":"Firmware has no verified asset slot filename; no storage mutation was attempted"}),
+                );
+            }
+            let name: Value = serde_json::from_str(result.stdout.trim()).map_err(failure)?;
+            let Some(name) = name.as_str() else {
+                return Ok(
+                    json!({"ok":false,"rejected":true,"error":"Firmware uses numeric asset slots; storage mapping unverified, no mutation attempted"}),
+                );
+            };
+            let value =
+                crate::assets::transfer(self.repl.connection_mut(), asset, name, false).await?;
+            return Ok(value);
+        }
+        if matches!(request, Request::Capabilities) {
+            let result = self
+                .repl
+                .exec(&crate::device::capability_source(), Duration::from_secs(30))
+                .await?;
+            checked(&result)?;
+            return Ok(
+                json!({"ok":true,"capabilities":serde_json::from_str::<Value>(result.stdout.trim()).map_err(failure)?,"identity":self.identity}),
+            );
+        }
+        if let Request::Observe {
+            output_dir,
+            with_detections,
+            camera_index,
+        } = request
+        {
+            let requested = crate::observation::now_ms();
+            let before = self.state().await?;
+            if before["robot_state"]["stopped"] != true {
+                return Ok(
+                    json!({"ok":false,"rejected":true,"error":"Robot is moving; finish/wait/cancel its action before a stable observation","robot_state":before["robot_state"]}),
+                );
+            }
+            eprintln!("Capturing a fresh camera observation (up to 60 seconds)");
+            let bytes = self.capture(*camera_index).await?;
+            let after = self.state().await;
+            let mut ready = after
+                .as_ref()
+                .is_ok_and(|s| s["robot_state"]["stopped"] == true);
+            let detections = if *with_detections && ready {
+                Some(match self.native(&["vision".into(), "get-data".into()]).await {
+                    Ok(value)=>value,
+                    Err(error)=>{ready=false;json!({"ok":false,"error":error.to_string()})}
+                })
+            } else {
+                None
+            };
+            self.needs_check = !ready;
+            let transport = if matches!(self.repl.connection(), GenericConnection::Serial(_)) {
+                "usb"
+            } else {
+                "bluetooth"
+            };
+            let mut artifact = crate::observation::store(
+                Path::new(output_dir),
+                &bytes,
+                self.identity.clone(),
+                transport,
+                requested,
+                before["robot_state"].clone(),
+                after
+                    .map(|s| s["robot_state"].clone())
+                    .unwrap_or_else(|e| json!({"error":e.to_string()})),
+                ready,
+                detections,
+            )?;
+            artifact["needs_check"] = json!(!ready);
+            return Ok(artifact);
+        }
         if let Request::Snap { output } = request {
             if !self.camera_usable {
                 return Err(failure(
                     "The camera transfer was interrupted. Close/start the session before another snapshot; movement remains available after an info check.",
                 ));
             }
-            bluetooth::require_camera_firmware(&self.identity)?;
-            let image = tokio::time::timeout(
-                Duration::from_secs(60),
-                bluetooth::capture_jpeg(self.repl.connection_mut()),
-            )
-            .await
-            .map_err(|_| failure("Camera timed out; output preserved"))??;
-            let (width, height) = bluetooth::jpeg_dimensions(&image)?;
-            bluetooth::save_atomic(Path::new(output), &image)?;
+            let image = self.capture(None).await?;
+            let (width, height) = crate::observation::validate(&image)?;
+            crate::observation::save(Path::new(output), &image)?;
             return Ok(
                 json!({"ok":true,"path":output,"width":width,"height":height,"bytes":image.len()}),
             );
@@ -268,7 +438,7 @@ impl Backend for Robot {
     fn interrupted(&mut self, request: &Request) {
         self.repl.invalidate();
         self.needs_check = true;
-        if matches!(request, Request::Snap { .. }) {
+        if matches!(request, Request::Snap { .. } | Request::Observe { .. }) {
             self.camera_usable = false;
         }
     }
@@ -283,7 +453,7 @@ impl Backend for Robot {
         let result = self
             .repl
             .exec(
-                &format!("{PREAMBLE}{}\nprint(_va_stop())\ntry:\n    robot.sound.stop()\nexcept Exception:\n    pass\n", motion::STOP_HELPER),
+                &format!("{PREAMBLE}{}\ntry:\n    _vx_cancel_all()\nexcept NameError:\n    pass\nprint(_va_stop())\ntry:\n    robot.sound.stop()\nexcept Exception:\n    pass\n", motion::STOP_HELPER),
                 Duration::from_secs(5),
             )
             .await?;
@@ -297,7 +467,10 @@ impl Backend for Robot {
     }
 
     async fn close(&mut self) {
+        let _ = self.halt().await;
         self.repl.close().await;
-        let _ = self.repl.connection_mut().close().await;
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut() {
+            let _ = conn.close().await;
+        }
     }
 }
