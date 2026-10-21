@@ -106,6 +106,7 @@ where
         serde_json::json!({"active":self.keepalive,
             "healthy":self.keepalive && self.alive_failures == 0 && self.last_alive_ok.is_some(),
             "method":"system-alive","period_ms":ALIVE_PERIOD.as_millis(),
+            "prevents_sleep":false,
             "confirmed_polls":self.alive_successes,"consecutive_failures":self.alive_failures,
             "last_confirmed_ms_ago":self.last_alive_ok.map(|at|at.elapsed().as_millis())})
     }

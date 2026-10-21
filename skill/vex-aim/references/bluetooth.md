@@ -33,8 +33,11 @@ needed. Windows captures have been verified; other OS/firmware combinations need
 their own hardware evidence. Snapshot transfers take several seconds and are
 optional; do not insert one as a prerequisite for every movement.
 
-With 0.3.0-rc.6, an owned Bluetooth session automatically sends and acknowledges
-the existing System Alive request every two seconds on AIM REV1 / BLE 1.0.0.b0.
+The unreleased 0.3.0-rc.6 candidate sends and acknowledges the existing System
+Alive request every two seconds on AIM REV1 / BLE 1.0.0.b0. The tested robot still
+lost power/connectivity around five minutes despite 92 acknowledged replies.
+This is link health monitoring, not verified sleep prevention; metadata reports
+`prevents_sleep:false`. Do not recommend this candidate as a sleep fix.
 This is separate from the display heartbeat: camera/sensor work and idle prompts
 do not need a visible program screen. Startup/live info report `keepalive.active`.
 Unknown firmware reports inactive rather than claiming equivalent verification.
@@ -44,7 +47,7 @@ Cached health reports successful poll counts, acknowledgment age and consecutive
 failures. Only the fixed read-only probe retries, up to three failures; student
 actions are never replayed. After an error, obtain live info before fresh motion.
 
-If discovery fails, check robot power and proximity before retrying. Earlier
+If discovery fails, check robot power and proximity before retrying. Current
 binaries can sleep despite REPL activity, and a keepalive cannot recover an
 already powered-off robot or guarantee battery/radio health. Give a clear
 power-on cue. After a link failure close/start the session, obtain live

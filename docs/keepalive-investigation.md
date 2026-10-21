@@ -54,6 +54,45 @@ seconds without touching the radio, so a broken heartbeat is detected promptly.
 
 ## Autonomous acceptance
 
+The hardened CI Windows candidate also failed hardware acceptance: it received
+92 acknowledged System Alive replies before the connection disappeared around
+333 seconds of uptime (startup battery 86%). All polls had succeeded until the
+link loss. The harness detected three subsequent failures and stopped after 187
+seconds; live info could not reach the robot and the next scan found no match.
+The two quiet intervals and camera/display phase therefore did not complete.
+System Alive is a confirmed link probe, but is not a proven AIM inactivity reset.
+The candidate must remain unreleased as a sleep fix. A passing fake radio test
+cannot override this result.
+
+Stationary developer probes compared the already sourced AIM native
+flags/status requests, `0x56/0x20` and `0x56/0x22`, through one BLE connection:
+
+```sh
+uv run --no-project --with bleak==3.0.2 --with keyring==25.7.0 python dev/probe-aim-idle.py --name AIM6518 --probe both --duration 420 --output .vexaim/keepalive/aim-status-probe.json
+```
+
+This probe is investigation tooling, not a student dependency or an established
+fix. It changes no menu, program, firmware or actuator state. It validates CDC
+framing/CRC/ACK, samples stopped state and uptime before/after, and reports failure
+rather than claiming completion after a disconnect. Query names come from
+`_v5_SystemStatus` and `_v5_BrainStatus` in the same cached official VEXcom.
+
+The combined probe experienced read timeouts and brief disconnections. A CLI
+reconnection succeeded without a new power-on, so those short failures do not
+establish shutdown. The final flags-only probe began at uptime 318833 ms and
+lost the link about 14 seconds later. None completed endurance. A first diagnostic
+run also had a cleanup-method bug which masked its original exception; that run
+is excluded and the cleanup was corrected before subsequent probes.
+
+The next control adds `--probe flags --home-back`. Once per minute it sends the
+official Back input (`0x56/0x65`, payload `0x54`) only after a live flags reply
+confirms home screen zero. It never selects a menu tile or sends input on an
+unknown/program screen. Input ACK loss aborts instead of replaying it. This is
+an opt-in diagnostic control, not a student workaround or runtime behavior.
+Tests cover the nonhome-screen guard and refusal to replay a lost input.
+The official VEXcode web page/download endpoints returned a Cloudflare challenge
+to both normal HTTP and a fresh browser; no challenge automation was attempted.
+
 Collect charging, power-on, USB disconnection and VEXcode closure up front.
 Do not require ongoing supervision for a stationary test, or deliberately run
 a power-off control when no one can recover it. A powered-off AIM cannot be

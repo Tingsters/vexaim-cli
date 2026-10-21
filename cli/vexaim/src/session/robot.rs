@@ -144,7 +144,7 @@ impl Robot {
         };
         Ok((
             robot,
-            json!({"transport":"bluetooth","id":id,"robot_state":state,"keepalive":{"active":keepalive,"period_ms":2000,"method":"system-alive"},"timings":{"discovery_ms":discovery_ms,
+            json!({"transport":"bluetooth","id":id,"robot_state":state,"keepalive":{"active":keepalive,"period_ms":2000,"method":"system-alive","prevents_sleep":false},"timings":{"discovery_ms":discovery_ms,
             "connection_ms":connection_ms,"preparation_ms":prepared.elapsed().as_millis() as u64,
             "startup_ms":all.elapsed().as_millis() as u64}}),
         ))
