@@ -87,8 +87,8 @@ impl Robot {
                 return Err(error);
             }
         };
-        identity["name"]=json!(name);
-        identity["id"]=json!(id);
+        identity["name"] = json!(name);
+        identity["id"] = json!(id);
         let connection_ms = connected.elapsed().as_millis() as u64;
         let prepared = Instant::now();
         let mut robot = Self {
@@ -306,10 +306,15 @@ impl Backend for Robot {
                 .as_ref()
                 .is_ok_and(|s| s["robot_state"]["stopped"] == true);
             let detections = if *with_detections && ready {
-                Some(match self.native(&["vision".into(), "get-data".into()]).await {
-                    Ok(value)=>value,
-                    Err(error)=>{ready=false;json!({"ok":false,"error":error.to_string()})}
-                })
+                Some(
+                    match self.native(&["vision".into(), "get-data".into()]).await {
+                        Ok(value) => value,
+                        Err(error) => {
+                            ready = false;
+                            json!({"ok":false,"error":error.to_string()})
+                        }
+                    },
+                )
             } else {
                 None
             };

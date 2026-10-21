@@ -55,7 +55,7 @@ class DeviceRuntime(unittest.TestCase):
         exec(compile(RUNTIME.read_text(), str(RUNTIME), 'exec'), self.ns)
 
     def action(self, method='robot.move_for', args=None, kind='motion', **options):
-        return dict(command='test', method=method, args=args or [200, 90], kind=kind,
+        return dict(command='test', method=method, args=[200,90] if args is None else args, kind=kind,
                     timeout=1, duration_ms=None, no_wait=False, velocity=None,
                     velocity_units=None, sample_ms=None, **options)
 
@@ -127,5 +127,63 @@ class DeviceRuntime(unittest.TestCase):
         self.ns['_vx_action_cancel'](result['action']['id'])
         self.finish()
         self.assertFalse(any(c[0]=='move' for c in self.calls))
+
+    def test_completion_is_published_only_after_delayed_stop(self):
+        robot=self.ns['robot']
+        original_wait=self.ns['wait']
+        states=[]
+        def delayed_stop():
+            self.active_until=self.t+200
+        robot.stop_all_movement=delayed_stop
+        result=self.dispatch(self.action())
+        identifier=result['action']['id']
+        def watch_wait(n,unit):
+            states.append(self.ns['_vx_action_status'](identifier)['state'])
+            original_wait(n,unit)
+        self.ns['wait']=watch_wait
+        self.finish()
+        self.assertTrue(all(s=='running' for s in states))
+        self.assertTrue(self.ns['_vx_action_status'](identifier)['stopped_confirmed'])
+
+    def test_missing_selector_rejects_without_transmitting(self):
+        result=self.dispatch(self.action('robot.vision.get_data',[{'constant':'MISSING'},8],'vision'))
+        self.assertTrue(result['rejected'])
+        self.assertEqual(self.calls,[])
+
+    def test_vision_selector_on_sensor_object_is_supported(self):
+        self.ns['robot'].vision.ALL_AIOBJECTS=99
+        self.assertEqual(self.ns['_vx_arg']({'constant':'ALL_AIOBJECTS'}),99)
+
+    def test_one_stick_uses_actual_constructor(self):
+        self.ns['Onestick']=lambda:SimpleNamespace(is_connected=lambda:True)
+        result=self.dispatch(self.action('onestick.is_connected',[],'read'))
+        self.assertEqual(result,{'value':True})
+
+    def test_timer_watch_rearms_and_deactivates_callbacks(self):
+        pending=[]
+        self.ns['robot'].timer.event=lambda callback,delay:pending.append((self.t+delay,callback))
+        original_wait=self.ns['wait']
+        def wait(n,unit):
+            original_wait(n,unit)
+            for due,callback in pending[:]:
+                if self.t>=due:
+                    pending.remove((due,callback));callback()
+        self.ns['wait']=wait
+        action=self.action('_vx_watch',['timer.event'],'events')
+        action['duration_ms']=200
+        for _ in range(2):
+            result=self.dispatch(action)
+            self.assertEqual(len(result['value']['events']),1)
+        watcher=self.ns['_vx_watchers']['timer.event']
+        watcher['callback']()
+        self.assertEqual(len(watcher['events']),1)
+        self.assertFalse(watcher['active'])
+
+    def test_thread_constructor_failure_does_not_leave_ghost_motion(self):
+        def broken_thread(*args):raise RuntimeError('thread unavailable')
+        self.ns['Thread']=broken_thread
+        with self.assertRaisesRegex(RuntimeError,'thread unavailable'):self.dispatch(self.action())
+        self.assertFalse(self.ns['_vx_busy']())
+        self.assertEqual(self.calls,[])
 
 if __name__=='__main__': unittest.main()

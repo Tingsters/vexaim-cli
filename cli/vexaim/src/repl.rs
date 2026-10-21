@@ -23,6 +23,7 @@ pub enum Fail {
     NotRepl(String),
     Io(String),
     Bluetooth(String),
+    Session(String),
 }
 
 impl std::fmt::Display for Fail {
@@ -30,7 +31,7 @@ impl std::fmt::Display for Fail {
         match self {
             Fail::NoRobot => write!(
                 f,
-                "no VEX device found: check the USB cable is plugged in and carries data, and the robot is on"
+                "no VEX AIM found: check the USB cable is plugged in and carries data, and the robot is on"
             ),
             Fail::Ambiguous(n) => write!(
                 f,
@@ -56,6 +57,7 @@ impl std::fmt::Display for Fail {
             ),
             Fail::Io(e) => write!(f, "robot I/O error: {e}"),
             Fail::Bluetooth(e) => write!(f, "Bluetooth: {e}"),
+            Fail::Session(e) => write!(f, "Session: {e}"),
         }
     }
 }
@@ -67,7 +69,7 @@ fn is_disconnect(e: &str) -> bool {
 
 pub fn devices() -> Result<Vec<SerialDevice>, Fail> {
     match serial::find_devices() {
-        Ok(d) => Ok(d),
+        Ok(d) => Ok(d.into_iter().filter(|dev|matches!(&dev.system_port().port_info.port_type,serialport::SerialPortType::UsbPort(usb) if usb.vid==0x2888 && usb.pid==0x0700)).collect()),
         // nothing recognisable is plugged in (the library reports this as a type-inference failure)
         Err(SerialError::CouldntInferTypes) => Ok(Vec::new()),
         Err(e) => Err(Fail::Io(e.to_string())),

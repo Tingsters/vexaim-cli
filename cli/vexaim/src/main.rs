@@ -29,6 +29,9 @@ struct Cli {
     /// Machine-readable JSON output
     #[arg(long, global = true)]
     json: bool,
+    /// Emit samples/events as JSON Lines, followed by a bounded final result
+    #[arg(long, global = true)]
+    jsonl: bool,
     /// Which robot to use when several are plugged in (0-based, see `doctor`)
     #[arg(long, global = true)]
     device: Option<usize>,
@@ -38,7 +41,7 @@ struct Cli {
     /// Exact Bluetooth robot name from `bluetooth scan` (for example AIM6518)
     #[arg(long, global = true, conflicts_with = "device")]
     name: Option<String>,
-    /// Reuse an agent-managed Bluetooth session; never reconnect or replay implicitly
+    /// Reuse an agent-managed USB/Bluetooth session; never reconnect or replay implicitly
     #[arg(long, global = true, conflicts_with_all = ["device", "transport"])]
     session: Option<String>,
     #[command(subcommand)]
@@ -92,7 +95,7 @@ enum Cmd {
     /// VEX-style commands; use `catalog GROUP` for parameters and units
     #[command(external_subcommand)]
     Native(Vec<String>),
-    /// Agent-facing persistent Bluetooth connection management
+    /// Agent-facing persistent USB/Bluetooth connection management
     Session {
         #[command(subcommand)]
         command: SessionCmd,
@@ -149,7 +152,7 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum SessionCmd {
-    /// Start or reuse a connection to the explicitly named robot (agent handles this)
+    /// Start/reuse the named Bluetooth robot or selected USB robot
     Start,
     /// Read cached connection status without rescanning or touching the robot
     Status,
@@ -364,8 +367,22 @@ fn run_exec(cli: &Cli, src: &str, timeout: u64, preamble: bool) -> Result<i32, F
 }
 
 fn print_exec(cli: &Cli, res: &repl::ExecResult, timeout: u64) -> i32 {
-    let value=if matches!(cli.cmd,Cmd::Native(_)|Cmd::Capabilities{..}) {serde_json::from_str::<serde_json::Value>(res.stdout.trim()).ok()} else {None};
-    let ok = res.stderr.is_empty() && !res.timed_out && value.as_ref().is_none_or(|v|v["rejected"]!=true && v["state"]!="failed" && v["state"]!="cancelled");
+    let value = if matches!(cli.cmd, Cmd::Native(_) | Cmd::Capabilities { .. }) {
+        serde_json::from_str::<serde_json::Value>(res.stdout.trim()).ok()
+    } else {
+        None
+    };
+    let ok = res.stderr.is_empty()
+        && !res.timed_out
+        && value.as_ref().is_none_or(|v| {
+            v["rejected"] != true && v["state"] != "failed" && v["state"] != "cancelled"
+        });
+    if cli.jsonl {
+        device::print_jsonl(
+            json!({"ok":ok,"value":value,"stdout":if value.is_none(){Some(&res.stdout)}else{None},"stderr":res.stderr,"timed_out":res.timed_out}),
+        );
+        return if ok { 0 } else { 1 };
+    }
     out(
         cli.json,
         json!({"ok": ok, "stdout": res.stdout, "stderr": res.stderr, "timed_out": res.timed_out, "possible_output_truncation": res.timed_out && res.stdout.len() >= 1500, "elapsed_ms": res.elapsed.as_millis() as u64,"value":value}),
@@ -597,7 +614,10 @@ mod tests {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    if cli.jsonl {
+        cli.json = true;
+    }
     match run(&cli) {
         Ok(code) => std::process::exit(code),
         Err(e) => {

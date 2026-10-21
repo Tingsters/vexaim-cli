@@ -22,6 +22,42 @@ pub struct Action {
 pub fn fail(s: impl ToString) -> Fail {
     Fail::Io(s.to_string())
 }
+pub fn jsonl_records(mut value: Value) -> Vec<Value> {
+    fn extract(value: &mut Value, records: &mut Vec<Value>) {
+        if let Some(object) = value.as_object_mut() {
+            for (field, event) in [("samples", "sample"), ("events", "callback")] {
+                if let Some(Value::Array(items)) = object.remove(field) {
+                    let count = items.len();
+                    for item in items {
+                        let mut record = if item.is_object() {
+                            item
+                        } else {
+                            json!({"value":item})
+                        };
+                        record["event"] = json!(event);
+                        records.push(record);
+                    }
+                    object.insert(format!("{field}_count"), json!(count));
+                }
+            }
+            for key in ["value", "action"] {
+                if let Some(nested) = object.get_mut(key) {
+                    extract(nested, records);
+                }
+            }
+        }
+    }
+    let mut records = Vec::new();
+    extract(&mut value, &mut records);
+    value["event"] = json!("result");
+    records.push(value);
+    records
+}
+pub fn print_jsonl(value: Value) {
+    for record in jsonl_records(value) {
+        println!("{record}");
+    }
+}
 fn specs() -> impl Iterator<Item = Vec<&'static str>> {
     include_str!("catalog.tsv")
         .lines()
@@ -66,7 +102,9 @@ pub fn standalone(a: &Action) -> String {
 }
 fn value(raw: &str, ty: &str) -> Result<Value, Fail> {
     let upper = raw.to_uppercase().replace('-', "_");
-    if ty=="optional-number" && raw=="null" {return Ok(Value::Null);}
+    if ty == "optional-number" && raw == "null" {
+        return Ok(Value::Null);
+    }
     if let Some(choices) = ty.strip_prefix("enum(").and_then(|s| s.strip_suffix(')')) {
         if choices.split(',').any(|s| s == upper) {
             return Ok(json!({"constant":upper}));
@@ -223,6 +261,7 @@ fn value(raw: &str, ty: &str) -> Result<Value, Fail> {
             if ![
                 "screen.pressed",
                 "screen.released",
+                "timer.event",
                 "inertial.changed",
                 "inertial.collision",
                 "inertial.crashed",
@@ -418,6 +457,13 @@ pub fn parse(words: &[String], session: bool) -> Result<Action, Fail> {
     if matches!(spec[2], "continuous" | "experimental" | "events") && duration_ms.is_none() {
         return Err(fail("This operation requires --duration (for example 2s)"));
     }
+    if duration_ms.is_some()
+        && !matches!(spec[2], "continuous" | "experimental" | "events" | "read")
+    {
+        return Err(fail(
+            "--duration is for continuous motion, events or sampled reads; finite actions use --timeout",
+        ));
+    }
     let no_wait = options.contains_key("no-wait");
     if no_wait && !session {
         return Err(fail("--no-wait requires an owned --session"));
@@ -425,6 +471,11 @@ pub fn parse(words: &[String], session: bool) -> Result<Action, Fail> {
     if spec[2] == "experimental" && !options.contains_key("experimental") {
         return Err(fail(
             "Independent wheel signs/units need hardware validation; opt in with --experimental",
+        ));
+    }
+    if options.contains_key("experimental") && spec[2] != "experimental" {
+        return Err(fail(
+            "--experimental only applies to independent wheel control",
         ));
     }
     let velocity = options
@@ -461,11 +512,21 @@ pub fn parse(words: &[String], session: bool) -> Result<Action, Fail> {
     let sample_ms = options
         .get("sample-ms")
         .map(|s| s.parse::<u64>().map_err(fail))
-        .transpose()?;
+        .transpose()?
+        .or(if spec[2] == "read" && duration_ms.is_some() {
+            Some(100)
+        } else {
+            None
+        });
     if let Some(ms) = sample_ms {
         if !(50..=60000).contains(&ms) || spec[2] != "read" || duration_ms.is_none() {
             return Err(fail(
                 "Sampling requires a read operation, --duration, and --sample-ms 50..60000",
+            ));
+        }
+        if duration_ms.unwrap().div_ceil(ms) > 256 {
+            return Err(fail(
+                "Sampling exceeds 256 records; shorten duration or increase --sample-ms",
             ));
         }
     }
@@ -537,5 +598,34 @@ mod tests {
         )
         .unwrap();
         assert!(source(&a).contains("_vx_json.loads("));
+    }
+    #[test]
+    fn duration_and_sampling_options_cannot_be_silently_ignored() {
+        assert!(parse("led on all BLUE --duration 2s").is_err());
+        assert!(parse("motion turn-for right 10 --duration 1s").is_err());
+        assert!(parse("inertial get-heading --duration 30s").is_err());
+        assert_eq!(
+            parse("inertial get-heading --duration 2s")
+                .unwrap()
+                .sample_ms,
+            Some(100)
+        );
+        assert_eq!(
+            parse("inertial get-heading --duration 30s --sample-ms 200")
+                .unwrap()
+                .sample_ms,
+            Some(200)
+        );
+    }
+    #[test]
+    fn jsonl_samples_are_separate_and_not_repeated_in_result() {
+        let records = jsonl_records(
+            json!({"ok":true,"action":{"id":"action-1","value":{"samples":[{"value":1},{"value":2}]}}}),
+        );
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0]["event"], "sample");
+        assert_eq!(records[2]["event"], "result");
+        assert_eq!(records[2]["action"]["value"]["samples_count"], 2);
+        assert!(records[2]["action"]["value"].get("samples").is_none());
     }
 }

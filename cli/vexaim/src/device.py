@@ -52,6 +52,9 @@ def _vx_arg(value):
         name = value['constant']
         if name in globals():
             return globals()[name]
+        # Some AIM revisions expose vision selectors on the sensor object only.
+        if name in ('ALL_AIOBJS', 'ALL_AIOBJECTS', 'ALL_OBJECTS', 'ALL_TAGS', 'ALL_COLORS', 'ALL_CODES') and hasattr(robot.vision, name):
+            return getattr(robot.vision, name)
         # Constants share names between Color/TurnType/SoundType. Keep namespaces.
         for typename in ('Color', 'FontType', 'SoundType', 'EmojiType', 'EmojiLookType', 'LightType', 'VoltageUnits', 'CurrentUnits', 'AxisType', 'OrientationType', 'AccelerationType', 'SensitivityType', 'KickType', 'TurnType'):
             cls = globals().get(typename)
@@ -135,7 +138,7 @@ def _vx_capabilities(paths):
             'note': 'Presence is not a behavioral test. Missing methods are never emulated.'}
 
 
-def _vx_watch(source, duration_ms):
+def _vx_watch(source, duration_ms, job=None):
     # Registrations persist on some firmware. Reuse one gated callback per source.
     if source not in _vx_watchers:
         path = ('onestick.' + source[len('controller.'):]) if source.startswith('controller.') else 'robot.' + source
@@ -148,14 +151,20 @@ def _vx_watch(source, duration_ms):
                     watcher['events'].append({'source': source, 'data': _vx_plain(args)})
                 else:
                     watcher['dropped'] += 1
-        fn(callback)
+        if source != 'timer.event':
+            fn(callback)
+        watcher['callback'] = callback
     watcher = _vx_watchers[source]
     watcher['events'] = []
     watcher['dropped'] = 0
     watcher['active'] = True
     clock = Timer()
+    if source == 'timer.event':
+        _vx_resolve('robot.timer.event')(watcher['callback'], max(1, duration_ms // 2))
     try:
         while clock.time(MSEC) < duration_ms:
+            if job is not None and job['cancel_requested']:
+                break
             wait(20, MSEC)
     finally:
         watcher['active'] = False
@@ -183,7 +192,7 @@ def _vx_execute(a, job):
     if kind == 'print-at':
         return fn(args[0], x=args[1], y=args[2])
     if kind == 'events':
-        return _vx_watch(args[0], a['duration_ms'])
+        return _vx_watch(args[0], a['duration_ms'], job)
     if method == 'robot.link.send_message':
         return fn(args[0], *args[1])
     if kind == 'actions':
@@ -233,6 +242,8 @@ def _vx_execute(a, job):
     if a.get('sample_ms'):
         samples = []
         while job['clock'].time(MSEC) < a['duration_ms']:
+            if job['cancel_requested']:
+                break
             _vx_deadline(job, a)
             if len(samples) >= 256:
                 raise RuntimeError('Sampling limit 256 reached; choose a shorter duration or interval')
@@ -298,11 +309,11 @@ def _vx_macro(args, a, job):
 
 
 def _vx_worker(a, job):
+    terminal = 'failed'
     try:
         job['value'] = None if job['cancel_requested'] else _vx_plain(_vx_execute(a, job))
-        job['state'] = 'cancelled' if job['cancel_requested'] else 'completed'
+        terminal = 'cancelled' if job['cancel_requested'] else 'completed'
     except Exception as error:
-        job['state'] = 'failed'
         job['error'] = str(error)
     finally:
         if job['resource'] == 'motion':
@@ -313,12 +324,14 @@ def _vx_worker(a, job):
                     wait(20, MSEC)
                 job['stopped_confirmed'] = robot.is_stopped()
                 if not job['stopped_confirmed']:
-                    job['state'] = 'failed'
+                    terminal = 'failed'
                     job['error'] = 'Stop not confirmed; check physical robot'
             except Exception as error:
-                job['state'] = 'failed'
+                terminal = 'failed'
                 job['error'] = str(error)
         job['elapsed_ms'] = job['clock'].time(MSEC)
+        # Completion is published only after stop/cleanup, never while settling.
+        job['state'] = terminal
 
 
 def _vx_dispatch(a):
@@ -331,6 +344,8 @@ def _vx_dispatch(a):
     # Resolve before reserving a resource; unsupported firmware cannot start a job.
     try:
         _vx_resolve(a['method'])
+        for value in a['args']:
+            _vx_arg(value)
     except Exception as error:
         return {'rejected': True, 'error': str(error)}
     if a['kind'] == 'stop':
@@ -356,7 +371,12 @@ def _vx_dispatch(a):
         job = {'id': identifier, 'command': a['command'], 'state': 'running',
                'resource': 'motion' if moving else 'device', 'cancel_requested': False, 'clock': Timer()}
         _vx_jobs[identifier] = job
-        job['thread'] = Thread(_vx_worker, (a, job))
+        try:
+            job['thread'] = Thread(_vx_worker, (a, job))
+        except Exception as error:
+            job['state'] = 'failed'
+            job['error'] = str(error)
+            raise
         return {'action': _vx_public(job)}
     job = {'clock': Timer(), 'cancel_requested': False, 'resource': 'device'}
     return {'value': _vx_plain(_vx_execute(a, job))}

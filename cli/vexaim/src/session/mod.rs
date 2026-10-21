@@ -23,7 +23,7 @@ const PROTOCOL: u32 = 2;
 const IDLE: Duration = Duration::from_secs(30 * 60);
 
 pub(super) fn failure(e: impl std::fmt::Display) -> Fail {
-    Fail::Bluetooth(e.to_string())
+    Fail::Session(e.to_string())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -209,7 +209,7 @@ async fn handle(
         .await;
         return;
     }
-    let concurrent_device=matches!(&request,Request::Native{words} if crate::device::parse(words,true).is_ok_and(|a|matches!(a.kind.as_str(),"read"|"write"|"vision"|"setting"|"actions")));
+    let concurrent_device = matches!(&request,Request::Native{words} if crate::device::parse(words,true).is_ok_and(|a|matches!(a.kind.as_str(),"read"|"write"|"vision"|"setting"|"actions")));
     if !request.priority() && busy.replace(true) && !concurrent_device {
         let _ = write_frame(
             &mut stream,
@@ -678,9 +678,10 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             None
         };
         let foreground = native.as_ref().is_some_and(|a| !a.no_wait);
+        if matches!(request,Request::Observe{..}) {eprintln!("Capturing a fresh native frame; allow up to 60 seconds plus cleanup.");}
         let wait_id=native.as_ref().filter(|a|a.command=="actions wait").and_then(|a|a.args[0].as_str()).map(str::to_owned);
         if let Some(id)=&wait_id {request=Request::Native{words:vec!["actions".into(),"status".into(),id.clone()]};}
-        let mut value = client(id, &request, cli.json, !foreground).await?;
+        let mut value = client(id, &request, cli.json, !foreground && !cli.jsonl).await?;
         if foreground {
             if let Some(action_id) = value["value"]["action"]["id"].as_str().map(str::to_owned).or(wait_id) {
                 let started = Instant::now();
@@ -712,8 +713,9 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                     }
                 }
             }
-            crate::out(cli.json, value.clone(), || value.to_string());
+            if !cli.jsonl {crate::out(cli.json, value.clone(), || value.to_string());}
         }
+        if cli.jsonl {crate::device::print_jsonl(value.clone());}
         Ok(if value["ok"] == true { 0 } else { 1 })
     });
     runtime.shutdown_timeout(Duration::from_millis(100));

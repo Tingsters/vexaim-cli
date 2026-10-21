@@ -59,9 +59,12 @@ Other command groups:
 | macro | all 20 named toolbox behaviors, adapted with finite deadlines; these may move, emotions included |
 
 Read sources can be sampled with `--duration 2s --sample-ms 100` (50..60000 ms,
-at most 256 samples). `events watch screen.pressed --duration 5s --no-wait`
+at most 256 samples). Use global `--jsonl` to emit one sample/callback per line
+and a final result with counts instead of repeating arrays.
+`events watch screen.pressed --duration 5s --no-wait`
 retains its own action and bounded event buffer; callbacks are disabled after
-the watch. Inspect action output for events and dropped count. Use Python for
+the watch. Inspect action output for events and dropped count. `events watch
+timer.event --duration 2s` schedules one midpoint timer callback. Use Python for
 custom event composition, loops, functions, VEX `Thread`, and `Timer.event`.
 
 Vision targets include SPORTS_BALL, ORANGE_BARREL, BLUE_BARREL, AIM_ROBOT,

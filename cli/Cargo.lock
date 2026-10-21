@@ -2693,6 +2693,7 @@ dependencies = [
  "rpassword",
  "serde",
  "serde_json",
+ "serialport",
  "sha2",
  "smol",
  "tempfile",
