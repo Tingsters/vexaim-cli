@@ -44,6 +44,14 @@ options or the existing session; a USB diagnostic cannot diagnose a wireless lin
 Close VEXcode and other programs using the robot. Installation does not require
 the robot to be connected; ask for power-on/readiness when interaction needs it.
 
+**Wheels and kicker may not work over USB.** On one AIM, `move_for` and
+`kicker.kick` over USB returned without error but nothing moved (a 20 mm move
+returned in about 10 ms and the robot made an error-like sound), while the same
+actions worked over Bluetooth. This is believed to be firmware locking out motion
+and kicker actuation while USB is connected; the cause is unconfirmed. USB still
+works for lights, sound, sensors and snapshots. If a movement over USB has no
+effect, do not repeat it: switch to Bluetooth and start a session.
+
 For repeated USB work, `vexaim --json session start` creates the same reusable
 owner as Bluetooth; select `--device N` before startup if several robots are
 connected. Keep the returned session ID. Do not switch transports implicitly.
