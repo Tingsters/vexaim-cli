@@ -736,3 +736,18 @@ scan. It performs no pairing or characteristic writes:
 ```sh
 cargo run --locked --manifest-path cli/Cargo.toml -p vex-v5-serial --example ble-discover --no-default-features --features bluetooth
 ```
+
+## Pairing from an agent (opt-in)
+
+`vexaim --name NAME bluetooth pair` normally needs a local terminal with masked
+input, so the code never reaches an agent. For settings where convenience matters
+more (for example a classroom workshop), `pair --code-stdin` reads the four-digit
+code from one line of stdin instead:
+
+```sh
+printf '%s\n' 1234 | vexaim --name NAME bluetooth pair --code-stdin
+```
+
+The code is short-lived and only useful within Bluetooth range, but whoever runs
+this sees it, and it may appear in an agent's transcript. Masked input remains the
+default; the flag changes nothing unless it is passed.

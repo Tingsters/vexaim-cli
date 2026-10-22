@@ -87,7 +87,7 @@ async fn stationary_idle_control() -> Result<(), Box<dyn std::error::Error>> {
     let result = async {
         let identity = bluetooth::identity(&conn).await.map_err(probe_error)?;
         bluetooth::require_camera_firmware(&identity).map_err(probe_error)?;
-        bluetooth::authenticate(&mut conn, &id, false)
+        bluetooth::authenticate(&mut conn, &id, false, false)
             .await
             .map_err(probe_error)?;
         conn.peripheral
