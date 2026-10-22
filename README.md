@@ -3,11 +3,13 @@
 Control a VEX AIM robot over USB or Bluetooth. Run MicroPython, read sensors,
 move, stop, and save native camera photographs. The command is **`vexaim`**.
 
-The next command release adds the [VEX AIM device catalogue](docs/device-commands.md)
+The 0.3 release includes the [VEX AIM device catalogue](docs/device-commands.md)
 and [agent image workflow](skill/vex-aim/references/agent-vision.md): strafing and
-vector motion, sensors, vision, LEDs, screen, sound and bounded actions. Use a
-matching candidate binary/skill to try it. Firmware-gated features report their
-limits; stable installers continue to select the latest stable release.
+vector motion, sensors, vision, LEDs, screen, sound and bounded actions.
+Agent-assisted Bluetooth pairing can read the displayed code from standard input
+with `bluetooth pair --code-stdin`; the default remains a masked local prompt.
+Installers select the latest stable release with its matching skill.
+Firmware-gated features report their limits.
 
 **[Downloads and installation](https://tingsters.github.io/vexaim-cli/)** ·
 [Latest release](https://github.com/Tingsters/vexaim-cli/releases/latest) ·
@@ -55,7 +57,7 @@ agent skill. The default locations are:
 
 Use `--agents claude` / `-Agents claude` to select an agent, `--dry-run` /
 `-DryRun` to preview, or `--from-dir DIR` / `-FromDir DIR` to use local release
-archives plus checksums. `--version 0.2.1` / `-Version 0.2.1` selects a release.
+archives plus checksums. `--version 0.3.0` / `-Version 0.3.0` selects a release.
 No shell profile or agent settings are changed. To update, rerun the one-line
 command for your computer. An extracted bundle installs its own version offline;
 download a fresh bundle when updating offline. Close active sessions first.

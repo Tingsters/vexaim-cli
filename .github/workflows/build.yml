@@ -103,7 +103,9 @@ jobs:
 
       - name: Smoke test the binary
         shell: bash
-        run: cli/target/release/${{ matrix.exe }} --version
+        run: |
+          cli/target/release/${{ matrix.exe }} --version
+          python -c "import subprocess; help_text = subprocess.check_output(['cli/target/release/${{ matrix.exe }}', 'bluetooth', 'pair', '--help'], text=True); assert '--code-stdin' in help_text, help_text"
 
       - name: shellcheck (Linux)
         if: runner.os == 'Linux'
