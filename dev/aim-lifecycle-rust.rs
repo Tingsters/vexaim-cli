@@ -125,6 +125,10 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         }
         }
         let mut repl = Repl::from_connection(&mut conn);
+        if sleep_control {
+            repl.sync_waiting_without_interrupt().await.map_err(probe_error)?;
+            report["raw_entry"] = json!("observed_waiting_prompt_no_interrupt");
+        }
         let read_state = if sleep_control {
             "print(_va_json.dumps({'stopped':robot.is_stopped(),'battery_pct':robot.get_battery_level(),'system_time_ms':robot.timer.system(),'marker':_va_repl_control_marker,'sleep_disabled':robot._sleep_disable()}))\n"
         } else {

@@ -333,6 +333,22 @@ the final True readback, restoration of the original setting and stopping only
 its own REPL. Unconfirmed cleanup is failure. This is a developer experiment,
 with no new power opcode, saved-program upload or production startup change.
 
+The first combined setup did not reach the helper call or quiet measurement:
+the source start confirmed program 27/screen 19, but ordinary raw-console entry
+then reported program 0/screen 0. The guard rejected the control. This is a
+lifecycle initialization failure, not new sleep evidence. The normal sync path
+sends two Ctrl-C interrupts before Ctrl-A; an interrupt can end the system
+program that this comparison needs to retain.
+
+The developer-only comparison now waits for an actual friendly or raw prompt,
+then enters raw mode with Ctrl-A when necessary, without an interrupt fallback.
+The next run retained program 27/screen 19, read the original sleep value False,
+set/read back True, and began the 1200-second quiet interval at robot time
+119837 ms, 49% battery and stopped. Its outcome remains pending. Four simulated
+console tests cover fragmented prompts through the first execution, an already
+raw console, a missing friendly prompt and a failed raw transition. Production
+sync is unchanged pending hardware acceptance and stop/recovery validation.
+
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares source-derived controls:
 the official connection's three remote-service notifications, or its built-in
