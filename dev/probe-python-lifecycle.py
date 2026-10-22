@@ -48,6 +48,21 @@ def validate_result(value, token, seconds, elapsed):
         raise RuntimeError("Host did not observe the requested interval")
 
 
+def cli_result(result):
+    rows = [json.loads(row) for row in result.stdout.splitlines() if row.strip()]
+    value = rows[-1] if rows else {"error": result.stderr}
+    if not isinstance(value, dict):
+        raise TypeError("CLI did not return a result object")
+    if result.returncode or value.get("ok") is not True:
+        raise RuntimeError(
+            value.get("error")
+            or value.get("stderr")
+            or result.stderr
+            or "CLI control failed"
+        )
+    return value
+
+
 def run(args):
     tool = str(args.tool.resolve(strict=True))
     output = args.output.resolve()
@@ -73,13 +88,6 @@ def run(args):
         report["elapsed_s"] = time.monotonic() - started
         write_json(output, report)
 
-    def decode(result):
-        rows = [json.loads(row) for row in result.stdout.splitlines() if row.strip()]
-        value = rows[-1] if rows else {"error": result.stderr}
-        if result.returncode or value.get("ok") is not True:
-            raise RuntimeError(value.get("error", "CLI control failed"))
-        return value
-
     def call(words):
         result = subprocess.run(
             [tool, "--json", "--session", args.session, *words],
@@ -89,7 +97,7 @@ def run(args):
             timeout=45,
             check=False,
         )
-        value = decode(result)
+        value = cli_result(result)
         report["checks"].append({"command": words, "result": value})
         save()
         return value
@@ -145,7 +153,7 @@ def run(args):
                 raise RuntimeError("Bounded Python control did not return in time")
             save()
         stdout, stderr = child.communicate()
-        result = decode(
+        result = cli_result(
             subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
         )
         report["execution"] = result
@@ -185,6 +193,7 @@ def run(args):
         RuntimeError,
         OSError,
         ValueError,
+        TypeError,
         subprocess.SubprocessError,
     ) as error:
         report.update(error=str(error) or "Interrupted", passed=False)
@@ -209,6 +218,7 @@ def run(args):
                 RuntimeError,
                 OSError,
                 ValueError,
+                TypeError,
                 subprocess.SubprocessError,
             ) as error:
                 report.update(thread_cleanup=str(error), passed=False, state="failed")

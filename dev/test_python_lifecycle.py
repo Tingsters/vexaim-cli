@@ -19,6 +19,13 @@ spec.loader.exec_module(probe)
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_python_tracebacks_survive_cli_failure(self):
+        reply = subprocess.CompletedProcess(
+            [], 1, json.dumps({"ok": False, "stderr": "NameError: wait"}), ""
+        )
+        with self.assertRaisesRegex(RuntimeError, "NameError: wait"):
+            probe.cli_result(reply)
+
     def execute_source(self, mode):
         clock = [10000]
         pending = []
