@@ -44,6 +44,16 @@ then enables admin and remote-control status notifications. This source trace
 does not yet establish a sleep-prevention mechanism. No other product's
 `disableSleep` method is eligible for use on AIM.
 
+The collector also includes the Windows Electron entry point and preload bridge.
+The bridge delegates Bluetooth device selection to Chromium; inspection found no
+AIM sleep-maintenance loop there. In the AIM-specific terminal path,
+`sendDataUserPort` checks program state and starts built-in system program 2
+before writing terminal input when no program is running. The Bluetooth manager
+implements that start through the existing file-load/run protocol with system
+vendor `0x0f` and name `___v_02.bin`. This invokes an installed system program;
+it uploads no file. It is a concrete lifecycle difference from direct raw-REPL
+entry, but its effect on the inactivity timer has not yet been measured.
+
 No public AIM-specific changelog for 1.0.1 through 1.0.4 was located during this
 review. The source-defined public firmware catalogue returned HTTP 403 to a
 normal request. Record these gaps rather than applying V5/EXP/IQ release notes.
@@ -104,9 +114,45 @@ close. Existing motion and owner inactivity deadlines remain unchanged.
 
 ## Acceptance status
 
-New-firmware hardware acceptance is pending. Software and source inspection
-alone do not establish that 1.0.4 prevents sleep, that a new command exists, or
-that camera/display protocols are unchanged. Movement and kicker regressions
+The unchanged published rc.6 baseline connected wirelessly at 94% battery and
+reported stopped. Its unfamiliar-profile gate disabled legacy System Alive.
+After 420 seconds with no foreground or background CLI radio traffic, the next
+live read reported a disconnected link; a fresh connection attempt and a scan
+found no AIM6518. This run failed before camera/display checks. Discovery loss
+alone does not establish physical power-off or its cause. Its local report is
+under `.vexaim/keepalive/firmware104-baseline-1`.
+
+After the operator's next power-on, installed Windows VEXcode authenticated
+automatically and read both GATT application revisions as `1.0.4.b0`. A local
+DevTools observation records characteristic UUIDs, command IDs and notification
+counts without recording authentication bytes or terminal payloads. The timed
+reference excludes discovery/setup and requires fresh status notifications,
+uninterrupted host monitoring and a final read after 900 seconds. Its result
+remains pending until that interval completes.
+
+The ignored `stationary_source_lifecycle_control` test in
+`dev/aim-lifecycle-rust.rs` prepares two separate source-derived controls:
+the official connection's three remote-service notifications, or its built-in
+REPL start. It accepts only the observed AIM REV1 / `1.0.4.b0` profile and a
+confirmed no-program state, never stops/replaces an existing program, sends no
+actuator command, and checks persistent Python state after 420 silent seconds.
+The REPL control invokes only the named existing system binary, once, and stops
+it at cleanup only if it is still the current program. No production behavior
+is changed by an ignored diagnostic.
+
+With VEXcode and ordinary CLI owners closed, select exactly one control:
+
+```powershell
+$env:VEXAIM_HARDWARE_READY='stationary-bluetooth-no-actuators'
+$env:VEXAIM_HARDWARE_NAME='AIM6518'
+$env:VEXAIM_LIFECYCLE_MODE='official-notifications' # or builtin-repl
+$env:VEXAIM_LIFECYCLE_OUTPUT="$PWD/.vexaim/keepalive/lifecycle-control.json"
+cargo test --locked --manifest-path cli/Cargo.toml -p vexaim stationary_source_lifecycle_control -- --ignored --nocapture
+```
+
+Full new-firmware acceptance is pending. These observations alone do not
+establish a sleep-prevention mechanism or unchanged camera/display protocols.
+Movement and kicker regressions
 require a separate supervised readiness check. Two-robot behavior requires a
 second robot and remains untested without it. Publish matching binaries/skills
 only after the stated Windows hardware gate passes.

@@ -51,7 +51,12 @@ def inspect(archive_path, output):
                 name,
                 re.IGNORECASE,
             )
-            if not wanted and name not in ("package.json", "dist/appversion.txt"):
+            if not wanted and name not in (
+                "package.json",
+                "dist/appversion.txt",
+                "dist/main.js",
+                "dist/preload.js",
+            ):
                 continue
             relative = PurePosixPath(name)
             if (
