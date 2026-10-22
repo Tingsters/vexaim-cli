@@ -1,7 +1,7 @@
 //! Owned AIM system-REPL context and a finite robot-side sleep lease.
 use crate::{
     display::DisplayConnection,
-    repl::{Fail, Repl},
+    repl::{Fail, PREAMBLE, Repl},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -20,6 +20,9 @@ use vex_v5_serial::{
 
 type Console = Repl<DisplayConnection<GenericConnection>>;
 const RUNTIME: &str = include_str!("power.py");
+/// Display activation restarts the robot's Python namespace, so the lease code cannot rely on
+/// names defined earlier in the session.
+const JSON: &str = "import json as _va_json\n";
 const LEASE: Duration = Duration::from_secs(30 * 60);
 
 pub struct Power {
@@ -243,13 +246,13 @@ impl Power {
         };
         let code = if install || !self.attempted_lease {
             format!(
-                "{RUNTIME}\nprint(_va_json.dumps(_va_power_acquire('{}',{remaining},{restore},{})))\n",
+                "{PREAMBLE}{JSON}{RUNTIME}\nprint(_va_json.dumps(_va_power_acquire('{}',{remaining},{restore},{})))\n",
                 self.token,
                 if replace_worker { "True" } else { "False" }
             )
         } else {
             format!(
-                "print(_va_json.dumps(_va_power_lease.renew('{}',{remaining})))\n",
+                "{JSON}print(_va_json.dumps(_va_power_lease.renew('{}',{remaining})))\n",
                 self.token
             )
         };
@@ -278,7 +281,7 @@ impl Power {
             let value = execute(
                 repl,
                 &format!(
-                    "print(_va_json.dumps(_va_power_lease.release('{}')))\n",
+                    "{JSON}print(_va_json.dumps(_va_power_lease.release('{}')))\n",
                     self.token
                 ),
                 5,
