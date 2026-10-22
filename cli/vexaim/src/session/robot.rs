@@ -304,7 +304,10 @@ impl Robot {
             ));
         }
         self.repl.connection_mut().enable(&self.identity).await?;
-        self.power.acquire(&mut self.repl, true, true).await
+        self.power.acquire(&mut self.repl, true, true).await?;
+        // Activating the display restarts the robot's Python namespace, which drops the
+        // session helpers (_va_*, _vx_*) that the next command relies on.
+        self.prepare().await
     }
 }
 
