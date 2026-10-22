@@ -57,6 +57,14 @@ complete 1.0.4 profile and uses a finite robot-side power lease tied to client
 inactivity. Watchdog execution, normal camera/display/stop recovery and two
 clean-boot 20-minute candidate runs remain hardware gates. The standalone
 mechanism control does not certify the integration.
+The first packaged integration run proved robot-side watchdog expiry and passed
+420 quiet seconds with the same lease, then returned a verified camera image.
+It failed at 458 seconds when display activation replaced its interpreter.
+Diagnostic output also exposed a program-status-bit ownership rejection after
+stop. The follow-up rebuilds helpers at display entry and follows the official
+AIM low-nibble program-slot parsing while retaining explicit ownership guards.
+A short display/stop/live-info recovery passed; full candidate acceptance is
+still pending. See the investigation for the failed-run evidence.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)

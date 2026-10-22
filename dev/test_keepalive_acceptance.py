@@ -55,6 +55,7 @@ class AcceptanceTests(unittest.TestCase):
         failed_health = options.pop("failed_health", False)
         frozen_health = options.pop("frozen_health", False)
         lost_nonce = options.pop("lost_nonce", False)
+        context_reset = options.pop("context_reset", False)
         cancel_at = options.pop("cancel_at", None)
         host_stall = options.pop("host_stall", False)
         timer_reads = [0]
@@ -96,6 +97,22 @@ class AcceptanceTests(unittest.TestCase):
                 value = {"value": {"value": uptime}}
             elif words[:2] == ["exec", "--no-preamble"]:
                 source = words[2]
+                if "'same_lease':" in source:
+                    value = {
+                        "stdout": json.dumps(
+                            {
+                                "same_lease": True,
+                                "active": True,
+                                "expired": False,
+                                "sleep_disabled": True,
+                                "watchdog_age_ms": 0,
+                                "watchdog_ticks": int(now[0] * 10) + 1,
+                            }
+                        )
+                    }
+                    return subprocess.CompletedProcess(
+                        command, 0, json.dumps({"ok": True, **value}), ""
+                    )
                 if source.startswith("_va_endurance_nonce = "):
                     nonce[0] = ast.literal_eval(
                         source.split(" = ", 1)[1].split(";", 1)[0]
@@ -108,6 +125,8 @@ class AcceptanceTests(unittest.TestCase):
             elif words[:2] == ["camera", "observe"]:
                 value = {"control_ready": camera_ready}
             elif words == ["screen", "show-emoji", "HAPPY"]:
+                if context_reset:
+                    nonce[0] = None
                 value = {}
             elif words == ["session", "status"]:
                 value = {
@@ -115,9 +134,12 @@ class AcceptanceTests(unittest.TestCase):
                         "active": not failed_health,
                         "healthy": True,
                         "confirmed_polls": 1 if frozen_health else int(now[0] / 2) + 1,
+                        "power": {"supported": True, "active": True},
                     }
                 }
             elif words == ["stop"]:
+                if context_reset:
+                    nonce[0] = None
                 value = {"stopped": True}
             else:
                 raise AssertionError("Unexpected robot action: " + repr(words))
@@ -239,6 +261,32 @@ class AcceptanceTests(unittest.TestCase):
             self.assertEqual(
                 sum(command[:2] == ["camera", "observe"] for command in words), 2
             )
+
+    def test_explicit_native_context_changes_preserve_uptime_validation(self):
+        with TemporaryDirectory() as folder:
+            code, report, _ = self.run_probe(
+                Path(folder),
+                duration=100,
+                quiet_seconds=20,
+                after_stop_quiet=40,
+                require_power_lease=True,
+                context_reset=True,
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue(report["passed"])
+            self.assertEqual(len(report["context_transitions"]), 1)
+        with TemporaryDirectory() as folder:
+            code, report, _ = self.run_probe(
+                Path(folder),
+                duration=100,
+                quiet_seconds=20,
+                after_stop_quiet=40,
+                require_power_lease=True,
+                context_reset=True,
+                reboot=True,
+            )
+            self.assertEqual(code, 1)
+            self.assertIn("system time", report["error"])
 
     def test_interpreter_state_loss_fails_even_with_continuous_system_time(self):
         with TemporaryDirectory() as folder:

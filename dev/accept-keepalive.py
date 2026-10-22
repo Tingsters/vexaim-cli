@@ -299,6 +299,30 @@ def main(args):
                 report["lcd_path"] = lcd["path"]
                 save()
             call(["stop"])
+            if getattr(args, "require_power_lease", False):
+                recovered = call(["info"])["robot_state"]
+                if recovered.get("stopped") is not True:
+                    raise RuntimeError("Poststop live state is not stopped")
+                # 1.0.4 native display/REPL program transitions replace the
+                # interpreter. Verify persistence within each quiet context;
+                # sample() separately requires continuous robot system time.
+                nonce = str(uuid.uuid4())
+                call(
+                    [
+                        "exec",
+                        "--no-preamble",
+                        "_va_endurance_nonce = "
+                        + repr(nonce)
+                        + "; print(_va_endurance_nonce)",
+                    ]
+                )
+                report.setdefault("context_transitions", []).append(
+                    {
+                        "reason": "explicit display and stop program transition",
+                        "elapsed_s": time.monotonic() - start,
+                    }
+                )
+                save()
             sample()
             phase("quiet_after_stop")
             observed_quiet(args.after_stop_quiet)

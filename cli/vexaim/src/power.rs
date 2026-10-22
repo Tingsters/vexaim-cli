@@ -26,6 +26,7 @@ pub struct Power {
     supported: bool,
     token: String,
     owned_program: bool,
+    owned_display: bool,
     needs_arm: bool,
     suspended: bool,
     attempted_lease: bool,
@@ -39,7 +40,12 @@ fn fail(message: impl ToString) -> Fail {
     Fail::Session(message.to_string())
 }
 fn is_repl(program: u8, flags: u32) -> bool {
-    program == 27 && flags.to_le_bytes()[3] == 19
+    program & 0x0f == 11 && flags.to_le_bytes()[3] == 19
+}
+fn is_display(program: u8, flags: u32) -> bool {
+    // Windows VEXcode masks AIM currentProgram to its low nibble. 27 and
+    // 43 observed here are status variants of slot 11, not foreign slots.
+    program & 0x0f == 11 && flags.to_le_bytes()[3] == 20
 }
 fn supported(identity: &Value) -> bool {
     identity["model"] == "AIM"
@@ -50,6 +56,13 @@ fn supported(identity: &Value) -> bool {
 }
 
 impl Power {
+    pub fn supported(&self) -> bool {
+        self.supported
+    }
+    fn owns(&self, program: u8, flags: u32) -> bool {
+        (self.owned_program && is_repl(program, flags))
+            || (self.owned_display && is_display(program, flags))
+    }
     pub fn new(identity: &Value) -> Self {
         let supported = supported(identity);
         Self {
@@ -63,6 +76,7 @@ impl Power {
                     .as_nanos()
             ),
             owned_program: false,
+            owned_display: false,
             needs_arm: supported,
             suspended: false,
             attempted_lease: false,
@@ -125,15 +139,14 @@ impl Power {
             .await
             .map_err(fail)?
             .map_err(fail)?;
-        if flags.current_program & 0x0f == 0
-            || (self.owned_program && is_repl(flags.current_program, flags.flags))
-        {
+        if flags.current_program & 0x0f == 0 || self.owns(flags.current_program, flags.flags) {
             Ok(())
         } else {
-            Err(Fail::ProgramOwned(
-                "Another program owns the AIM; its execution was not interrupted or replaced"
-                    .into(),
-            ))
+            Err(Fail::ProgramOwned(format!(
+                "Another program owns the AIM (program={}, screen={}); its execution was not interrupted or replaced",
+                flags.current_program,
+                flags.flags.to_le_bytes()[3]
+            )))
         }
     }
 
@@ -149,7 +162,7 @@ impl Power {
             .await
             .map_err(fail)?
             .map_err(fail)?;
-        if self.owned_program && is_repl(flags.current_program, flags.flags) {
+        if self.owns(flags.current_program, flags.flags) {
             if !repl.is_raw() {
                 repl.sync_waiting_without_interrupt().await?;
             }
@@ -214,6 +227,32 @@ impl Power {
         }
         self.needs_arm = false;
         Ok(true)
+    }
+
+    /// Called only after this owner sent remote-display start and screen 20
+    /// was confirmed. Never adopt a program discovered during connection.
+    pub async fn claim_display(&mut self, repl: &mut Console) -> Result<(), Fail> {
+        if !self.supported {
+            return Ok(());
+        }
+        let flags = repl
+            .connection_mut()
+            .handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0)
+            .await
+            .map_err(fail)?
+            .map_err(fail)?;
+        if !self.owned_program
+            || flags.flags.to_le_bytes()[3] != 20
+            || ![0, 11].contains(&(flags.current_program & 15))
+        {
+            return Err(fail(format!(
+                "Our display start did not retain an empty or owned system slot on screen 20 (program={}, screen={})",
+                flags.current_program,
+                flags.flags.to_le_bytes()[3]
+            )));
+        }
+        self.owned_display = true;
+        Ok(())
     }
 
     pub async fn acquire(
@@ -297,7 +336,7 @@ impl Power {
     }
 
     pub async fn stop_owned(&mut self, repl: &mut Console) -> Result<(), Fail> {
-        if !self.owned_program {
+        if !self.owned_program && !self.owned_display {
             return Ok(());
         }
         let flags = repl
@@ -306,7 +345,7 @@ impl Power {
             .await
             .map_err(fail)?
             .map_err(fail)?;
-        if is_repl(flags.current_program, flags.flags) {
+        if self.owns(flags.current_program, flags.flags) {
             repl.connection_mut()
                 .handshake(
                     FileLoadActionPacket {
@@ -322,6 +361,7 @@ impl Power {
                 .map_err(fail)?;
         }
         self.owned_program = false;
+        self.owned_display = false;
         Ok(())
     }
 }
@@ -330,8 +370,10 @@ async fn execute(repl: &mut Console, code: &str, seconds: u64) -> Result<Value, 
     let result = repl.exec(code, Duration::from_secs(seconds)).await?;
     if result.timed_out || !result.stderr.is_empty() {
         return Err(fail(format!(
-            "AIM power lease Python failed: {}",
-            result.stderr.trim()
+            "AIM power lease Python failed (timed_out={}): stderr={:?}, output={:?}",
+            result.timed_out,
+            result.stderr.chars().take(240).collect::<String>(),
+            result.stdout.chars().take(240).collect::<String>()
         )));
     }
     serde_json::from_str(result.stdout.trim()).map_err(fail)
@@ -365,5 +407,23 @@ mod tests {
         assert!(!is_repl(27, 0));
         assert!(!is_repl(0, 0x13000000));
         assert!(!is_repl(27, 0x14000000));
+        assert!(is_repl(43, 0x13000000));
+    }
+    #[test]
+    fn status_bits_never_grant_ownership_of_an_unclaimed_display_or_foreign_slot() {
+        let mut owner = Power::new(&Value::Null);
+        for program in [27, 43] {
+            assert!(!owner.owns(program, 0x14000000));
+        }
+        owner.owned_program = true;
+        assert!(owner.owns(27, 0x13000000));
+        assert!(!owner.owns(27, 0x14000000));
+        owner.owned_display = true;
+        for program in [27, 43] {
+            assert!(owner.owns(program, 0x14000000));
+        }
+        for (program, screen) in [(26, 20), (42, 20), (27, 0), (43, 21)] {
+            assert!(!owner.owns(program, screen << 24));
+        }
     }
 }

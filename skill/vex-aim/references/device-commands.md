@@ -76,6 +76,9 @@ candidate may then show REPL Mode until session close. One-shot commands clean
 up when they finish. `exec` also activates display
 for scripts referring to `.screen`; prefer native screen commands for dynamic
 Python that does not contain that reference. No stored project or USB is needed.
+On the 1.0.4 power candidate, display/system-REPL transitions may create a fresh
+interpreter. The CLI restores its helpers automatically; custom Python variables
+must be recreated after those transitions. Ordinary same-context exec retains them.
 Use named emoji constants (HAPPY/LOOK_FORWARD), not numeric IDs: the observed
 firmware's numeric 6 selected a sunglasses face. For text, choose contrasting
 pen and fill colors; white text on white fill appears as a solid white bar.
