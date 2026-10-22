@@ -1,5 +1,23 @@
 # Hardware evidence
 
+## Windows AIM 1.0.4 investigation (2026-10-21)
+
+AIM6518 now reports `1.0.4.b0` from GATT firmware/software revisions, VEXos and
+both CPUs. The unchanged rc.6 baseline disabled its monitor for that unfamiliar
+profile, then failed its live check after 420 silent seconds; discovery found no
+robot. Installed Windows VEXcode also lost its idle connection after about
+900 seconds from its last setup command despite continuous status notifications.
+The visible built-in REPL control likewise did not complete endurance. These are
+failed controls, not proof of a particular firmware power-management cause.
+
+An independent Bluetooth-only LCD read returned a complete 240x240 RGB565 frame;
+the decoded PNG visibly shows REPL Mode. No photo, log or extracted official app
+asset is published. The rc.7 candidate recognizes the exact new profile for
+existing health, camera and display operations, retaining `prevents_sleep:false`.
+Its new-profile JPEG/display and two fresh-boot 20-minute acceptance runs remain
+pending. No wheels, kicker, firmware write or saved-project upload ran.
+See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
+
 ## Session keepalive candidate (2026-10-21)
 
 Two stationary checks exposed why a successful connection is insufficient proof
