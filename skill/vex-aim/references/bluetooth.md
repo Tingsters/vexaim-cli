@@ -47,12 +47,24 @@ Cached health reports successful poll counts, acknowledgment age and consecutive
 failures. Only the fixed read-only probe retries, up to three failures; student
 actions are never replayed. After an error, obtain live info before fresh motion.
 
+The rc.7 compatibility candidate also recognizes the observed AIM REV1 /
+`1.0.4.b0` profile. Its System Alive request is unchanged and still reports
+`prevents_sleep:false`; new-firmware endurance is not yet accepted. Older builds
+can disable their monitor or reject camera/display solely because a firmware
+revision is unfamiliar, even when Python works. Record startup/live `device_info`
+once after an update and use a documented compatible CLI/skill pair. Do not
+bypass an unknown-profile guard or downgrade firmware to silence it.
+
 If discovery fails, check robot power and proximity before retrying. Current
 binaries can sleep despite REPL activity, and a keepalive cannot recover an
 already powered-off robot or guarantee battery/radio health. Give a clear
 power-on cue. After a link failure close/start the session, obtain live
 status and confirm stopped state before a new movement. Never replay a movement
 whose outcome is uncertain. Cached status is not proof of a live connection.
+Brief link errors can recover without physical power-on. After a failure, make
+at most three bounded read-only recovery attempts before requesting physical
+help. Record discovery loss as unavailable connectivity unless power-off was
+independently observed; a visible REPL/emoji screen is not an endurance result.
 
 The session owns its connection; standalone commands will refuse to take it over.
 Use its ID or close it deliberately. A cancelled camera transfer requires a

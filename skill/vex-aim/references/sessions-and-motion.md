@@ -52,6 +52,11 @@ Startup/live info include `keepalive.active`, `method` and `period_ms`. Unknown
 firmware reports inactive. A failed heartbeat marks `needs_check`; an explicit
 live info can re-establish the read-only heartbeat, while lost links require a
 fresh session. Power loss still needs a person to switch the AIM on.
+After firmware changes, inspect `device_info` once. The rc.7 candidate recognizes
+the observed `1.0.4.b0` profile alongside `1.0.0.b0`; earlier guards can report
+inactive monitoring despite a working Python console. This compatibility change
+does not establish sleep prevention. Keep the measured hardware coverage and
+matching installed skill/binary version explicit.
 
 ## Translate ideas into actions
 

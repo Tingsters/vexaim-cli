@@ -7,6 +7,10 @@ Prepare binaries and diagnostics before waking the robot. Gather charge,
 power-on/restart, exact robot, requested transport, USB state, competing
 applications, controller state and pairing permissions together at the start.
 Keep pairing codes in masked local input. State what will run and its duration.
+After a firmware update, record the actual reported revisions before measuring.
+An active link monitor or visible REPL screen does not prove sleep prevention.
+Keep failed runs failed, and separate a firmware compatibility rejection from
+a transport failure or independently observed power-off.
 
 Arrange a distinctive audible cue on the computer while the user is present.
 Play a rehearsal and obtain confirmation it is audible from where they will be.
