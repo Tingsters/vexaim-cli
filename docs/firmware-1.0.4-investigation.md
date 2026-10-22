@@ -414,7 +414,21 @@ The corrected short display → stop → live-info sequence passed on the same b
 The acceptance harness now tests nonce persistence within each quiet interpreter
 context and permits a new nonce only at its explicit display/stop transition.
 Continuous robot system time remains required across the transition, so a reboot
-cannot pass. Full packaged-candidate acceptance remains pending.
+cannot pass. The retained-context recovery smoke completed 135.828 seconds,
+including a quiet minute after stop with its watchdog advancing 66→674 ticks.
+A second 98-second smoke verified LCD output, camera/stop recovery and the same
+watchdog advancing 10→486 ticks during LCD transfer.
+
+The revised packaged candidate (`fbfb9ac`; acceptance harness `4ccc82d`) then
+completed its first clean-boot acceptance run in **1214.266 seconds**. Real
+watchdog expiry passed, both 420-second quiet intervals preserved their lease
+and advancing watchdog, native camera captures and LCD output passed, and live
+state remained stopped. Robot system time advanced 50648→1254792 ms across the
+expected interpreter transition, with battery 41%→28%. After close, an independent
+read-only SYS_FLAGS check confirmed native program 0. The local evidence is
+`power-fbfb9ac-cleanboot-1/endurance-63f63add-7df9-469d-8648-31dcef70e085.json`
+and its postclose report. Images and reports remain excluded from Git.
+One charged clean-boot 20-minute run remains before full candidate acceptance.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares source-derived controls:
