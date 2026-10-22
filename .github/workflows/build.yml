@@ -77,6 +77,7 @@ jobs:
           python -m unittest discover -s dev -p test_ble_feasibility.py -v
           python -m unittest discover -s dev -p test_display_probe.py -v
           python -m unittest discover -s dev -p test_keepalive_acceptance.py -v
+          python -m unittest discover -s dev -p test_python_lifecycle.py -v
           python -m unittest discover -s dev -p test_attention.py -v
           python -m unittest discover -s dev -p test_inspect_vexcode.py -v
           python -m unittest discover -s dev -p test_aim_idle_probe.py -v

@@ -160,9 +160,38 @@ the previous `1.0.0.b0` profile. The new revision was read from both GATT fields
 VEXos and both CPUs. This permits the existing acknowledged System Alive health
 monitor and bounded camera/display checks; it changes no wire request, firmware,
 saved program or movement default. VEXcode itself sent System Alive on 1.0.4.
-The candidate still reports `prevents_sleep:false`; testing whether firmware
-changed that request's practical effect is pending. No speculative power API or
-built-in-program activation was added to production startup.
+The candidate still reports `prevents_sleep:false`. Its first hardware run also
+failed: startup reported stopped at 73% battery; the harness sampled 71% battery
+at system time 223041 ms. The link monitor reached 124 acknowledged polls before
+three consecutive failures stopped it. The quiet interval ended after 86.7
+seconds, before either camera/display phase. Live info could not reach the robot;
+one new connection attempt and a scan found no AIM6518. The timing is consistent
+with the earlier approximately five-minute loss, but physical power-off was not
+independently observed in this unattended run. Firmware 1.0.4 plus the existing
+System Alive monitor is therefore also a failed sleep-prevention candidate.
+No speculative power API or built-in-program activation was added to production
+startup. The local report is under
+`.vexaim/keepalive/firmware104-monitor-acceptance-1`.
+
+The next isolated comparison is executing Python versus waiting at a REPL.
+`dev/probe-python-lifecycle.py` uses only the documented AIM
+[`wait`](https://api.vex.com/aim/home/python/Logic/Controls.html) and
+[`Thread`](https://api.vex.com/aim/home/python/Logic/Threads.html) primitives.
+Its `main` mode runs a finite waiting loop; its `thread` mode runs the same loop
+in a background thread and returns to the console. Neither mode moves the robot,
+uploads a saved project, presses menu buttons or calls a possible power API.
+This tests a program-lifecycle hypothesis, not a documented sleep-prevention
+promise. Each report requires a persistent marker, advancing loop count, full
+robot/host interval and final live stopped state. A passing seven-minute control
+would still not satisfy the full acceptance gate or justify a release claim.
+
+Prepare both modes before asking for power-on; run `thread` only after `main`
+passes on the same connection:
+
+```powershell
+uv run --no-project python dev/probe-python-lifecycle.py <candidate.exe> --session <ID> --mode main --duration 420 --output .vexaim/keepalive/python-main-104.json
+uv run --no-project python dev/probe-python-lifecycle.py <candidate.exe> --session <ID> --mode thread --duration 420 --output .vexaim/keepalive/python-thread-104.json
+```
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares two separate source-derived controls:

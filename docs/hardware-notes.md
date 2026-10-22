@@ -14,8 +14,12 @@ An independent Bluetooth-only LCD read returned a complete 240x240 RGB565 frame;
 the decoded PNG visibly shows REPL Mode. No photo, log or extracted official app
 asset is published. The rc.7 candidate recognizes the exact new profile for
 existing health, camera and display operations, retaining `prevents_sleep:false`.
-Its new-profile JPEG/display and two fresh-boot 20-minute acceptance runs remain
-pending. No wheels, kicker, firmware write or saved-project upload ran.
+Its first new-profile endurance run failed after 86.7 measured seconds, before
+camera/display checks. The monitor reached 124 acknowledged System Alive polls
+then three failures; live recovery and discovery found no robot. Enabling this
+known request on 1.0.4 is not a sleep fix. The new-profile JPEG/display and two
+fresh-boot 20-minute acceptance runs remain pending. No wheels, kicker, firmware
+write or saved-project upload ran.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)
