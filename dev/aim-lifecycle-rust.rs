@@ -69,7 +69,7 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
     let mut original_sleep = None;
     let result = async {
         let mut identity = bluetooth::identity(&conn).await.map_err(probe_error)?;
-        bluetooth::authenticate(&mut conn, &id, false).await.map_err(probe_error)?;
+        bluetooth::authenticate(&mut conn, &id, false, false).await.map_err(probe_error)?;
         conn.peripheral.request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized).await?;
         bluetooth::add_system_versions(&mut conn, &mut identity).await;
         let before_flags = conn.handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
@@ -302,7 +302,7 @@ async fn stationary_lifecycle_diagnostics() -> Result<(), Box<dyn std::error::Er
     let result = async {
         let mut identity = bluetooth::identity(&conn).await.map_err(probe_error)?;
         check_profile(&identity, 0)?;
-        bluetooth::authenticate(&mut conn, &id, false)
+        bluetooth::authenticate(&mut conn, &id, false, false)
             .await
             .map_err(probe_error)?;
         bluetooth::add_system_versions(&mut conn, &mut identity).await;

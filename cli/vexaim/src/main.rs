@@ -63,7 +63,12 @@ enum BluetoothCmd {
     /// List VEX BLE candidates without pairing or executing robot code
     Scan,
     /// Pair the named AIM using masked local input and the native OS credential store
-    Pair,
+    Pair {
+        /// Read the four-digit code from one line of stdin instead of a masked terminal prompt.
+        /// Lets an agent pair on a student's behalf; the code is then visible to that agent.
+        #[arg(long)]
+        code_stdin: bool,
+    },
     /// Remove this CLI's stored credential for the named visible robot (does not unpair the robot)
     Forget,
 }

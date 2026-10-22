@@ -10,6 +10,7 @@ options or existing session. The USB rows below do not diagnose a wireless link.
 | `open-ports` fails, "Permission denied" (Linux) | User not allowed to open `/dev/ttyACM*` | Install the udev rule (below), then re-plug. Or `sudo usermod -aG dialout $USER` and log out/in. |
 | Windows opens both COM ports but `repl` gets `""` | Version 0.1.0 does not assert DTR | Check `& $vexaim --version`; install 0.1.1 or newer. See Windows notes below. |
 | `repl` fails or times out with a current executable | Robot busy, booting, or another serial tool interfering | Close other serial tools, re-plug and retry at most three times; if still stuck, power-cycle. `vexaim stop` cannot repair a connection it cannot initialize. |
+| Over USB, `move`/`move_for`/`kicker.kick` return without error but nothing moves (a move returns in ~10 ms, error-like sound) | Believed to be firmware locking out wheels and kicker while USB is connected (seen on one AIM; cause unconfirmed) | Do not repeat the movement. Switch to Bluetooth (`bluetooth.md`). Lights, sound, sensors and `snap` work over USB. |
 | A call hangs then "timed out" after printing ~2 KB | Robot USB output buffer overflowed | Print less per burst or chunk with `wait(60, MSEC)`. |
 | `snap`: "no camera with 'AIM' in its name" | Robot not plugged in, or the OS blocked camera access | macOS: System Settings > Privacy > Camera, allow your terminal/Goose. Windows: Settings > Privacy > Camera. |
 | `snap` image upside-down / odd | Robot pose, not a bug | Rotate the image when analysing. |
