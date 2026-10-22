@@ -81,10 +81,12 @@ pub fn capture(camera_index: Option<u32>) -> Result<Vec<u8>, String> {
         let bytes = if f.source_frame_format() == FrameFormat::MJPEG {
             trim_jpeg(f.buffer()).to_vec() // already a JPEG; drop the driver's zero padding
         } else {
-            return Err(format!(
-                "camera delivered {:?}, expected MJPEG",
-                f.source_frame_format()
-            ));
+            // Some drivers (observed: macOS AVFoundation) hand back raw frames such as YUYV
+            // even when MJPEG was requested; decode them and encode our own JPEG.
+            let rgb = f
+                .decode_image::<RgbFormat>()
+                .map_err(|e| format!("cannot decode {:?} camera frame: {e}", f.source_frame_format()))?;
+            encode_jpeg(rgb.width(), rgb.height(), rgb.as_raw())?
         };
         crate::observation::validate(&bytes).map_err(|e| e.to_string())?;
         return Ok(bytes);
@@ -102,6 +104,15 @@ pub fn output_path(output: Option<&str>) -> String {
     })
 }
 
+/// Encode packed RGB8 pixels as a JPEG.
+fn encode_jpeg(width: u32, height: u32, rgb: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90)
+        .encode(rgb, width, height, image::ExtendedColorType::Rgb8)
+        .map_err(|e| format!("cannot encode camera frame as JPEG: {e}"))?;
+    Ok(out)
+}
+
 /// V4L2 buffers can be larger than the JPEG they hold; cut after the last end-of-image marker
 /// that precedes only padding.
 fn trim_jpeg(b: &[u8]) -> &[u8] {
@@ -111,7 +122,14 @@ fn trim_jpeg(b: &[u8]) -> &[u8] {
 
 #[cfg(test)]
 mod tests {
-    use super::trim_jpeg;
+    use super::{encode_jpeg, trim_jpeg};
+
+    #[test]
+    fn encodes_raw_rgb_as_valid_jpeg() {
+        let rgb = vec![128u8; 64 * 48 * 3];
+        let jpeg = encode_jpeg(64, 48, &rgb).unwrap();
+        assert_eq!(crate::observation::validate(&jpeg).unwrap(), (64, 48));
+    }
 
     #[test]
     fn trims_zero_padding_after_eoi() {
