@@ -287,6 +287,12 @@ def main(args):
             camera()
             call(["screen", "show-emoji", "HAPPY"])
             if getattr(args, "capture_lcd", False):
+                display_before = (
+                    power_checkpoint(reset=True)
+                    if getattr(args, "require_power_lease", False)
+                    else None
+                )
+                display_started = time.monotonic()
                 lcd = call(
                     [
                         "screen",
@@ -298,6 +304,13 @@ def main(args):
                     raise RuntimeError("Control not ready after LCD capture")
                 report["lcd_path"] = lcd["path"]
                 save()
+                if display_before:
+                    display_after = power_checkpoint()
+                    validate_power_evidence(
+                        display_after,
+                        display_before["watchdog_ticks"],
+                        time.monotonic() - display_started,
+                    )
             call(["stop"])
             if getattr(args, "require_power_lease", False):
                 recovered = call(["info"])["robot_state"]

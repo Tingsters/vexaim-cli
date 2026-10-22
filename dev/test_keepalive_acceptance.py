@@ -56,6 +56,7 @@ class AcceptanceTests(unittest.TestCase):
         frozen_health = options.pop("frozen_health", False)
         lost_nonce = options.pop("lost_nonce", False)
         context_reset = options.pop("context_reset", False)
+        stalled_power = options.pop("stalled_power", False)
         cancel_at = options.pop("cancel_at", None)
         host_stall = options.pop("host_stall", False)
         timer_reads = [0]
@@ -106,7 +107,9 @@ class AcceptanceTests(unittest.TestCase):
                                 "expired": False,
                                 "sleep_disabled": True,
                                 "watchdog_age_ms": 0,
-                                "watchdog_ticks": int(now[0] * 10) + 1,
+                                "watchdog_ticks": 1
+                                if stalled_power
+                                else int(now[0] * 10) + 1,
                             }
                         )
                     }
@@ -128,6 +131,9 @@ class AcceptanceTests(unittest.TestCase):
                 if context_reset:
                     nonce[0] = None
                 value = {}
+            elif words[:2] == ["screen", "screenshot"]:
+                now[0] += 5
+                value = {"control_ready": True, "path": words[2]}
             elif words == ["session", "status"]:
                 value = {
                     "keepalive": {
@@ -261,6 +267,21 @@ class AcceptanceTests(unittest.TestCase):
             self.assertEqual(
                 sum(command[:2] == ["camera", "observe"] for command in words), 2
             )
+
+    def test_lcd_transfer_requires_its_existing_watchdog_to_advance(self):
+        for stalled in (False, True):
+            with self.subTest(stalled=stalled), TemporaryDirectory() as folder:
+                code, report, _ = self.run_probe(
+                    Path(folder),
+                    duration=60,
+                    after_stop_quiet=1,
+                    require_power_lease=True,
+                    capture_lcd=True,
+                    stalled_power=stalled,
+                )
+                self.assertEqual(code, 1 if stalled else 0)
+                if stalled:
+                    self.assertIn("watchdog did not advance", report["error"])
 
     def test_explicit_native_context_changes_preserve_uptime_validation(self):
         with TemporaryDirectory() as folder:
