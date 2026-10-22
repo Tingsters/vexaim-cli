@@ -7,6 +7,13 @@ passed its first clean-boot acceptance run: **1214.266 seconds**. A second charg
 clean-boot run remains pending; this is not yet a two-run acceptance result.
 The earlier controls and failures below explain why the follow-up was needed.
 
+The 2026-10-22 source sync combines the merged Mac camera/constants/pairing fixes
+with the fresh-namespace imports and raw-banner parsing from PR #10, retaining
+the Windows ownership and display recovery path. The combined source passes
+73 CLI tests, 25 USB-only tests, 17 acceptance-harness tests and 15 lease tests.
+It has not been retested on the robot. The first acceptance result above belongs
+to `fbfb9ac`; a new matching package needs hardware acceptance after this sync.
+
 AIM6518 now reports `1.0.4.b0` from GATT firmware/software revisions, VEXos and
 both CPUs. The unchanged rc.6 baseline disabled its monitor for that unfamiliar
 profile, then failed its live check after 420 silent seconds; discovery found no
