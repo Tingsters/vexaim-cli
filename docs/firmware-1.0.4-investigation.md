@@ -20,6 +20,14 @@ their presence is not evidence the AIM requires them. No driver was changed by
 this investigation. Both host software and firmware changed, so successful
 post-update behavior alone cannot identify which change caused an improvement.
 
+A later read-only Windows check found a healthy Generic Bluetooth Radio using
+Microsoft's driver and a MediaTek adapter with problem code 22. Microsoft defines
+[Code 22 as a disabled device](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-prob-disabled),
+so its broad `Error` status must not be mistaken for a newly detected radio fault.
+No relevant sleep or Bluetooth power event was found in the recent System log;
+that absence alone does not prove a firmware cause. Adapter state, drivers and
+Windows power settings were left unchanged.
+
 ## Official source reference
 
 The installed Windows VEXcode AIM 4.67.0 archive is read locally by
@@ -52,7 +60,7 @@ before writing terminal input when no program is running. The Bluetooth manager
 implements that start through the existing file-load/run protocol with system
 vendor `0x0f` and name `___v_02.bin`. This invokes an installed system program;
 it uploads no file. It is a concrete lifecycle difference from direct raw-REPL
-entry, but its effect on the inactivity timer has not yet been measured.
+entry; its power behavior must be measured independently of its program field.
 
 No public AIM-specific changelog for 1.0.1 through 1.0.4 was located during this
 review. The source-defined public firmware catalogue returned HTTP 403 to a
