@@ -231,9 +231,78 @@ The already sourced next control combines acknowledged System Alive with the
 official Back input on verified home screen zero. Its fixed packet and guards
 are described in the [earlier investigation](keepalive-investigation.md). This
 tests the remaining UI-inactivity hypothesis without a guessed power API; the
-firmware-1.0.4 run is pending. It must complete seven acknowledged home-only
+firmware-1.0.4 run was prepared. Passing requires seven acknowledged home-only
 inputs, 420 seconds and final live stopped/system-time checks. A lost input ACK
 aborts without replay.
+
+That control subsequently acknowledged one Back input on confirmed home screen
+zero and completed three polls through 4.543 seconds. It then failed with Windows
+HRESULT `0x800704C7`, "The operation was canceled by the user." This error text
+alone does not establish operator cancellation. A fresh CLI session reconnected
+without another power cycle, at 64% battery and stopped. Classify this short
+failure as transport loss, not confirmed sleep or a passing Back control.
+
+The recovered session completed the first new-profile native camera observation:
+a 27732-byte 640x480 JPEG in 10875 ms, with stopped state before and after and
+`control_ready:true`. Local pixel inspection shows the controller on the floor.
+The photograph remains ignored and local. Bluetooth JPEG retrieval on the
+observed 1.0.4 profile therefore has direct evidence; display/stop and full
+endurance acceptance remain separate.
+
+Read-only runtime inspection also found `robot._sleep_disable`: it is callable,
+its type is `bound_method`, and its docstring is absent. Its SDK module identifies
+itself as `vexbdev.py`. No call site was found by searching all packaged VEXcode
+JavaScript, JSON, Python, HTML and text assets, and no public `vexbdev` source was
+located. Do not claim it is new in 1.0.4 or that its signature/semantics are known.
+The first source read was interrupted by link loss. On a fresh power-on,
+`open('vexbdev.py')` failed with `ENODEV`; the module's reported filename does not
+establish that its source is accessible. A metadata probe also incorrectly
+assumed the module exports `Robot`; its `AttributeError` occurred before any
+helper call. Correcting inspection to `type(robot)` avoided that assumption.
+The read-only `dev/inspect-power-api.py` prints metadata without calling the method.
+
+The actual bound helper accepts a zero-argument call and returns Boolean `False`.
+A subsequent explicit call with `True` returned `None`, and immediate zero-argument
+readback returned `True`. These establish a query/setter interface on this robot,
+not its power-management semantics. Both stationary endurance controls failed:
+
+| Control | Initial robot time | Measured interval | Final link health |
+| --- | --- | --- | --- |
+| No-argument helper call | 140039 ms | 166.922 s | 99 acknowledged polls, then three failures |
+| One `True` setter and readback | 41842 ms | 267.704 s | 132 acknowledged polls, then three failures |
+
+Live info then reported the link down, and discovery found no robot. Both failures
+occurred around five minutes of boot-relative time, including failure-detection
+delay; exact physical shutdown times were not independently observed. Neither
+run reached camera/display/stop acceptance. Do not treat a successful setter or
+`True` readback as verified sleep prevention. No private sleep helper is enabled
+by production startup.
+
+A fresh short lifetime check retained the same `id(robot)` and `True` helper value
+across a subsequent raw execution, the ordinary exec preamble, live info and stop.
+The stop guard correctly required a fresh `info` before the next exec; the first
+attempted post-stop query was rejected locally. Recovery confirmed the flag still
+read `True`. Ordinary commands clearing the setting therefore do not explain
+the earlier failure.
+
+The next isolated comparison holds that same observed setting inside one finite
+main-thread execution. `dev/probe-python-lifecycle.py --observed-sleep-control`
+is explicit opt-in, requires the complete observed 1.0.4 profile, checks readback,
+and restores the original Boolean setting in `finally`. Its default controls
+still call no private power helper. The option supports only finite main mode;
+it neither extends the normal 120-second session limit nor uploads a saved
+program. A long comparison uses the existing explicit standalone handoff:
+
+```powershell
+uv run --no-project python dev/probe-python-lifecycle.py <candidate.exe> --session <ID> --mode main --duration 420 --standalone-name AIM6518 --observed-sleep-control --output .vexaim/keepalive/sleep-main-104.json
+```
+
+This comparison is not the two fresh-boot 20-minute acceptance gate. A result
+requires the final worker frame, requested robot/host interval, verified original
+setting restoration and a live stopped sample after reconnecting. Local tests
+cover finite execution, restoration after a worker exception, preservation of a
+preexisting `True` state, and refusal of unsupported modes. No sleep fix has been
+accepted from the helper discovery.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares two separate source-derived controls:
@@ -257,8 +326,8 @@ $env:VEXAIM_LIFECYCLE_OUTPUT="$PWD/.vexaim/keepalive/lifecycle-control.json"
 cargo test --locked --manifest-path cli/Cargo.toml -p vexaim stationary_source_lifecycle_control -- --ignored --nocapture
 ```
 
-Full new-firmware acceptance is pending. These observations alone do not
-establish a sleep-prevention mechanism or unchanged camera/display protocols.
+Full new-firmware acceptance is pending. The native JPEG check passed separately;
+these observations do not establish sustained sleep prevention or display recovery.
 Movement and kicker regressions
 require a separate supervised readiness check. Two-robot behavior requires a
 second robot and remains untested without it. Publish matching binaries/skills

@@ -19,6 +19,67 @@ spec.loader.exec_module(probe)
 
 
 class LifecycleTests(unittest.TestCase):
+    def sleep_scope(self, fail_wait=False):
+        clock = [10000]
+        flag = [False]
+        calls = []
+
+        def control(*args):
+            if args:
+                self.assertIs(type(args[0]), bool)
+                flag[0] = args[0]
+                calls.append(args[0])
+            return flag[0]
+
+        def wait(duration, units):
+            self.assertTrue(flag[0])
+            if fail_wait:
+                raise RuntimeError("injected worker failure")
+            clock[0] += duration
+
+        scope = {
+            "robot": SimpleNamespace(
+                timer=SimpleNamespace(system=lambda: clock[0]), _sleep_disable=control
+            ),
+            "wait": wait,
+            "MSEC": "MSEC",
+        }
+        return scope, flag, calls
+
+    def test_explicit_sleep_control_is_finite_and_restores_original_state(self):
+        scope, flag, calls = self.sleep_scope()
+        with contextlib.redirect_stdout(io.StringIO()):
+            exec(probe.source_for("_sleep_test", 60, "main", True), scope)  # noqa: S102 - generated robot source in an isolated fake SDK
+        value = scope["_sleep_test"]
+        probe.validate_result(value, "_sleep_test", 60, 60.1)
+        self.assertIs(value["sleep_during"], True)
+        self.assertIs(value["sleep_at_end"], True)
+        self.assertIs(value["sleep_restored"], False)
+        self.assertFalse(flag[0])
+        self.assertEqual(calls, [True, False])
+
+    def test_sleep_control_restores_after_worker_exception(self):
+        scope, flag, calls = self.sleep_scope(fail_wait=True)
+        with self.assertRaisesRegex(RuntimeError, "injected worker failure"):
+            exec(probe.source_for("_sleep_test", 60, "main", True), scope)  # noqa: S102 - generated robot source in an isolated fake SDK
+        self.assertFalse(flag[0])
+        self.assertEqual(calls, [True, False])
+        self.assertFalse(scope["_sleep_test"]["done"])
+
+    def test_sleep_control_preserves_a_preexisting_disabled_setting(self):
+        scope, flag, calls = self.sleep_scope()
+        flag[0] = True
+        with contextlib.redirect_stdout(io.StringIO()):
+            exec(probe.source_for("_sleep_test", 60, "main", True), scope)  # noqa: S102 - generated robot source in an isolated fake SDK
+        self.assertTrue(flag[0])
+        self.assertEqual(calls, [True, True])
+        self.assertIs(scope["_sleep_test"]["sleep_restored"], True)
+
+    def test_private_helper_is_absent_from_default_and_rejected_for_thread(self):
+        self.assertNotIn("_sleep_disable", probe.source_for("_test", 60, "main"))
+        with self.assertRaisesRegex(ValueError, "finite main"):
+            probe.source_for("_test", 60, "thread", True)
+
     def test_thread_endurance_uses_a_short_session_request(self):
         command = probe.execution_command("tool", "session", "source", 1200, "thread")
         self.assertEqual(command[command.index("--timeout") + 1], "30")

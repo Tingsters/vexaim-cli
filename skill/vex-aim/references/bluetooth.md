@@ -55,6 +55,12 @@ revision is unfamiliar, even when Python works. Record startup/live `device_info
 once after an update and use a documented compatible CLI/skill pair. Do not
 bypass an unknown-profile guard or downgrade firmware to silence it.
 
+On the observed 1.0.4 robot, the private `_sleep_disable` helper accepted `True`
+and read back `True`, but the link still disappeared around five minutes after
+boot despite acknowledged health checks. Do not use that private setting as a
+student sleep workaround or infer its effect from its name. See the CLI's
+firmware investigation for the separate developer controls and measured limits.
+
 If discovery fails, check robot power and proximity before retrying. Current
 binaries can sleep despite REPL activity, and a keepalive cannot recover an
 already powered-off robot or guarantee battery/radio health. Give a clear

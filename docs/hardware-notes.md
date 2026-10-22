@@ -17,7 +17,7 @@ existing health, camera and display operations, retaining `prevents_sleep:false`
 Its first new-profile endurance run failed after 86.7 measured seconds, before
 camera/display checks. The monitor reached 124 acknowledged System Alive polls
 then three failures; live recovery and discovery found no robot. Enabling this
-known request on 1.0.4 is not a sleep fix. The new-profile JPEG/display and two
+known request on 1.0.4 is not a sleep fix. The new-profile display and two
 fresh-boot 20-minute acceptance runs remain pending. No wheels, kicker, firmware
 write or saved-project upload ran.
 A background waiting Thread subsequently lost its link after 162.343 seconds;
@@ -26,6 +26,19 @@ wait also failed to return its final frame, ending with a closed Bluetooth
 object error after 466.218 host seconds; discovery then found no robot. Local
 timeout and connection-handoff rejections are recorded separately as harness
 failures. Neither Python control is accepted as sleep prevention.
+A home-only Back plus System Alive control failed after one acknowledged input
+and three polls, then reconnected without physical power-on. The recovered
+session downloaded a native 640x480 JPEG in 10.875 seconds; local pixels show
+the controller and postcapture control was ready. Read-only inspection found
+a callable private `Robot._sleep_disable` helper. Its zero-argument query returns
+a Boolean; setting `True` returns `None` and reads back `True`. Nevertheless,
+the no-argument control failed after 166.922 seconds and the one-time setter
+control after 267.704 seconds, both around five minutes from boot. The latter
+acknowledged 132 health polls before three failures. The flag was subsequently
+shown to survive ordinary exec, live info and stop with the same Robot object.
+No private helper is enabled by production startup. A finite main-execution
+comparison with explicit readback/restoration is a separate developer control,
+not accepted sleep prevention.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)
