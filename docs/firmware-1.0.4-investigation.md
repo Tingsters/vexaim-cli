@@ -126,16 +126,51 @@ After the operator's next power-on, installed Windows VEXcode authenticated
 automatically and read both GATT application revisions as `1.0.4.b0`. A local
 DevTools observation records characteristic UUIDs, command IDs and notification
 counts without recording authentication bytes or terminal payloads. The timed
-reference excludes discovery/setup and requires fresh status notifications,
-uninterrupted host monitoring and a final read after 900 seconds. Its result
-remains pending until that interval completes.
+reference excluded discovery/setup and required fresh status notifications,
+uninterrupted host monitoring and a final read after 900 seconds. It failed:
+the connected state disappeared at 841 seconds of timed observation. The last
+status notification arrived about 899 seconds after the last setup command;
+Windows reported disconnection about ten seconds later. Approximately 9004 robot
+status and 9001 AI-status notifications arrived, with no recurring host writes.
+A new CLI connection attempt and scan found no AIM6518. This is consistent with
+an approximately 15-minute idle limit on that connection, but neither the timer's
+implementation nor physical power-off was independently established. The local
+redacted report is `.vexaim/keepalive/official104-reference.json`.
+
+Consequently matching idle subscriptions alone is not accepted as sleep
+prevention.
+
+The built-in terminal start returned code `0x01`, classified as `WriteError` by
+the generic CDC library. Its encoded packet matches the installed official
+builder byte for byte. Follow-up read-only inspection captured the LCD showing
+`REPL Mode`, screen ID 19 and program field 27. Therefore the generic NACK alone
+did not establish that no state change occurred. No start was replayed, and the
+generic ACK decoder was not loosened. System-directory enumeration listed only
+`settings.bin`; the built-in mode did not require a file upload.
+
+A separately labeled continuation adopted that known control's REPL. Raw console
+entry retained program field 27 and read stopped state at system time 703337 ms,
+74% battery. The Bluetooth connection disappeared after 70 quiet seconds, before
+its requested 1200 seconds completed; subsequent discovery found no robot.
+This control also failed. Neither a visible REPL mode nor its program field
+establishes sleep prevention.
+
+The compatibility candidate now recognizes exactly AIM REV1 / `1.0.4.b0` alongside
+the previous `1.0.0.b0` profile. The new revision was read from both GATT fields,
+VEXos and both CPUs. This permits the existing acknowledged System Alive health
+monitor and bounded camera/display checks; it changes no wire request, firmware,
+saved program or movement default. VEXcode itself sent System Alive on 1.0.4.
+The candidate still reports `prevents_sleep:false`; testing whether firmware
+changed that request's practical effect is pending. No speculative power API or
+built-in-program activation was added to production startup.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares two separate source-derived controls:
 the official connection's three remote-service notifications, or its built-in
 REPL start. It accepts only the observed AIM REV1 / `1.0.4.b0` profile and a
 confirmed no-program state, never stops/replaces an existing program, sends no
-actuator command, and checks persistent Python state after 420 silent seconds.
+actuator command, and checks persistent Python state after 1200 silent seconds
+by default (`VEXAIM_LIFECYCLE_SECONDS` allows 420 through 1800 for labeled controls).
 The REPL control invokes only the named existing system binary, once, and stops
 it at cleanup only if it is still the current program. No production behavior
 is changed by an ignored diagnostic.
@@ -146,6 +181,7 @@ With VEXcode and ordinary CLI owners closed, select exactly one control:
 $env:VEXAIM_HARDWARE_READY='stationary-bluetooth-no-actuators'
 $env:VEXAIM_HARDWARE_NAME='AIM6518'
 $env:VEXAIM_LIFECYCLE_MODE='official-notifications' # or builtin-repl
+$env:VEXAIM_LIFECYCLE_SECONDS='1200'
 $env:VEXAIM_LIFECYCLE_OUTPUT="$PWD/.vexaim/keepalive/lifecycle-control.json"
 cargo test --locked --manifest-path cli/Cargo.toml -p vexaim stationary_source_lifecycle_control -- --ignored --nocapture
 ```

@@ -49,9 +49,13 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
     let name = std::env::var("VEXAIM_HARDWARE_NAME")?;
     let mode = std::env::var("VEXAIM_LIFECYCLE_MODE")?;
     assert!(["official-notifications", "builtin-repl"].contains(&mode.as_str()));
+    let quiet_seconds: u64 = std::env::var("VEXAIM_LIFECYCLE_SECONDS")
+        .unwrap_or_else(|_| "1200".into())
+        .parse()?;
+    assert!((420..=1800).contains(&quiet_seconds));
     let path = PathBuf::from(std::env::var("VEXAIM_LIFECYCLE_OUTPUT")?);
     let mut report = json!({"passed":false,"state":"starting","name":name,
-        "method":mode,"quiet_seconds":420,
+        "method":mode,"quiet_seconds":quiet_seconds,
         "foreground_radio_during_quiet":false,"program_uploaded":false});
     std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
     let (id, device) = bluetooth::select(&name).await.map_err(probe_error)?;
@@ -65,7 +69,8 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         let before_flags = conn.handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
         report["identity"] = identity;
         report["current_program_before"] = json!(before_flags.current_program);
-        check_profile(&report["identity"], before_flags.current_program)?;
+        let adopt_owned = mode == "builtin-repl" && std::env::var("VEXAIM_LIFECYCLE_ADOPT_OWNED_REPL").as_deref() == Ok("confirmed-prior-control");
+        check_profile(&report["identity"], if adopt_owned { 0 } else { before_flags.current_program })?;
         if mode == "official-notifications" {
             // All three notifications are enabled by the official AIM connect
             // path. Subscribing to command status sends no motion command.
@@ -80,21 +85,34 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
                 conn.peripheral.subscribe(&characteristic).await?;
             }
             report["subscribed_remote_characteristics"] = json!(3);
+        } else if adopt_owned {
+            if before_flags.current_program != 27 {
+                return Err(std::io::Error::other("The prior control's owned REPL program 27 is no longer active").into());
+            }
+            started = true;
+            report["adopted_prior_owned_repl"] = json!(true);
         } else {
         report["state"] = json!("starting_builtin_repl");
         std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
         // Fixed existing system binary only. No file-transfer, firmware write,
         // saved student program or retry of an uncertain start is permitted.
-        conn.handshake(FileLoadActionPacket {
+        let ack = conn.handshake(FileLoadActionPacket {
             vendor: FileVendor::Sys, action: FileLoadAction::Run,
             file_name: FixedString::new("___v_02.bin")?,
-        }, Duration::from_secs(2), 0).await??;
+        }, Duration::from_secs(2), 0).await?;
+        match ack {
+            Ok(_) => report["start_reply_code"] = json!(0x76),
+            // Observed on AIM 1.0.4: this reply accompanies REPL Mode.
+            // Never accept it without the independent program/screen checks.
+            Err(vex_v5_serial::protocol::cdc2::Cdc2Ack::WriteError) => report["start_reply_code"] = json!(1),
+            Err(error) => return Err(error.into()),
+        }
         started = true;
         tokio::time::sleep(Duration::from_millis(100)).await;
         let flags = conn.handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
         report["current_program_started"] = json!(flags.current_program);
-        if flags.current_program & 0x0f != 2 {
-            return Err(std::io::Error::other("Built-in REPL start was acknowledged but program 2 was not confirmed").into());
+        if flags.current_program != 27 {
+            return Err(std::io::Error::other("Built-in REPL program 27 was not confirmed; start was not replayed").into());
         }
         }
         let mut repl = Repl::from_connection(&mut conn);
@@ -103,11 +121,20 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         if before.timed_out || !before.stderr.is_empty() { return Err(std::io::Error::other("Initial Python read failed").into()); }
         let before: Value = serde_json::from_str(before.stdout.trim())?;
         if before["stopped"] != true { return Err(std::io::Error::other("Robot is not stopped").into()); }
+        let flags = repl.connection_mut().handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
+        report["current_program_after_raw_entry"] = json!(flags.current_program);
+        if mode == "builtin-repl" && flags.current_program != 27 {
+            return Err(std::io::Error::other("Raw console entry did not retain built-in REPL program 27").into());
+        }
         report["before"] = before.clone(); report["state"] = json!("quiet");
         let quiet = Instant::now(); let mut observed = Instant::now();
-        while quiet.elapsed() < Duration::from_secs(420) {
-            tokio::time::sleep(Duration::from_secs(5).min(Duration::from_secs(420).saturating_sub(quiet.elapsed()))).await;
+        while quiet.elapsed() < Duration::from_secs(quiet_seconds) {
+            tokio::time::sleep(Duration::from_secs(5).min(Duration::from_secs(quiet_seconds).saturating_sub(quiet.elapsed()))).await;
             if observed.elapsed() > Duration::from_secs(15) { return Err(std::io::Error::other("Host monitoring stalled; quiet interval incomplete").into()); }
+            // Cached Windows/OS connection state only; no GATT round trip.
+            if !tokio::time::timeout(Duration::from_millis(500), repl.connection_mut().peripheral.is_connected()).await?? {
+                return Err(std::io::Error::other("Bluetooth connection disappeared during quiet interval").into());
+            }
             observed = Instant::now(); report["elapsed_s"] = json!(quiet.elapsed().as_secs_f64());
             std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
         }
@@ -132,7 +159,7 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
             .handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0)
             .await
         {
-            if flags.current_program & 0x0f == 2 {
+            if flags.current_program == 27 {
                 report["stop_confirmed"] = json!(matches!(
                     conn.handshake(
                         FileLoadActionPacket {
@@ -175,4 +202,103 @@ fn builtin_control_refuses_unknown_profiles_and_running_programs() {
         unknown[key] = json!("unknown");
         assert!(check_profile(&unknown, 0).is_err());
     }
+}
+
+#[test]
+fn builtin_start_matches_the_installed_official_packet_builder() {
+    use vex_v5_serial::protocol::Encode;
+    let packet = FileLoadActionPacket {
+        vendor: FileVendor::Sys,
+        action: FileLoadAction::Run,
+        file_name: FixedString::new("___v_02.bin").unwrap(),
+    };
+    let mut bytes = vec![0; packet.size()];
+    packet.encode(&mut bytes);
+    assert_eq!(
+        bytes,
+        [
+            201, 54, 184, 71, 86, 24, 26, 15, 0, 95, 95, 95, 118, 95, 48, 50, 46, 98, 105, 110, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 203
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "read-only stationary hardware inspection; explicit readiness/name/output env"]
+async fn stationary_lifecycle_diagnostics() -> Result<(), Box<dyn std::error::Error>> {
+    use vex_v5_serial::protocol::cdc2::file::{DirectoryEntryPacket, DirectoryFileCountPacket};
+    assert_eq!(
+        std::env::var("VEXAIM_HARDWARE_READY").as_deref(),
+        Ok("stationary-bluetooth-no-actuators")
+    );
+    let name = std::env::var("VEXAIM_HARDWARE_NAME")?;
+    let path = PathBuf::from(std::env::var("VEXAIM_LIFECYCLE_OUTPUT")?);
+    let (id, device) = bluetooth::select(&name).await.map_err(probe_error)?;
+    let mut conn = device.connect().await?;
+    let mut report = json!({"read_only":true,"program_started":false,"passed":false});
+    let result = async {
+        let mut identity = bluetooth::identity(&conn).await.map_err(probe_error)?;
+        check_profile(&identity, 0)?;
+        bluetooth::authenticate(&mut conn, &id, false)
+            .await
+            .map_err(probe_error)?;
+        bluetooth::add_system_versions(&mut conn, &mut identity).await;
+        conn.peripheral
+            .request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized)
+            .await?;
+        let flags = conn
+            .handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0)
+            .await??;
+        report["identity"] = identity;
+        report["program_field"] = json!(flags.current_program);
+        report["flags"] = json!(flags.flags);
+        std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
+        let bytes =
+            tokio::time::timeout(Duration::from_secs(60), bluetooth::capture_lcd(&mut conn))
+                .await?
+                .map_err(probe_error)?;
+        let png = crate::observation::lcd_png(&bytes).map_err(probe_error)?;
+        let image = path.with_extension("png");
+        crate::observation::save_bytes(&image, &png).map_err(probe_error)?;
+        report["lcd"] = json!(image);
+        let count = conn
+            .handshake(
+                DirectoryFileCountPacket {
+                    vendor: FileVendor::Sys,
+                    reserved: 0,
+                },
+                Duration::from_secs(2),
+                0,
+            )
+            .await??
+            .count;
+        report["system_file_count"] = json!(count);
+        report["system_files"] = json!([]);
+        for index in 0..count.min(16) {
+            let entry = conn
+                .handshake(
+                    DirectoryEntryPacket {
+                        file_index: index as u8,
+                        reserved: 0,
+                    },
+                    Duration::from_secs(2),
+                    0,
+                )
+                .await??;
+            report["system_files"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!(entry.file_name.as_str()));
+        }
+        report["passed"] = json!(true);
+        Ok::<_, Box<dyn std::error::Error>>(())
+    }
+    .await;
+    if let Err(ref error) = result {
+        report["error"] = json!(error.to_string());
+    }
+    let _ = conn.close().await;
+    std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
+    println!("{}", report);
+    result
 }

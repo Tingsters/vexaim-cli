@@ -391,10 +391,16 @@ async fn run_python(
     operation
 }
 
+pub(crate) fn known_aim_profile(info: &serde_json::Value) -> bool {
+    info["model"] == "AIM"
+        && info["hardware"] == "REV1"
+        && matches!(info["firmware"].as_str(), Some("1.0.0.b0" | "1.0.4.b0"))
+}
+
 pub(crate) fn require_camera_firmware(info: &serde_json::Value) -> Result<(), Fail> {
-    if info["model"] != "AIM" || info["hardware"] != "REV1" || info["firmware"] != "1.0.0.b0" {
+    if !known_aim_profile(info) {
         return Err(fail(
-            "Native Bluetooth JPEG capture is verified only for AIM REV1 / BLE firmware 1.0.0.b0; no menu/reset fallback was attempted.",
+            "Native Bluetooth JPEG capture supports only AIM REV1 / BLE firmware 1.0.0.b0 or 1.0.4.b0; no menu/reset fallback was attempted.",
         ));
     }
     Ok(())
@@ -644,9 +650,20 @@ mod tests {
     #[test]
     fn camera_firmware_is_checked_without_writes() {
         let mut info = json!({"model":"AIM","hardware":"REV1","firmware":"1.0.0.b0"});
-        assert!(require_camera_firmware(&info).is_ok());
-        info["firmware"] = json!("unknown");
-        assert!(require_camera_firmware(&info).is_err());
+        for revision in ["1.0.0.b0", "1.0.4.b0"] {
+            info["firmware"] = json!(revision);
+            assert!(require_camera_firmware(&info).is_ok());
+        }
+        for revision in ["unknown", "1.0.3.b0", "1.0.5.b0"] {
+            info["firmware"] = json!(revision);
+            assert!(require_camera_firmware(&info).is_err());
+        }
+        info["firmware"] = json!("1.0.4.b0");
+        for field in ["model", "hardware"] {
+            let mut other = info.clone();
+            other[field] = json!("unknown");
+            assert!(require_camera_firmware(&other).is_err());
+        }
     }
 
     #[test]
