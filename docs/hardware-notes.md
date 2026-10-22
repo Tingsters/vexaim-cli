@@ -38,7 +38,12 @@ acknowledged 132 health polls before three failures. The flag was subsequently
 shown to survive ordinary exec, live info and stop with the same Robot object.
 No private helper is enabled by production startup. A finite main-execution
 comparison with explicit readback/restoration is a separate developer control,
-not accepted sleep prevention.
+not accepted sleep prevention. The finite main-with-helper comparison also
+returned no final frame and failed after 466.485 host seconds with a closed
+Bluetooth object; a fresh scan found no robot. The subsequent short timing
+comparison showed 0–1 ms per batch of 30 cached sensor reads with either flag
+value. It restored `False` and closed normally, at 53% battery and stopped.
+The combined official built-in REPL plus SDK-setting control remains unmeasured.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)

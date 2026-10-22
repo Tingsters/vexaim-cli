@@ -52,7 +52,8 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
     );
     let name = std::env::var("VEXAIM_HARDWARE_NAME")?;
     let mode = std::env::var("VEXAIM_LIFECYCLE_MODE")?;
-    assert!(["official-notifications", "builtin-repl"].contains(&mode.as_str()));
+    assert!(["official-notifications", "builtin-repl", "builtin-repl-sleep"].contains(&mode.as_str()));
+    let sleep_control = mode == "builtin-repl-sleep";
     let quiet_seconds: u64 = std::env::var("VEXAIM_LIFECYCLE_SECONDS")
         .unwrap_or_else(|_| "1200".into())
         .parse()?;
@@ -65,6 +66,7 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
     let (id, device) = bluetooth::select(&name).await.map_err(probe_error)?;
     let mut conn = device.connect().await?;
     let mut started = false;
+    let mut original_sleep = None;
     let result = async {
         let mut identity = bluetooth::identity(&conn).await.map_err(probe_error)?;
         bluetooth::authenticate(&mut conn, &id, false).await.map_err(probe_error)?;
@@ -72,6 +74,9 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         bluetooth::add_system_versions(&mut conn, &mut identity).await;
         let before_flags = conn.handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
         report["identity"] = identity;
+        if sleep_control && ["vexos_version", "cpu0_version", "cpu1_version"].iter().any(|key| report["identity"][*key] != "1.0.4.b0") {
+            return Err(std::io::Error::other("Private helper comparison requires all observed 1.0.4 revisions").into());
+        }
         report["current_program_before"] = json!(before_flags.current_program);
         let adopt_owned = mode == "builtin-repl" && std::env::var("VEXAIM_LIFECYCLE_ADOPT_OWNED_REPL").as_deref() == Ok("confirmed-prior-control");
         check_profile(&report["identity"], if adopt_owned { 0 } else { before_flags.current_program })?;
@@ -120,7 +125,11 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         }
         }
         let mut repl = Repl::from_connection(&mut conn);
-        let read_state = "print(_va_json.dumps({'stopped':robot.is_stopped(),'battery_pct':robot.get_battery_level(),'system_time_ms':robot.timer.system(),'marker':_va_repl_control_marker}))\n";
+        let read_state = if sleep_control {
+            "print(_va_json.dumps({'stopped':robot.is_stopped(),'battery_pct':robot.get_battery_level(),'system_time_ms':robot.timer.system(),'marker':_va_repl_control_marker,'sleep_disabled':robot._sleep_disable()}))\n"
+        } else {
+            "print(_va_json.dumps({'stopped':robot.is_stopped(),'battery_pct':robot.get_battery_level(),'system_time_ms':robot.timer.system(),'marker':_va_repl_control_marker}))\n"
+        };
         let before = repl.exec(&format!("{PREAMBLE}import json as _va_json\n_va_repl_control_marker=robot.timer.system()\n{read_state}"), Duration::from_secs(15)).await.map_err(probe_error)?;
         if before.timed_out || !before.stderr.is_empty() { return Err(std::io::Error::other("Initial Python read failed").into()); }
         let before: Value = serde_json::from_str(before.stdout.trim())?;
@@ -128,8 +137,18 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         let flags = repl.connection_mut().handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
         report["current_program_after_raw_entry"] = json!(flags.current_program);
         report["screen_after_raw_entry"] = json!(flags.flags.to_le_bytes()[3]);
-        if mode == "builtin-repl" && !repl_mode_confirmed(flags.current_program, flags.flags) {
+        if mode != "official-notifications" && !repl_mode_confirmed(flags.current_program, flags.flags) {
             return Err(std::io::Error::other("Raw console entry did not retain built-in REPL program 27").into());
+        }
+        if sleep_control {
+            let previous = before["sleep_disabled"].as_bool().ok_or_else(|| std::io::Error::other("Observed helper state was not Boolean"))?;
+            original_sleep = Some(previous);
+            let set = repl.exec("robot._sleep_disable(True)\nprint(robot._sleep_disable())\n", Duration::from_secs(5)).await.map_err(probe_error)?;
+            if set.timed_out || !set.stderr.is_empty() || set.stdout.trim() != "True" {
+                return Err(std::io::Error::other("Observed helper setter readback failed").into());
+            }
+            report["sleep_original"] = json!(previous);
+            report["sleep_readback"] = json!(true);
         }
         report["before"] = before.clone(); report["state"] = json!("quiet");
         let quiet = Instant::now(); let mut observed = Instant::now();
@@ -150,6 +169,9 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
             || after["system_time_ms"].as_u64() <= before["system_time_ms"].as_u64() {
             return Err(std::io::Error::other("Final state/REPL continuity check failed").into());
         }
+        if sleep_control && after["sleep_disabled"] != true {
+            return Err(std::io::Error::other("Private sleep setting did not survive quiet interval").into());
+        }
         report["after"] = after; report["passed"] = json!(true); report["state"] = json!("passed");
         repl.close().await;
         Ok::<_, Box<dyn std::error::Error>>(())
@@ -165,6 +187,19 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
             .await
         {
             if repl_mode_confirmed(flags.current_program, flags.flags) {
+                if let Some(previous) = original_sleep {
+                    let value = if previous { "True" } else { "False" };
+                    let restored = {
+                        let mut repl = Repl::from_connection(&mut conn);
+                        repl.exec(&format!("robot._sleep_disable({value})\nprint(robot._sleep_disable())\n"), Duration::from_secs(5)).await
+                    };
+                    let confirmed = restored.is_ok_and(|r| !r.timed_out && r.stderr.is_empty() && r.stdout.trim() == value);
+                    report["sleep_restoration_confirmed"] = json!(confirmed);
+                    if !confirmed {
+                        report["passed"] = json!(false);
+                        report["state"] = json!("failed");
+                    }
+                }
                 report["stop_confirmed"] = json!(matches!(
                     conn.handshake(
                         FileLoadActionPacket {
@@ -181,13 +216,24 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
             }
         }
     }
+    if sleep_control && report["passed"] == true
+        && (report["sleep_restoration_confirmed"] != true || report["stop_confirmed"] != true)
+    {
+        report["passed"] = json!(false);
+        report["state"] = json!("failed");
+        report["error"] = json!("Quiet control completed but private setting/program cleanup was not confirmed");
+    }
     let _ = conn.close().await;
     std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
     println!(
         "{}",
         json!({"passed":report["passed"],"error":report.get("error"),"report":path})
     );
-    result
+    result?;
+    if report["passed"] != true {
+        return Err(std::io::Error::other("Lifecycle control or cleanup did not pass; inspect report").into());
+    }
+    Ok(())
 }
 
 fn probe_error(error: crate::repl::Fail) -> std::io::Error {

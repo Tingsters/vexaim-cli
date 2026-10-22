@@ -304,8 +304,37 @@ cover finite execution, restoration after a worker exception, preservation of a
 preexisting `True` state, and refusal of unsupported modes. No sleep fix has been
 accepted from the helper discovery.
 
+The main-with-helper comparison subsequently failed after 466.485 host seconds
+with Bluetooth HRESULT `0x80000013` during a write. No final worker frame,
+readback or restoration result returned; a fresh scan found no robot. Do not
+claim the helper remained effective inside that execution or that restoration
+was confirmed. Its earlier ordinary-command persistence is separate evidence.
+
+A later short stopped-state comparison alternated the flag False/True/True/False
+and timed 30 battery reads and 30 stopped-state reads per setting. Every batch
+took 0 or 1 ms. This found no measurable effect on these cached getters; it does
+not establish the helper's purpose. Its original `False` value was restored,
+the robot reported 53% battery and stopped, and the CLI session closed normally.
+
+The official-app trace was also audited for an omitted write route: it wraps
+`writeValue`, `writeValueWithResponse` and `writeValueWithoutResponse`, in addition
+to reads and notification subscriptions. No obvious unobserved Web Bluetooth
+write method explains the idle trace. This remains application-level evidence,
+not a capture of Windows HCI or link-layer packets.
+
+One combined control remains unmeasured: the official built-in REPL and the
+observed SDK setting together. Prior controls measured each separately; their
+failures do not establish the combination's behavior. The opt-in ignored Rust
+mode `builtin-repl-sleep` first verifies no student program is running, starts
+only the existing system REPL, proves program 27 AND screen 19, checks all
+reported 1.0.4 revisions and stopped state, then sets/readbacks the actual helper.
+It observes 1200 quiet seconds by default. Acceptance requires persistent state,
+the final True readback, restoration of the original setting and stopping only
+its own REPL. Unconfirmed cleanup is failure. This is a developer experiment,
+with no new power opcode, saved-program upload or production startup change.
+
 The ignored `stationary_source_lifecycle_control` test in
-`dev/aim-lifecycle-rust.rs` prepares two separate source-derived controls:
+`dev/aim-lifecycle-rust.rs` prepares source-derived controls:
 the official connection's three remote-service notifications, or its built-in
 REPL start. It accepts only the observed AIM REV1 / `1.0.4.b0` profile and a
 confirmed no-program state, never stops/replaces an existing program, sends no
@@ -320,7 +349,7 @@ With VEXcode and ordinary CLI owners closed, select exactly one control:
 ```powershell
 $env:VEXAIM_HARDWARE_READY='stationary-bluetooth-no-actuators'
 $env:VEXAIM_HARDWARE_NAME='AIM6518'
-$env:VEXAIM_LIFECYCLE_MODE='official-notifications' # or builtin-repl
+$env:VEXAIM_LIFECYCLE_MODE='official-notifications' # or builtin-repl / builtin-repl-sleep
 $env:VEXAIM_LIFECYCLE_SECONDS='1200'
 $env:VEXAIM_LIFECYCLE_OUTPUT="$PWD/.vexaim/keepalive/lifecycle-control.json"
 cargo test --locked --manifest-path cli/Cargo.toml -p vexaim stationary_source_lifecycle_control -- --ignored --nocapture
