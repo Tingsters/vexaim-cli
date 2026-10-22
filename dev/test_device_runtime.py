@@ -108,6 +108,38 @@ class DeviceRuntime(unittest.TestCase):
         result = self.dispatch(self.action('robot.vision.get_data',[{'constant':'ALL_AIOBJS'},8],'vision'))
         self.assertEqual(result, {'value': []})
 
+    def test_collect_requires_the_requested_cargo_class(self):
+        for requested, held in [('ORANGE_BARREL', 'BLUE_BARREL'),
+                                ('BLUE_BARREL', 'ORANGE_BARREL'),
+                                ('SPORTS_BALL', 'BLUE_BARREL'),
+                                ('ORANGE_BARREL', 'SPORTS_BALL'),
+                                ('ORANGE_BARREL', 'ORANGE_BARREL'),
+                                ('BLUE_BARREL', 'BLUE_BARREL'),
+                                ('SPORTS_BALL', 'SPORTS_BALL')]:
+            with self.subTest(requested=requested, held=held):
+                self.setUp()
+                for name in ('ORANGE_BARREL', 'BLUE_BARREL', 'SPORTS_BALL'):
+                    self.ns[name] = name
+                vision = self.ns['robot'].vision
+                vision.get_data = lambda *args: [SimpleNamespace(exists=True, centerX=160, width=30)]
+                vision.has_any_barrel = lambda: held.endswith('BARREL')
+                vision.has_sports_ball = lambda: held == 'SPORTS_BALL'
+                vision.has_orange_barrel = lambda: held == 'ORANGE_BARREL'
+                vision.has_blue_barrel = lambda: held == 'BLUE_BARREL'
+                self.ns['robot'].move_at = lambda *args: self.calls.append(('move_at', *args))
+                result = self.dispatch(self.action('_vx_macro',
+                    ['collect', {'constant': requested}], 'macro'))
+                self.finish()
+                job = self.ns['_vx_action_status'](result['action']['id'])
+                if requested == held:
+                    self.assertEqual(job['state'], 'completed')
+                    self.assertEqual(job['value'], {'collected': True})
+                else:
+                    self.assertEqual(job['state'], 'failed')
+                    self.assertIn('deadline', job['error'])
+                    self.assertIsNone(job.get('value'))
+                self.assertTrue(job['stopped_confirmed'])
+
     def test_vision_dispatch_with_aim_micropython_string_semantics(self):
         # Live AIM core 1.22.0 rejects tuple suffixes, unlike desktop Python.
         class AimString(str):
