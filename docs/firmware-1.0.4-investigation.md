@@ -344,10 +344,20 @@ The developer-only comparison now waits for an actual friendly or raw prompt,
 then enters raw mode with Ctrl-A when necessary, without an interrupt fallback.
 The next run retained program 27/screen 19, read the original sleep value False,
 set/read back True, and began the 1200-second quiet interval at robot time
-119837 ms, 49% battery and stopped. Its outcome remains pending. Four simulated
+119837 ms, 49% battery and stopped. Four simulated
 console tests cover fragmented prompts through the first execution, an already
 raw console, a missing friendly prompt and a failed raw transition. Production
 sync is unchanged pending hardware acceptance and stop/recovery validation.
+
+This combined control completed 1200.014 quiet seconds with no foreground radio
+requests. The final live read retained marker 119836, advanced robot system time
+from 119837 to 1320275 ms, reported stopped and read the helper as True. Battery
+changed from 49% to 36%. Restoration of the original False setting and stopping
+the owned system REPL both confirmed. The local report is
+`aim104-repl-sleep-combination-0fc3604ffa3e4a0b8786031222e955ed.json`.
+This is the first complete mechanism control to pass. It does not yet establish
+ordinary CLI stop/display/camera recovery or two fresh-boot candidate acceptance
+runs; production startup remains unchanged while that integration is developed.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares source-derived controls:

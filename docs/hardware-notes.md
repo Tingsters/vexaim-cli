@@ -43,7 +43,14 @@ returned no final frame and failed after 466.485 host seconds with a closed
 Bluetooth object; a fresh scan found no robot. The subsequent short timing
 comparison showed 0–1 ms per batch of 30 cached sensor reads with either flag
 value. It restored `False` and closed normally, at 53% battery and stopped.
-The combined official built-in REPL plus SDK-setting control remains unmeasured.
+The first combined setup lost program 27 during ordinary interrupting raw entry
+and correctly stopped before calling the helper. Waiting for a prompt and using
+Ctrl-A without Ctrl-C retained program 27/screen 19. That combined control passed
+1200.014 quiet seconds: a final live read retained its marker, advanced system
+time from 119837 to 1320275 ms, reported stopped and read True. Original False
+restoration and stopping its own system REPL confirmed. Battery changed 49% to
+36%. This is mechanism evidence; normal CLI integration and two fresh-boot
+candidate passes are still pending.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)
