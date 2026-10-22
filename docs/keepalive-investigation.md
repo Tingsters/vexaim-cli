@@ -1,5 +1,9 @@
 # Bluetooth session keepalive
 
+For the firmware upgrade, Windows source evidence and trained computer cue,
+follow the [1.0.4 investigation](firmware-1.0.4-investigation.md). Its hardware
+acceptance is separate from the failed earlier controls below.
+
 ## Cause and scope
 
 An rc.5 controller-search session lost AIM6518 after recent motor and camera

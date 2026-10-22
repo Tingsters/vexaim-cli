@@ -71,8 +71,9 @@ requires stopped wheels and no calibration; it preserves heading and position.
 An ordinary camera photograph never activates the display.
 
 Reuse a session so emojis/drawings remain visible across agent turns. Stop/close
-ends the display program; after 60 seconds without traffic it returns to the
-menu. One-shot commands clean up when they finish. `exec` also activates display
+ends the display program, as does 60 seconds without traffic. The rc.7 power
+candidate may then show REPL Mode until session close. One-shot commands clean
+up when they finish. `exec` also activates display
 for scripts referring to `.screen`; prefer native screen commands for dynamic
 Python that does not contain that reference. No stored project or USB is needed.
 Use named emoji constants (HAPPY/LOOK_FORWARD), not numeric IDs: the observed

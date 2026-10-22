@@ -10,6 +10,8 @@ mod observation;
 mod repl;
 #[cfg(feature = "bluetooth")]
 mod session;
+#[cfg(feature = "bluetooth")]
+mod power;
 mod snap;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -649,3 +651,6 @@ fn main() {
 #[cfg(all(test, feature = "bluetooth"))]
 #[path = "../../../dev/aim-idle-rust.rs"]
 mod aim_idle_probe;
+#[cfg(all(test, feature = "bluetooth"))]
+#[path = "../../../dev/aim-lifecycle-rust.rs"]
+mod aim_lifecycle_probe;

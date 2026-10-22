@@ -47,12 +47,47 @@ Cached health reports successful poll counts, acknowledgment age and consecutive
 failures. Only the fixed read-only probe retries, up to three failures; student
 actions are never replayed. After an error, obtain live info before fresh motion.
 
+The rc.7 compatibility candidate also recognizes the observed AIM REV1 /
+`1.0.4.b0` profile. Its System Alive request is unchanged and still reports
+`prevents_sleep:false`; new-firmware endurance is not yet accepted. Older builds
+can disable their monitor or reject camera/display solely because a firmware
+revision is unfamiliar, even when Python works. Record startup/live `device_info`
+once after an update and use a documented compatible CLI/skill pair. Do not
+bypass an unknown-profile guard or downgrade firmware to silence it.
+
+On the observed 1.0.4 robot, the private `_sleep_disable` helper accepted `True`
+and read back `True`, but the link still disappeared around five minutes after
+boot despite acknowledged health checks. Do not use that private setting as a
+student sleep workaround or infer its effect from its name. See the CLI's
+firmware investigation for the separate developer controls and measured limits.
+
+The rc.7 integration candidate combines the existing system REPL with that SDK
+setting and enters its waiting prompt without Ctrl-C. That complete mechanism
+passed a 20-minute quiet control with final live state and cleanup. Normal CLI
+camera/display/stop recovery and two fresh-boot candidate runs are still pending;
+do not describe the integration as accepted solely from the mechanism control.
+
+On its exact supported profile, normal session startup prepares this automatically;
+students do not upload a project, navigate menus or call a private method. The
+LCD may show REPL Mode while connected. `keepalive.power` reports the separate
+experimental power lease. System Alive's `prevents_sleep:false` still describes
+the heartbeat alone. Cached active state does not prove live connectivity.
+The robot-side lease follows the 30-minute client-idle limit and restores the
+prior setting if renewals stop; cached status and background heartbeats do not
+renew it. Close restores the prior setting and stops only the owned system REPL.
+After an interrupted operation, obtain live info before any fresh movement.
+Unsupported profiles retain their earlier behavior; do not bypass the gate.
+
 If discovery fails, check robot power and proximity before retrying. Current
 binaries can sleep despite REPL activity, and a keepalive cannot recover an
 already powered-off robot or guarantee battery/radio health. Give a clear
 power-on cue. After a link failure close/start the session, obtain live
 status and confirm stopped state before a new movement. Never replay a movement
 whose outcome is uncertain. Cached status is not proof of a live connection.
+Brief link errors can recover without physical power-on. After a failure, make
+at most three bounded read-only recovery attempts before requesting physical
+help. Record discovery loss as unavailable connectivity unless power-off was
+independently observed; a visible REPL/emoji screen is not an endurance result.
 
 The session owns its connection; standalone commands will refuse to take it over.
 Use its ID or close it deliberately. A cancelled camera transfer requires a

@@ -1,5 +1,64 @@
 # Hardware evidence
 
+## Windows AIM 1.0.4 investigation (2026-10-21)
+
+AIM6518 now reports `1.0.4.b0` from GATT firmware/software revisions, VEXos and
+both CPUs. The unchanged rc.6 baseline disabled its monitor for that unfamiliar
+profile, then failed its live check after 420 silent seconds; discovery found no
+robot. Installed Windows VEXcode also lost its idle connection after about
+900 seconds from its last setup command despite continuous status notifications.
+The visible built-in REPL control likewise did not complete endurance. These are
+failed controls, not proof of a particular firmware power-management cause.
+
+An independent Bluetooth-only LCD read returned a complete 240x240 RGB565 frame;
+the decoded PNG visibly shows REPL Mode. No photo, log or extracted official app
+asset is published. The rc.7 candidate recognizes the exact new profile for
+existing health, camera and display operations, retaining `prevents_sleep:false`.
+Its first new-profile endurance run failed after 86.7 measured seconds, before
+camera/display checks. The monitor reached 124 acknowledged System Alive polls
+then three failures; live recovery and discovery found no robot. Enabling this
+known request on 1.0.4 is not a sleep fix. The new-profile display and two
+fresh-boot 20-minute acceptance runs remain pending. No wheels, kicker, firmware
+write or saved-project upload ran.
+A background waiting Thread subsequently lost its link after 162.343 seconds;
+the operator independently confirmed power-off. A standalone finite main-loop
+wait also failed to return its final frame, ending with a closed Bluetooth
+object error after 466.218 host seconds; discovery then found no robot. Local
+timeout and connection-handoff rejections are recorded separately as harness
+failures. Neither Python control is accepted as sleep prevention.
+A home-only Back plus System Alive control failed after one acknowledged input
+and three polls, then reconnected without physical power-on. The recovered
+session downloaded a native 640x480 JPEG in 10.875 seconds; local pixels show
+the controller and postcapture control was ready. Read-only inspection found
+a callable private `Robot._sleep_disable` helper. Its zero-argument query returns
+a Boolean; setting `True` returns `None` and reads back `True`. Nevertheless,
+the no-argument control failed after 166.922 seconds and the one-time setter
+control after 267.704 seconds, both around five minutes from boot. The latter
+acknowledged 132 health polls before three failures. The flag was subsequently
+shown to survive ordinary exec, live info and stop with the same Robot object.
+That one-time setter was not adopted as a standalone startup fix. A finite main-execution
+comparison with explicit readback/restoration is a separate developer control,
+not accepted sleep prevention. The finite main-with-helper comparison also
+returned no final frame and failed after 466.485 host seconds with a closed
+Bluetooth object; a fresh scan found no robot. The subsequent short timing
+comparison showed 0–1 ms per batch of 30 cached sensor reads with either flag
+value. It restored `False` and closed normally, at 53% battery and stopped.
+The first combined setup lost program 27 during ordinary interrupting raw entry
+and correctly stopped before calling the helper. Waiting for a prompt and using
+Ctrl-A without Ctrl-C retained program 27/screen 19. That combined control passed
+1200.014 quiet seconds: a final live read retained its marker, advanced system
+time from 119837 to 1320275 ms, reported stopped and read True. Original False
+restoration and stopping its own system REPL confirmed. Battery changed 49% to
+36%. This is mechanism evidence; normal CLI integration and two fresh-boot
+candidate passes are still pending.
+
+The integration candidate now automatically prepares that context on the exact
+complete 1.0.4 profile and uses a finite robot-side power lease tied to client
+inactivity. Watchdog execution, normal camera/display/stop recovery and two
+clean-boot 20-minute candidate runs remain hardware gates. The standalone
+mechanism control does not certify the integration.
+See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
+
 ## Session keepalive candidate (2026-10-21)
 
 Two stationary checks exposed why a successful connection is insufficient proof

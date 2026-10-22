@@ -76,13 +76,14 @@ where
     pub fn active(&self) -> bool {
         self.active
     }
+    pub fn lease_expired(&self) -> bool {
+        self.active && Instant::now() >= self.idle_deadline
+    }
     /// Legacy System Alive is independent of the remote program/LCD lifecycle.
     /// Only this fixed read-only probe may retry; student commands never replay.
     pub async fn enable_keepalive(&mut self, identity: &Value) -> Result<bool, Fail> {
         if !self.inner.connection_type().is_bluetooth()
-            || identity["model"] != "AIM"
-            || identity["hardware"] != "REV1"
-            || identity["firmware"] != "1.0.0.b0"
+            || !crate::bluetooth::known_aim_profile(identity)
         {
             return Ok(false);
         }
@@ -134,12 +135,9 @@ where
         if !self.inner.connection_type().is_bluetooth() {
             return Ok(());
         }
-        if identity["model"] != "AIM"
-            || identity["hardware"] != "REV1"
-            || identity["firmware"] != "1.0.0.b0"
-        {
+        if !crate::bluetooth::known_aim_profile(identity) {
             return Err(Fail::Session(
-                "Remote display is verified only for AIM REV1 / BLE firmware 1.0.0.b0".into(),
+                "Remote display supports only AIM REV1 / BLE firmware 1.0.0.b0 or 1.0.4.b0".into(),
             ));
         }
         self.touch();
@@ -379,25 +377,30 @@ mod tests {
     }
     #[tokio::test]
     async fn system_alive_keeps_session_without_display_program_or_user_code() {
-        let mut c = DisplayConnection::new(Radio {
-            auto_alive: true,
-            ..Radio::default()
-        });
-        assert!(c.enable_keepalive(&identity()).await.unwrap());
-        assert!(c.keepalive);
-        assert!(!c.active());
-        assert_eq!(alive_count(&c), 1);
-        c.idle().await.unwrap();
-        assert_eq!(alive_count(&c), 1);
-        c.last_alive = Instant::now() - ALIVE_PERIOD;
-        c.idle().await.unwrap();
-        assert_eq!(alive_count(&c), 2);
-        assert_eq!(count(&c, 0x57, 0x7f), 0);
-        assert_eq!(count(&c, 0x57, 0x7e), 0);
-        c.end_keepalive();
-        c.last_alive = Instant::now() - ALIVE_PERIOD;
-        c.idle().await.unwrap();
-        assert_eq!(alive_count(&c), 2);
+        for revision in ["1.0.0.b0", "1.0.4.b0"] {
+            let mut c = DisplayConnection::new(Radio {
+                auto_alive: true,
+                ..Radio::default()
+            });
+            let mut profile = identity();
+            profile["firmware"] = json!(revision);
+            assert!(c.enable_keepalive(&profile).await.unwrap());
+            assert_eq!(c.keepalive_status()["prevents_sleep"], false);
+            assert!(c.keepalive);
+            assert!(!c.active());
+            assert_eq!(alive_count(&c), 1);
+            c.idle().await.unwrap();
+            assert_eq!(alive_count(&c), 1);
+            c.last_alive = Instant::now() - ALIVE_PERIOD;
+            c.idle().await.unwrap();
+            assert_eq!(alive_count(&c), 2);
+            assert_eq!(count(&c, 0x57, 0x7f), 0);
+            assert_eq!(count(&c, 0x57, 0x7e), 0);
+            c.end_keepalive();
+            c.last_alive = Instant::now() - ALIVE_PERIOD;
+            c.idle().await.unwrap();
+            assert_eq!(alive_count(&c), 2);
+        }
     }
     #[tokio::test]
     async fn display_lease_and_stop_do_not_end_session_liveness() {

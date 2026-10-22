@@ -28,6 +28,16 @@ sensor/motor traffic or displaying a face prevents sleep. Students should use a
 published binary/skill together. Close at actual wrap-up; 30 minutes without
 client work also closes the owner. See the session reference for evidence.
 
+The rc.7 candidate adds a separate firmware-gated power lease for AIM REV1 with
+all reported revisions `1.0.4.b0`. It owns the existing system REPL without
+uploading a project; the LCD may show REPL Mode. Its mechanism passed a 20-minute
+quiet control, while normal CLI acceptance is still pending. Use the matching
+candidate and read the Bluetooth reference; do not set private SDK flags yourself.
+
+When the user asks for unattended work, arrange physical setup, pairing and a
+rehearsed audible computer cue up front. Do not assume they watch the console.
+Read `references/unattended-work.md`; a disconnected robot cannot sound its cue.
+
 For USB, run `vexaim doctor` initially and after a connection failure. A successful
 check reports `verdict: ready` and battery. For Bluetooth use its transport/name
 options or the existing session; a USB diagnostic cannot diagnose a wireless link.
@@ -50,7 +60,8 @@ calibration before ordinary movement.
 For faces, messages and drawings over Bluetooth, use 0.3.0-rc.5 or newer and a
 reusable session. Screen writes activate the program display automatically;
 named emoji constants match the firmware. Stop/close or 60 seconds without
-activity returns to the menu. See the device-command reference for display limits.
+activity ends the drawing. The rc.7 power candidate may then show REPL Mode
+until the session closes. See the device-command reference for display limits.
 
 Announce movement and establish a clear, level area with a person near the power
 switch. Preserve readiness within the current interaction rather than asking
@@ -125,6 +136,7 @@ robot. Actual coverage: https://github.com/Tingsters/vexaim-cli/blob/main/docs/h
 - `references/examples.md`: short Python examples for creative compositions.
 - `references/device-commands.md`: VEX-style native command catalogue and actions.
 - `references/agent-vision.md`: capture, inspect, decide, act and observe again.
+- `references/unattended-work.md`: front-loaded setup and audible intervention.
 
 For Linux USB only, `linux/install-udev.sh` avoids ModemManager interference.
 Ask before its administrator action and explicitly cue a USB reconnect afterward.
