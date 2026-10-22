@@ -88,7 +88,7 @@ class _VaPowerLease:
                 'remaining_ms': max(0, self.ttl_ms - self.age(self.renewed_ms))}
 
 
-def _va_power_acquire(token, ttl_ms, restore_to=None):
+def _va_power_acquire(token, ttl_ms, restore_to=None, replace_worker=False):
     global _va_power_lease
     if ttl_ms <= 0 or ttl_ms > 1800000:
         raise ValueError('Power lease must fit the client idle deadline')
@@ -96,8 +96,12 @@ def _va_power_acquire(token, ttl_ms, restore_to=None):
     if old is not None and old.active:
         if old.token != token:
             raise RuntimeError('Another power lease still owns this REPL')
-        if old.age(old.last_tick_ms) <= 3000:
+        if restore_to is None:
+            restore_to = old.previous
+        if not replace_worker and old.age(old.last_tick_ms) <= 3000:
             return old.renew(token, ttl_ms)
-        old.release(token)
+        # Transfer ownership without briefly enabling sleep. The old worker
+        # must not restore the setting after the replacement has taken over.
+        old.active = False
     _va_power_lease = _VaPowerLease(token, ttl_ms, restore_to)
     return _va_power_lease.start()

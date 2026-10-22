@@ -155,6 +155,21 @@ class LeaseTests(unittest.TestCase):
         self.assertIsNot(old, self.scope["_va_power_lease"])
         self.assertTrue(self.flag)
 
+    def test_context_handoff_replaces_the_worker_without_a_sleep_gap(self):
+        self.setup_sdk()
+        self.acquire("owner", 1800000)
+        old = self.scope["_va_power_lease"]
+        self.acquire("owner", 1800000, None, True)
+        replacement = self.scope["_va_power_lease"]
+        self.assertIsNot(old, replacement)
+        self.assertFalse(old.active)
+        self.assertFalse(replacement.previous)
+        self.assertEqual(self.sets, [True, True])
+        old.release("owner")
+        self.assertTrue(self.flag)
+        replacement.release("owner")
+        self.assertFalse(self.flag)
+
     def test_unexpected_worker_exit_restores_the_original_flag(self):
         self.setup_sdk()
         self.acquire("owner", 1800000)

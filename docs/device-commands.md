@@ -23,7 +23,8 @@ switches menus or firmware modes to obtain an image.
 The 0.3.0-rc.5 candidate fixes hidden Bluetooth display output on AIM REV1 / BLE
 1.0.0.b0. Screen writes activate the program display and maintain its required
 keepalive through the existing owner. Reuse a session; no stored project or USB
-is needed. Stop/close or 60 seconds without traffic returns to the menu. Native
+is needed. Stop/close or 60 seconds without traffic ends the drawing. The rc.7
+power candidate may then show REPL Mode until session close. Native
 camera capture does not activate this display mode. See the
 [investigation and protocol evidence](display-investigation.md).
 

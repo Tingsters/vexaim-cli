@@ -151,7 +151,7 @@ impl Robot {
             }
         };
         let device_info = robot.identity.clone();
-        if let Err(error) = robot.power.acquire(&mut robot.repl, true).await {
+        if let Err(error) = robot.power.acquire(&mut robot.repl, true, false).await {
             robot.cleanup_open().await;
             return Err(error);
         }
@@ -213,7 +213,7 @@ impl Robot {
             }
         }
         self.power
-            .acquire(&mut self.repl, restarted || reinstall)
+            .acquire(&mut self.repl, restarted || reinstall, restarted)
             .await
     }
     async fn native(&mut self, words: &[String]) -> Result<Value, Fail> {
@@ -268,9 +268,9 @@ impl Robot {
         checked(&result)?;
         if result.stdout.trim() == "__VEXAIM_REINITIALIZE__" {
             self.power.request_arm();
-            self.power.arm(&mut self.repl).await?;
+            let restarted = self.power.arm(&mut self.repl).await?;
             self.prepare().await?;
-            self.power.acquire(&mut self.repl, true).await?;
+            self.power.acquire(&mut self.repl, true, restarted).await?;
             result = self
                 .repl
                 .exec(
@@ -304,7 +304,7 @@ impl Robot {
             ));
         }
         self.repl.connection_mut().enable(&self.identity).await?;
-        self.power.acquire(&mut self.repl, true).await
+        self.power.acquire(&mut self.repl, true, true).await
     }
 }
 

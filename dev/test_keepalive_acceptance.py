@@ -18,6 +18,32 @@ spec.loader.exec_module(probe)
 
 
 class AcceptanceTests(unittest.TestCase):
+    def test_power_evidence_requires_real_flag_and_watchdog_progress(self):
+        valid = {
+            "active": True,
+            "sleep_disabled": True,
+            "expired": False,
+            "watchdog_age_ms": 0,
+            "watchdog_ticks": 4300,
+            "same_lease": True,
+        }
+        probe.validate_power_evidence(valid, 100, 420)
+        for change in (
+            {"active": False},
+            {"sleep_disabled": False},
+            {"expired": True},
+            {"watchdog_age_ms": 4000},
+            {"same_lease": False},
+            {"watchdog_ticks": 100},
+            {"watchdog_ticks": None},
+        ):
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                probe.validate_power_evidence({**valid, **change}, 100, 420)
+
+    def test_missing_power_proof_cannot_be_accepted(self):
+        with self.assertRaises(RuntimeError):
+            probe.validate_power_evidence({})
+
     def run_probe(self, root, **options):
         tool = root / "vexaim"
         tool.touch()

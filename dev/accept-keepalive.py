@@ -20,6 +20,26 @@ class Incomplete(RuntimeError):
     """The requested interval was not completed; this is never a pass."""
 
 
+def validate_power_evidence(value, previous_ticks=None, seconds=0):
+    if (
+        value.get("active") is not True
+        or value.get("sleep_disabled") is not True
+        or value.get("expired") is not False
+        or not isinstance(value.get("watchdog_ticks"), int)
+        or value["watchdog_ticks"] <= 0
+        or not isinstance(value.get("watchdog_age_ms"), (int, float))
+        or not 0 <= value["watchdog_age_ms"] <= 3000
+    ):
+        raise RuntimeError("Robot power lease/watchdog is not live and confirmed")
+    if previous_ticks is not None and (
+        value.get("same_lease") is not True
+        or value["watchdog_ticks"] - previous_ticks < max(1, int(seconds / 2))
+    ):
+        raise RuntimeError(
+            "Quiet interval replaced its lease or watchdog did not advance"
+        )
+
+
 def main(args):
     tool = str(args.tool.resolve(strict=True))
     output = args.output_dir.resolve()
@@ -161,6 +181,24 @@ def main(args):
                 "Background keepalive acknowledgment count did not advance"
             )
 
+    def power_checkpoint(reset=False):
+        source = "_va_endurance_power_ref = _va_power_lease\n" if reset else ""
+        source += "print(_va_json.dumps({'same_lease':_va_power_lease is _va_endurance_power_ref,'active':_va_power_lease.active,'expired':_va_power_lease.expired,'sleep_disabled':_va_power_lease.control(),'watchdog_ticks':_va_power_lease.ticks,'watchdog_age_ms':_va_power_lease.age(_va_power_lease.last_tick_ms)}))\n"
+        result = call(["exec", "--no-preamble", source])
+        value = json.loads(result.get("stdout", ""))
+        validate_power_evidence(value)
+        report.setdefault("power_checks", []).append(value)
+        save()
+        return value
+
+    def observed_quiet(seconds):
+        required = getattr(args, "require_power_lease", False)
+        before = power_checkpoint(reset=True) if required and seconds else None
+        quiet(seconds)
+        if before:
+            after = power_checkpoint()
+            validate_power_evidence(after, before["watchdog_ticks"], seconds)
+
     def camera():
         observation = call(
             ["camera", "observe", "--output-dir", str(output / "captures")]
@@ -191,6 +229,45 @@ def main(args):
                 "keepalive",
             )
         }
+        if getattr(args, "require_power_lease", False):
+            power = cached.get("keepalive", {}).get("power", {})
+            if power.get("supported") is not True or power.get("active") is not True:
+                raise RuntimeError(
+                    "Candidate must report its supported active power lease"
+                )
+        if getattr(args, "probe_watchdog_expiry", False):
+            if not getattr(args, "require_power_lease", False):
+                raise ValueError("Watchdog expiry probe requires power lease checks")
+            phase("watchdog_expiry")
+            call(
+                [
+                    "exec",
+                    "--no-preamble",
+                    "_va_expiry_ref = _va_power_lease\n_va_expiry_ref.ttl_ms = 1500\n_va_expiry_ref.renewed_ms = int(_va_expiry_ref.now())\nprint('expiry armed')",
+                ]
+            )
+            # No foreground command renews or repairs the lease during this gap.
+            time.sleep(3.5)
+            call(["info"])
+            result = call(
+                [
+                    "exec",
+                    "--no-preamble",
+                    "print(_va_json.dumps({'expired':_va_expiry_ref.expired,'released':_va_expiry_ref.released,'old_active':_va_expiry_ref.active,'new_active':_va_power_lease.active,'sleep_disabled':_va_power_lease.control()}))",
+                ]
+            )
+            evidence = json.loads(result.get("stdout", ""))
+            report["watchdog_expiry"] = evidence
+            save()
+            if evidence != {
+                "expired": True,
+                "released": True,
+                "old_active": False,
+                "new_active": True,
+                "sleep_disabled": True,
+            }:
+                raise RuntimeError("Robot-side watchdog expiry was not established")
+            phase("preflight_after_expiry")
         call(
             [
                 "exec",
@@ -202,17 +279,29 @@ def main(args):
             call(["screen", "show-emoji", "HAPPY"])
         sample()
         phase("quiet_before")
-        quiet(args.quiet_seconds)
+        observed_quiet(args.quiet_seconds)
         if args.quiet_seconds:
             sample()
         if args.after_stop_quiet:
             phase("camera_display_stop")
             camera()
             call(["screen", "show-emoji", "HAPPY"])
+            if getattr(args, "capture_lcd", False):
+                lcd = call(
+                    [
+                        "screen",
+                        "screenshot",
+                        str(output / ("lcd-happy-" + nonce + ".png")),
+                    ]
+                )
+                if lcd.get("control_ready") is not True:
+                    raise RuntimeError("Control not ready after LCD capture")
+                report["lcd_path"] = lcd["path"]
+                save()
             call(["stop"])
             sample()
             phase("quiet_after_stop")
-            quiet(args.after_stop_quiet)
+            observed_quiet(args.after_stop_quiet)
             sample()
             camera()
         phase("functional_interval")
@@ -288,6 +377,9 @@ if __name__ == "__main__":
         "--interval", type=int, default=15, choices=range(1, 31), metavar="1..30"
     )
     parser.add_argument("--display", action="store_true")
+    parser.add_argument("--require-power-lease", action="store_true")
+    parser.add_argument("--probe-watchdog-expiry", action="store_true")
+    parser.add_argument("--capture-lcd", action="store_true")
     parser.add_argument(
         "--quiet-seconds", type=int, default=0, choices=range(901), metavar="0..900"
     )

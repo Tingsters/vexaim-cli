@@ -216,7 +216,12 @@ impl Power {
         Ok(true)
     }
 
-    pub async fn acquire(&mut self, repl: &mut Console, install: bool) -> Result<(), Fail> {
+    pub async fn acquire(
+        &mut self,
+        repl: &mut Console,
+        install: bool,
+        replace_worker: bool,
+    ) -> Result<(), Fail> {
         if !self.supported {
             return Ok(());
         }
@@ -238,8 +243,9 @@ impl Power {
         };
         let code = if install || !self.attempted_lease {
             format!(
-                "{RUNTIME}\nprint(_va_json.dumps(_va_power_acquire('{}',{remaining},{restore})))\n",
-                self.token
+                "{RUNTIME}\nprint(_va_json.dumps(_va_power_acquire('{}',{remaining},{restore},{})))\n",
+                self.token,
+                if replace_worker { "True" } else { "False" }
             )
         } else {
             format!(
