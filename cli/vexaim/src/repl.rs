@@ -386,13 +386,26 @@ fn frame_end(b: &[u8]) -> Option<(usize, usize)> {
     Some((first, second))
 }
 
+/// Drop the raw-REPL banner ("raw REPL; CTRL-B to exit\r\n>") that can precede a reply when
+/// raw mode was entered by something other than this client (for example display activation).
+fn skip_banner(b: &[u8]) -> &[u8] {
+    if b.starts_with(b"raw REPL") {
+        if let Some(i) = b.windows(3).position(|w| w == b">OK") {
+            return &b[i + 1..];
+        }
+    }
+    b
+}
+
 fn complete_raw_frame(b: &[u8]) -> bool {
+    let b = skip_banner(b);
     // BLE can deliver the final '>' in its own notification. Consume it before
     // the next command, otherwise that delayed prompt corrupts the next 'OK'.
     b.starts_with(b"OK") && frame_end(b).is_some_and(|(_, end)| b.get(end + 1) == Some(&b'>'))
 }
 
 fn parse_frame(b: &[u8]) -> (String, String) {
+    let b = skip_banner(b);
     let (a, z) = frame_end(b).unwrap_or((b.len(), b.len()));
     let out = &b[2.min(b.len())..a]; // skip "OK"
     let err = if a + 1 <= z { &b[a + 1..z] } else { &b[0..0] };
@@ -405,6 +418,18 @@ fn parse_frame(b: &[u8]) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn banner_before_reply_is_skipped() {
+        let reply = b"raw REPL; CTRL-B to exit\r\n>OK\x04Traceback\r\nNameError\x04>";
+        assert!(complete_raw_frame(reply));
+        let (out, err) = parse_frame(reply);
+        assert_eq!(out, "");
+        assert!(err.starts_with("Traceback"));
+        let plain = b"OK42\r\n\x04\x04>";
+        assert!(complete_raw_frame(plain));
+        assert_eq!(parse_frame(plain).0, "42\r\n");
+    }
 
     #[test]
     fn preamble_reimports_constants_before_creating_robot() {
