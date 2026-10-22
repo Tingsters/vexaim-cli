@@ -19,6 +19,7 @@ pub struct Robot {
     identity: Value,
     needs_check: bool,
     camera_usable: bool,
+    power: crate::power::Power,
 }
 
 fn checked(result: &crate::repl::ExecResult) -> Result<(), Fail> {
@@ -58,6 +59,7 @@ impl Robot {
                 identity: json!({"transport":"usb","system_port":port}),
                 needs_check: false,
                 camera_usable: true,
+                power: crate::power::Power::new(&Value::Null),
             };
             robot.prepare().await?;
             let details = robot.state().await?;
@@ -98,10 +100,15 @@ impl Robot {
         let prepared = Instant::now();
         let mut robot = Self {
             repl: Repl::from_connection(DisplayConnection::new(GenericConnection::Bluetooth(conn))),
+            power: crate::power::Power::new(&identity),
             identity,
             needs_check: false,
             camera_usable: true,
         };
+        if let Err(error) = robot.power.arm(&mut robot.repl).await {
+            robot.cleanup_open().await;
+            return Err(error);
+        }
         let setup = robot
             .repl
             .exec(
@@ -120,18 +127,18 @@ impl Robot {
         let setup = match setup {
             Ok(result) => result,
             Err(error) => {
-                robot.close().await;
+                robot.cleanup_open().await;
                 return Err(error);
             }
         };
         let state: Value = match serde_json::from_str(setup.stdout.trim()) {
             Ok(state) => state,
             Err(error) => {
-                robot.close().await;
+                robot.cleanup_open().await;
                 return Err(failure(error));
             }
         };
-        let keepalive = match robot
+        let _keepalive = match robot
             .repl
             .connection_mut()
             .enable_keepalive(&robot.identity)
@@ -139,14 +146,19 @@ impl Robot {
         {
             Ok(active) => active,
             Err(error) => {
-                robot.close().await;
+                robot.cleanup_open().await;
                 return Err(error);
             }
         };
         let device_info = robot.identity.clone();
+        if let Err(error) = robot.power.acquire(&mut robot.repl, true).await {
+            robot.cleanup_open().await;
+            return Err(error);
+        }
+        let health = robot.health();
         Ok((
             robot,
-            json!({"transport":"bluetooth","id":id,"device_info":device_info,"robot_state":state,"keepalive":{"active":keepalive,"period_ms":2000,"method":"system-alive","prevents_sleep":false},"timings":{"discovery_ms":discovery_ms,
+            json!({"transport":"bluetooth","id":id,"device_info":device_info,"robot_state":state,"keepalive":health,"timings":{"discovery_ms":discovery_ms,
             "connection_ms":connection_ms,"preparation_ms":prepared.elapsed().as_millis() as u64,
             "startup_ms":all.elapsed().as_millis() as u64}}),
         ))
@@ -165,6 +177,44 @@ impl Robot {
             )
             .await?;
         checked(&result)
+    }
+    async fn cleanup_open(&mut self) {
+        // Startup failure must not interrupt an unowned student program.
+        if self.power.check_role(&mut self.repl).await.is_ok() {
+            let _ = self.power.release(&mut self.repl).await;
+        }
+        let _ = self.power.stop_owned(&mut self.repl).await;
+        self.disconnect().await;
+    }
+    async fn disconnect(&mut self) {
+        self.repl.close().await;
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
+            let _ = conn.close().await;
+        }
+    }
+    fn health(&self) -> Value {
+        let mut health = self.repl.connection().keepalive_status();
+        health["power"] = self.power.status();
+        health
+    }
+    async fn ensure_power(&mut self, reinstall: bool) -> Result<(), Fail> {
+        let restarted = self.power.arm(&mut self.repl).await?;
+        if restarted {
+            let check = self
+                .repl
+                .exec(
+                    "print('_va_state' in globals() and '_vx_runtime_version' in globals())\n",
+                    Duration::from_secs(5),
+                )
+                .await?;
+            checked(&check)?;
+            if check.stdout.trim() != "True" {
+                self.prepare().await?;
+            }
+        }
+        self.power
+            .acquire(&mut self.repl, restarted || reinstall)
+            .await
     }
     async fn native(&mut self, words: &[String]) -> Result<Value, Fail> {
         let a = crate::device::parse(words, true)?;
@@ -217,7 +267,10 @@ impl Robot {
         let mut result = self.repl.exec(query, Duration::from_secs(5)).await?;
         checked(&result)?;
         if result.stdout.trim() == "__VEXAIM_REINITIALIZE__" {
+            self.power.request_arm();
+            self.power.arm(&mut self.repl).await?;
             self.prepare().await?;
+            self.power.acquire(&mut self.repl, true).await?;
             result = self
                 .repl
                 .exec(
@@ -250,7 +303,8 @@ impl Robot {
                 "Finish movement/calibration before the first display program; nothing was replayed",
             ));
         }
-        self.repl.connection_mut().enable(&self.identity).await
+        self.repl.connection_mut().enable(&self.identity).await?;
+        self.power.acquire(&mut self.repl, true).await
     }
 }
 
@@ -266,15 +320,25 @@ impl Backend for Robot {
                 "Bluetooth link is down; robot may be asleep. Close/start the session after checking power. No action was sent or replayed.",
             ));
         }
+        self.power.touch(received);
+        if !self.repl.connection().active() {
+            if let Err(error) = self.power.check_role(&mut self.repl).await {
+                self.power.suspend();
+                self.needs_check = true;
+                return Err(error);
+            }
+        }
         if matches!(request, Request::Info | Request::Doctor) {
+            self.power.resume();
             let mut state = self.state().await?;
+            self.ensure_power(true).await?;
             // An explicit live read can re-establish failed read-only liveness;
             // background failures never restart or replay a student action.
             self.repl
                 .connection_mut()
                 .enable_keepalive(&self.identity)
                 .await?;
-            state["keepalive"] = self.repl.connection().keepalive_status();
+            state["keepalive"] = self.health();
             if matches!(request, Request::Doctor) {
                 state["verdict"] = json!("ready");
             }
@@ -285,6 +349,7 @@ impl Backend for Robot {
                 "Previous operation was interrupted or uncertain. Read info to verify the robot is stopped before issuing a fresh action. No movement was replayed.",
             ));
         }
+        self.ensure_power(false).await?;
         if let Request::Screenshot { output } = request {
             if !self.camera_usable {
                 return Err(failure(
@@ -540,6 +605,7 @@ impl Backend for Robot {
     fn interrupted(&mut self, request: &Request) {
         self.repl.invalidate();
         self.needs_check = true;
+        self.power.request_arm();
         if matches!(
             request,
             Request::Snap { .. } | Request::Observe { .. } | Request::Screenshot { .. }
@@ -579,23 +645,69 @@ impl Backend for Robot {
                 .await
                 .map_err(failure)?;
         }
+        self.power.request_arm();
         Ok(json!({"ok":true,"stopped":true}))
     }
 
     async fn close(&mut self) {
         self.repl.connection_mut().end_keepalive();
         let _ = self.halt().await;
-        self.repl.close().await;
-        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
-            let _ = conn.close().await;
+        if let Err(error) = self.power.release(&mut self.repl).await {
+            eprintln!("Power lease cleanup was not confirmed: {error}");
         }
+        let _ = self.power.stop_owned(&mut self.repl).await;
+        self.disconnect().await;
     }
     async fn idle(&mut self) -> Result<Option<Value>, Fail> {
+        let display_was_active = self.repl.connection().active();
+        if self.repl.connection().lease_expired() {
+            self.power.request_arm();
+        }
         if let Err(error) = self.repl.connection_mut().idle().await {
             self.needs_check = true;
             self.repl.invalidate();
+            self.power.request_arm();
+            self.power.suspend();
             return Err(failure(error));
         }
-        Ok(Some(self.repl.connection().keepalive_status()))
+        if display_was_active && !self.repl.connection().active() {
+            self.power.request_arm();
+            // Begin the write phase on the next tick so the actor can defer
+            // ordinary clients before borrowing this mutating future.
+            return Ok(Some(self.health()));
+        }
+        if self.power.background_due() {
+            let repair = async {
+                if !self.repl.is_raw() {
+                    return Err(failure(
+                        "Live info is required before power-context recovery",
+                    ));
+                }
+                self.power.check_role(&mut self.repl).await?;
+                let state = self
+                    .repl
+                    .exec("print(robot.is_stopped())\n", Duration::from_secs(5))
+                    .await?;
+                checked(&state)?;
+                if state.stdout.trim() == "True" {
+                    self.ensure_power(true).await?;
+                }
+                Ok::<_, Fail>(())
+            }
+            .await;
+            if let Err(error) = repair {
+                self.power.suspend();
+                self.needs_check = true;
+                return Err(error);
+            }
+        }
+        Ok(Some(self.health()))
+    }
+
+    fn client_activity(&mut self, received: Instant) {
+        self.power.touch(received);
+    }
+    fn idle_is_read_only(&self) -> bool {
+        !self.power.repair_pending() && !self.repl.connection().lease_expired()
     }
 }

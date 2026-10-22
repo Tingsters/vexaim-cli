@@ -26,6 +26,8 @@ pub enum Fail {
     Io(String),
     Bluetooth(String),
     Session(String),
+    #[cfg(feature = "bluetooth")]
+    ProgramOwned(String),
 }
 
 impl std::fmt::Display for Fail {
@@ -60,6 +62,8 @@ impl std::fmt::Display for Fail {
             Fail::Io(e) => write!(f, "robot I/O error: {e}"),
             Fail::Bluetooth(e) => write!(f, "Bluetooth: {e}"),
             Fail::Session(e) => write!(f, "Session: {e}"),
+            #[cfg(feature = "bluetooth")]
+            Fail::ProgramOwned(e) => write!(f, "{e}"),
         }
     }
 }
@@ -254,23 +258,33 @@ where
         Err(Fail::NotRepl(format!("got {last:?}")))
     }
 
-    /// Developer lifecycle control: require an already waiting system REPL,
-    /// then enter raw mode without sending a program-ending interrupt.
-    #[cfg(all(test, feature = "bluetooth"))]
+    /// Require an already waiting system REPL, then enter raw mode without a
+    /// program-ending interrupt. The caller must verify native program state.
+    #[cfg(feature = "bluetooth")]
     pub async fn sync_waiting_without_interrupt(&mut self) -> Result<(), Fail> {
-        let (prompt, ready) = self.read_until(
-            Instant::now() + Duration::from_secs(5),
-            |b| b.ends_with(b">>> ") || ends_raw_prompt(b),
-        ).await?;
+        self.raw = false;
+        // Ctrl-B refreshes a waiting friendly prompt or leaves waiting raw mode;
+        // it does not soft-reset Python. This also works after a warm reattach,
+        // when the previous prompt was consumed by the prior connection.
+        self.write_all(&[CTRL_B]).await?;
+        let (_, ready) = self
+            .read_until(Instant::now() + Duration::from_secs(5), |b| {
+                b.ends_with(b">>> ")
+            })
+            .await?;
         if !ready {
-            return Err(Fail::NotRepl("Built-in REPL waiting prompt was not observed; no interrupt sent".into()));
+            return Err(Fail::NotRepl(
+                "Built-in REPL waiting prompt was not observed; no interrupt sent".into(),
+            ));
         }
-        if !ends_raw_prompt(&prompt) {
-            self.write_all(&[CTRL_A]).await?;
-            let (_, raw) = self.read_until(Instant::now() + Duration::from_secs(3), ends_raw_prompt).await?;
-            if !raw {
-                return Err(Fail::NotRepl("Built-in REPL did not enter raw mode; no interrupt sent".into()));
-            }
+        self.write_all(&[CTRL_A]).await?;
+        let (_, raw) = self
+            .read_until(Instant::now() + Duration::from_secs(3), ends_raw_prompt)
+            .await?;
+        if !raw {
+            return Err(Fail::NotRepl(
+                "Built-in REPL did not enter raw mode; no interrupt sent".into(),
+            ));
         }
         self.raw = true;
         Ok(())
@@ -328,6 +342,10 @@ where
     #[cfg(feature = "bluetooth")]
     pub fn connection(&self) -> &C {
         &self.conn
+    }
+    #[cfg(feature = "bluetooth")]
+    pub fn is_raw(&self) -> bool {
+        self.raw
     }
 
     /// A cancelled transaction may have left Python running or a partial prompt.
@@ -400,10 +418,13 @@ mod tests {
             incoming: VecDeque<Vec<u8>>,
             writes: Vec<Vec<u8>>,
             raw_reply: bool,
+            friendly_reply: bool,
         }
         impl Connection for Console {
             type Error = GenericError;
-            fn connection_type(&self) -> ConnectionType { ConnectionType::Bluetooth }
+            fn connection_type(&self) -> ConnectionType {
+                ConnectionType::Bluetooth
+            }
             async fn send(&mut self, _: impl CdcCommand) -> Result<(), Self::Error> {
                 panic!("Console entry must not send an admin/program command")
             }
@@ -420,8 +441,12 @@ mod tests {
             }
             async fn write_user(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
                 self.writes.push(bytes.to_vec());
+                if bytes == [CTRL_B] && self.friendly_reply {
+                    self.incoming.push_back(b"MicroPython\r\n>>> ".to_vec());
+                }
                 if bytes == [CTRL_A] && self.raw_reply {
-                    self.incoming.push_back(b"raw REPL; CTRL-B to exit\r\n".to_vec());
+                    self.incoming
+                        .push_back(b"raw REPL; CTRL-B to exit\r\n".to_vec());
                     self.incoming.push_back(b">".to_vec());
                 }
                 if bytes == [CTRL_D] {
@@ -430,46 +455,56 @@ mod tests {
                 Ok(bytes.len())
             }
         }
-        fn console(chunks: &[&[u8]], raw_reply: bool) -> Repl<Console> {
+        fn console(chunks: &[&[u8]], friendly_reply: bool, raw_reply: bool) -> Repl<Console> {
             Repl::from_connection(Console {
                 incoming: chunks.iter().map(|b| b.to_vec()).collect(),
-                writes: Vec::new(), raw_reply,
+                writes: Vec::new(),
+                raw_reply,
+                friendly_reply,
             })
         }
 
         #[tokio::test]
         async fn waiting_entry_preserves_console_through_the_first_execution() {
-            let mut repl = console(&[b"MicroPython\r\n>", b">", b"> "], true);
+            let mut repl = console(&[b"MicroPython\r\n>", b">", b"> "], true, true);
             repl.sync_waiting_without_interrupt().await.unwrap();
             let result = repl.exec("print(1)", Duration::from_secs(1)).await.unwrap();
             assert_eq!(result.stdout.trim(), "1");
             assert!(result.stderr.is_empty());
-            assert_eq!(repl.conn.writes, [vec![CTRL_A], b"print(1)".to_vec(), vec![CTRL_D]]);
+            assert_eq!(
+                repl.conn.writes,
+                [
+                    vec![CTRL_B],
+                    vec![CTRL_A],
+                    b"print(1)".to_vec(),
+                    vec![CTRL_D]
+                ]
+            );
             assert!(!repl.conn.writes.iter().flatten().any(|b| *b == CTRL_C));
         }
 
         #[tokio::test]
-        async fn already_raw_waiting_entry_sends_nothing() {
-            let mut repl = console(&[b"raw REPL; CTRL-B to exit\r\n>"], false);
+        async fn warm_raw_console_is_reprompted_without_interrupt() {
+            let mut repl = console(&[b"raw REPL; CTRL-B to exit\r\n>"], true, true);
             repl.sync_waiting_without_interrupt().await.unwrap();
             assert!(repl.raw);
-            assert!(repl.conn.writes.is_empty());
+            assert_eq!(repl.conn.writes, [vec![CTRL_B], vec![CTRL_A]]);
         }
 
         #[tokio::test]
         async fn missing_waiting_prompt_never_sends_a_program_interrupt() {
-            let mut repl = console(&[b"program output without a prompt"], true);
+            let mut repl = console(&[b"program output without a prompt"], false, true);
             assert!(repl.sync_waiting_without_interrupt().await.is_err());
             assert!(!repl.raw);
-            assert!(repl.conn.writes.is_empty());
+            assert_eq!(repl.conn.writes, [vec![CTRL_B]]);
         }
 
         #[tokio::test]
         async fn failed_raw_entry_never_falls_back_to_a_program_interrupt() {
-            let mut repl = console(&[b">>> "], false);
+            let mut repl = console(&[b">>> "], true, false);
             assert!(repl.sync_waiting_without_interrupt().await.is_err());
             assert!(!repl.raw);
-            assert_eq!(repl.conn.writes, [vec![CTRL_A]]);
+            assert_eq!(repl.conn.writes, [vec![CTRL_B], vec![CTRL_A]]);
         }
     }
 

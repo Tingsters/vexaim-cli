@@ -58,6 +58,13 @@ inactive monitoring despite a working Python console. This compatibility change
 does not establish sleep prevention. Keep the measured hardware coverage and
 matching installed skill/binary version explicit.
 
+The rc.7 integration candidate also owns the existing system REPL and a finite
+SDK power lease on the exact complete `1.0.4.b0` profile. Its first mechanism
+control passed 20 quiet minutes, but full CLI acceptance remains pending. See
+the Bluetooth reference for `keepalive.power`, the REPL Mode screen and expiry.
+No student project upload or additional student command is required. Preserve
+the same session across prompts so the CLI can manage that context automatically.
+
 ## Translate ideas into actions
 
 "Spin in a circle" -> announce one full turn in place, then:

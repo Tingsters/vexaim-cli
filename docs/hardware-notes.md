@@ -36,7 +36,7 @@ the no-argument control failed after 166.922 seconds and the one-time setter
 control after 267.704 seconds, both around five minutes from boot. The latter
 acknowledged 132 health polls before three failures. The flag was subsequently
 shown to survive ordinary exec, live info and stop with the same Robot object.
-No private helper is enabled by production startup. A finite main-execution
+That one-time setter was not adopted as a standalone startup fix. A finite main-execution
 comparison with explicit readback/restoration is a separate developer control,
 not accepted sleep prevention. The finite main-with-helper comparison also
 returned no final frame and failed after 466.485 host seconds with a closed
@@ -51,6 +51,12 @@ time from 119837 to 1320275 ms, reported stopped and read True. Original False
 restoration and stopping its own system REPL confirmed. Battery changed 49% to
 36%. This is mechanism evidence; normal CLI integration and two fresh-boot
 candidate passes are still pending.
+
+The integration candidate now automatically prepares that context on the exact
+complete 1.0.4 profile and uses a finite robot-side power lease tied to client
+inactivity. Watchdog execution, normal camera/display/stop recovery and two
+clean-boot 20-minute candidate runs remain hardware gates. The standalone
+mechanism control does not certify the integration.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)

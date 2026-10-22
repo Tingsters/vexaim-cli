@@ -11,12 +11,19 @@ struct Counters {
     idles: Rc<Cell<usize>>,
     fail_idle: Rc<Cell<bool>>,
     hold_idle: Rc<Cell<bool>>,
+    write_once: Rc<Cell<bool>>,
+    write_started: Rc<Cell<bool>>,
+    hold_write: Rc<Cell<bool>>,
+    write_completed: Rc<Cell<bool>>,
 }
 struct Fake {
     counters: Counters,
     needs_check: bool,
 }
 impl Backend for Fake {
+    fn idle_is_read_only(&self) -> bool {
+        !self.counters.write_once.get()
+    }
     async fn perform(
         &mut self,
         request: &Request,
@@ -31,6 +38,10 @@ impl Backend for Fake {
         }
         if self.needs_check {
             return Err(failure("info required before fresh motion"));
+        }
+        if matches!(request, Request::Exec { source, .. } if source == "foreign") {
+            self.needs_check = true;
+            return Err(Fail::ProgramOwned("Another program owns the AIM".into()));
         }
         self.counters.calls.set(self.counters.calls.get() + 1);
         if let Request::Exec { source, .. } = request
@@ -53,6 +64,13 @@ impl Backend for Fake {
     }
     async fn idle(&mut self) -> Result<Option<Value>, Fail> {
         self.counters.idles.set(self.counters.idles.get() + 1);
+        if self.counters.write_once.replace(false) {
+            self.counters.write_started.set(true);
+            while self.counters.hold_write.get() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            self.counters.write_completed.set(true);
+        }
         if self.counters.hold_idle.get() {
             pending::<()>().await;
         }
@@ -172,6 +190,97 @@ async fn stop_and_close_preempt_a_pending_background_heartbeat() {
             .await
             .expect("close must preempt a pending heartbeat")
             .unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ordinary_clients_wait_for_background_writes_but_stop_preempts_them() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("idle-write").await;
+            counters.write_once.set(true);
+            counters.hold_write.set(true);
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while !counters.write_started.get() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            let query_id = id.clone();
+            let ordinary = tokio::task::spawn_local(async move {
+                client(&query_id, &Request::Info, false, false).await
+            });
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            assert!(
+                !ordinary.is_finished(),
+                "ordinary reads must not cancel a partial REPL write"
+            );
+            assert!(!counters.write_completed.get());
+            counters.hold_write.set(false);
+            tokio::time::timeout(Duration::from_secs(2), ordinary)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert!(counters.write_completed.get());
+
+            counters.write_started.set(false);
+            counters.write_completed.set(false);
+            counters.hold_write.set(true);
+            counters.write_once.set(true);
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while !counters.write_started.get() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            let stopped = tokio::time::timeout(
+                Duration::from_secs(1),
+                client(&id, &Request::Stop, false, false),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(stopped["stopped"], true);
+            assert!(
+                !counters.write_completed.get(),
+                "priority stop must cancel a background write"
+            );
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn rejected_program_ownership_does_not_trigger_an_automatic_stop() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("foreign-program").await;
+            let reply = client(
+                &id,
+                &Request::Exec {
+                    source: "foreign".into(),
+                    timeout: 5,
+                    preamble: false,
+                },
+                false,
+                false,
+            )
+            .await
+            .unwrap();
+            assert_eq!(reply["ok"], false);
+            assert_eq!(reply["rejected"], true);
+            assert_eq!(reply["needs_check"], true);
+            assert_eq!(counters.calls.get(), 0);
+            assert_eq!(counters.halts.get(), 0);
+            client(&id, &Request::Close, false, false).await.unwrap();
             owner.await.unwrap();
             listener.abort();
         })

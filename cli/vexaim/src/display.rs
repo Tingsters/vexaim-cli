@@ -76,6 +76,9 @@ where
     pub fn active(&self) -> bool {
         self.active
     }
+    pub fn lease_expired(&self) -> bool {
+        self.active && Instant::now() >= self.idle_deadline
+    }
     /// Legacy System Alive is independent of the remote program/LCD lifecycle.
     /// Only this fixed read-only probe may retry; student commands never replay.
     pub async fn enable_keepalive(&mut self, identity: &Value) -> Result<bool, Fail> {

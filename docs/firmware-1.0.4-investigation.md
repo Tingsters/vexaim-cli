@@ -275,8 +275,9 @@ Live info then reported the link down, and discovery found no robot. Both failur
 occurred around five minutes of boot-relative time, including failure-detection
 delay; exact physical shutdown times were not independently observed. Neither
 run reached camera/display/stop acceptance. Do not treat a successful setter or
-`True` readback as verified sleep prevention. No private sleep helper is enabled
-by production startup.
+`True` readback as verified sleep prevention. These one-time setter controls
+were not adopted as a standalone startup fix; the later combined integration
+is described below.
 
 A fresh short lifetime check retained the same `id(robot)` and `True` helper value
 across a subsequent raw execution, the ordinary exec preamble, live info and stop.
@@ -331,7 +332,8 @@ reported 1.0.4 revisions and stopped state, then sets/readbacks the actual helpe
 It observes 1200 quiet seconds by default. Acceptance requires persistent state,
 the final True readback, restoration of the original setting and stopping only
 its own REPL. Unconfirmed cleanup is failure. This is a developer experiment,
-with no new power opcode, saved-program upload or production startup change.
+with no new power opcode or saved-program upload. Normal integration is tracked
+separately below.
 
 The first combined setup did not reach the helper call or quiet measurement:
 the source start confirmed program 27/screen 19, but ordinary raw-console entry
@@ -347,7 +349,8 @@ set/read back True, and began the 1200-second quiet interval at robot time
 119837 ms, 49% battery and stopped. Four simulated
 console tests cover fragmented prompts through the first execution, an already
 raw console, a missing friendly prompt and a failed raw transition. Production
-sync is unchanged pending hardware acceptance and stop/recovery validation.
+sync remains the interrupting path; the candidate uses the waiting entry only
+for its verified system REPL. Hardware stop/recovery validation remains pending.
 
 This combined control completed 1200.014 quiet seconds with no foreground radio
 requests. The final live read retained marker 119836, advanced robot system time
@@ -357,7 +360,31 @@ the owned system REPL both confirmed. The local report is
 `aim104-repl-sleep-combination-0fc3604ffa3e4a0b8786031222e955ed.json`.
 This is the first complete mechanism control to pass. It does not yet establish
 ordinary CLI stop/display/camera recovery or two fresh-boot candidate acceptance
-runs; production startup remains unchanged while that integration is developed.
+runs. The normal CLI integration is described below.
+
+The current integration candidate now prepares that context during supported
+Bluetooth session startup. It refuses to replace an unowned running program,
+preserves the system REPL at raw entry, and installs a transient Thread watchdog
+with a lease bounded by the existing 30-minute client-idle deadline. Real client
+work renews it; cached status and health probes do not. The watchdog restores the
+original Boolean on expiry, including across the system millisecond counter's
+32-bit wrap. Stop/display teardown can end the REPL; recovery checks native
+program ownership and stopped state before rebuilding only that context. A
+failed background recovery suspends itself until explicit live info and never
+replays a student action. USB and unsupported profiles use their earlier paths.
+
+For a warm reattach, the candidate refreshes the friendly prompt with Ctrl-B
+before entering raw mode with Ctrl-A, and verifies the native program/screen
+again afterward. The [upstream MicroPython console implementation](https://github.com/micropython/micropython/blob/master/shared/runtime/pyexec.c)
+defines these as console-mode operations; Ctrl-D is the separate soft-reset
+operation. The AIM port still requires hardware validation. No Ctrl-C fallback
+is used for this waiting entry.
+
+Fourteen simulated SDK tests cover expiry without renewal, original True/False
+restoration, failed/stalled worker startup, foreign/old owners and counter wrap.
+They do not prove actual Thread scheduling. Candidate acceptance still requires
+a hardware watchdog-expiry check, camera/display/stop recovery and two clean-boot
+20-minute runs. No release is accepted from software tests alone.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares source-derived controls:

@@ -10,6 +10,8 @@ mod observation;
 mod repl;
 #[cfg(feature = "bluetooth")]
 mod session;
+#[cfg(feature = "bluetooth")]
+mod power;
 mod snap;
 
 use clap::{Parser, Subcommand, ValueEnum};

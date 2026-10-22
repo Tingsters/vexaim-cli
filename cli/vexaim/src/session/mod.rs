@@ -128,6 +128,8 @@ impl Request {
 
 type Events = mpsc::UnboundedSender<Value>;
 pub(super) trait Backend {
+    fn client_activity(&mut self, _: Instant) {}
+    fn idle_is_read_only(&self) -> bool { true }
     async fn perform(
         &mut self,
         request: &Request,
@@ -291,12 +293,13 @@ async fn actor_with_idle<B: Backend>(
             job = normal.recv() => job,
             _ = tokio::time::sleep_until(idle_deadline) => { let _ = backend.halt().await; break; }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                let ordinary_preempts = backend.idle_is_read_only();
                 let health = backend.idle();
                 tokio::pin!(health);
                 // A slow read-only health probe must not hold up stop or close.
                 tokio::select! { biased;
                     job = priority.recv() => job,
-                    job = normal.recv() => job,
+                    job = normal.recv(), if ordinary_preempts => job,
                     _ = tokio::time::sleep_until(idle_deadline) => { continue; }
                     result = &mut health => {
                         match result {
@@ -323,6 +326,7 @@ async fn actor_with_idle<B: Backend>(
         busy.set(true);
         cache.borrow_mut()["busy"] = json!(true);
         if job.request.priority() {
+            backend.client_activity(job.received);
             if matches!(job.request, Request::Close) {
                 cache.borrow_mut()["state"] = json!("closing");
             }
@@ -378,6 +382,16 @@ async fn actor_with_idle<B: Backend>(
                 cache.borrow_mut()["needs_check"] = json!(value["needs_check"] == true);
                 result(&job.events, value, job.received);
             }
+            Outcome::Complete(Err(Fail::ProgramOwned(message))) => {
+                // Ownership is a rejected precondition, not an uncertain action.
+                // Automatically halting here would stop the very program that
+                // the ownership check promised to leave alone.
+                cache.borrow_mut()["needs_check"] = json!(true);
+                let mut value = error(message);
+                value["rejected"] = json!(true);
+                value["needs_check"] = json!(true);
+                result(&job.events, value, job.received);
+            }
             Outcome::Complete(Err(e)) => {
                 backend.interrupted(&job.request);
                 let halted = backend.halt().await;
@@ -388,6 +402,10 @@ async fn actor_with_idle<B: Backend>(
                 result(&job.events, value, job.received);
             }
             other => {
+                if let Outcome::Stop(ref stop) = other {
+                    backend.client_activity(stop.received);
+                    idle_deadline = tokio::time::Instant::now() + idle_timeout;
+                }
                 backend.interrupted(&job.request);
                 let halted = backend.halt().await.unwrap_or_else(error);
                 cache.borrow_mut()["needs_check"] = json!(true);

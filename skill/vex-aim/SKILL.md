@@ -28,6 +28,12 @@ sensor/motor traffic or displaying a face prevents sleep. Students should use a
 published binary/skill together. Close at actual wrap-up; 30 minutes without
 client work also closes the owner. See the session reference for evidence.
 
+The rc.7 candidate adds a separate firmware-gated power lease for AIM REV1 with
+all reported revisions `1.0.4.b0`. It owns the existing system REPL without
+uploading a project; the LCD may show REPL Mode. Its mechanism passed a 20-minute
+quiet control, while normal CLI acceptance is still pending. Use the matching
+candidate and read the Bluetooth reference; do not set private SDK flags yourself.
+
 When the user asks for unattended work, arrange physical setup, pairing and a
 rehearsed audible computer cue up front. Do not assume they watch the console.
 Read `references/unattended-work.md`; a disconnected robot cannot sound its cue.

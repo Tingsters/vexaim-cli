@@ -61,6 +61,23 @@ boot despite acknowledged health checks. Do not use that private setting as a
 student sleep workaround or infer its effect from its name. See the CLI's
 firmware investigation for the separate developer controls and measured limits.
 
+The rc.7 integration candidate combines the existing system REPL with that SDK
+setting and enters its waiting prompt without Ctrl-C. That complete mechanism
+passed a 20-minute quiet control with final live state and cleanup. Normal CLI
+camera/display/stop recovery and two fresh-boot candidate runs are still pending;
+do not describe the integration as accepted solely from the mechanism control.
+
+On its exact supported profile, normal session startup prepares this automatically;
+students do not upload a project, navigate menus or call a private method. The
+LCD may show REPL Mode while connected. `keepalive.power` reports the separate
+experimental power lease. System Alive's `prevents_sleep:false` still describes
+the heartbeat alone. Cached active state does not prove live connectivity.
+The robot-side lease follows the 30-minute client-idle limit and restores the
+prior setting if renewals stop; cached status and background heartbeats do not
+renew it. Close restores the prior setting and stops only the owned system REPL.
+After an interrupted operation, obtain live info before any fresh movement.
+Unsupported profiles retain their earlier behavior; do not bypass the gate.
+
 If discovery fails, check robot power and proximity before retrying. Current
 binaries can sleep despite REPL activity, and a keepalive cannot recover an
 already powered-off robot or guarantee battery/radio health. Give a clear
