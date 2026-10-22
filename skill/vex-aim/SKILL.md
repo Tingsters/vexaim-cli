@@ -82,6 +82,9 @@ a working link and is not a guaranteed emergency stop.
 `exec` supplies `robot = Robot()`, `from vex import *`, and
 `from vex_globals import *`. Variables persist in the transient MicroPython REPL.
 Nothing is saved as a robot project or installed into its firmware.
+On the 1.0.4 power candidate, changing between display and system-REPL programs
+can replace the interpreter. Recreate custom variables after display/stop
+transitions; the CLI restores its own helpers and power lease automatically.
 
 ```sh
 vexaim info

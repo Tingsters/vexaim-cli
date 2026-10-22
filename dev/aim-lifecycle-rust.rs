@@ -316,6 +316,10 @@ async fn stationary_lifecycle_diagnostics() -> Result<(), Box<dyn std::error::Er
         report["program_field"] = json!(flags.current_program);
         report["flags"] = json!(flags.flags);
         std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
+        if std::env::var("VEXAIM_LIFECYCLE_FLAGS_ONLY").as_deref() == Ok("1") {
+            report["passed"] = json!(true);
+            return Ok::<_, Box<dyn std::error::Error>>(());
+        }
         let bytes =
             tokio::time::timeout(Duration::from_secs(60), bluetooth::capture_lcd(&mut conn))
                 .await?

@@ -198,6 +198,7 @@ impl Robot {
         health
     }
     async fn ensure_power(&mut self, reinstall: bool) -> Result<(), Fail> {
+        let repair = self.power.repair_pending();
         let restarted = self.power.arm(&mut self.repl).await?;
         if restarted {
             let check = self
@@ -213,7 +214,11 @@ impl Robot {
             }
         }
         self.power
-            .acquire(&mut self.repl, restarted || reinstall, restarted)
+            .acquire(
+                &mut self.repl,
+                restarted || reinstall || repair,
+                restarted || repair,
+            )
             .await
     }
     async fn native(&mut self, words: &[String]) -> Result<Value, Fail> {
@@ -304,10 +309,16 @@ impl Robot {
             ));
         }
         self.repl.connection_mut().enable(&self.identity).await?;
-        self.power.acquire(&mut self.repl, true, true).await?;
-        // Activating the display restarts the robot's Python namespace, which drops the
-        // session helpers (_va_*, _vx_*) that the next command relies on.
-        self.prepare().await
+        if self.power.supported() {
+            // AIM 1.0.4 starts a fresh interpreter when switching from the
+            // system REPL to the remote display. Its raw banner and globals
+            // must be handled before installing the next power watchdog.
+            self.repl.invalidate();
+            self.repl.sync_waiting_without_interrupt().await?;
+            self.prepare().await?;
+            self.power.claim_display(&mut self.repl).await?;
+        }
+        self.power.acquire(&mut self.repl, true, true).await
     }
 }
 

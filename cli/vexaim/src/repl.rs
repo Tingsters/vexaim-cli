@@ -430,7 +430,7 @@ mod tests {
         assert!(complete_raw_frame(plain));
         assert_eq!(parse_frame(plain).0, "42\r\n");
     }
-    
+
     #[test]
     fn preamble_reimports_constants_before_creating_robot() {
         let reimport = PREAMBLE.find("sys.modules.pop('vex_globals'").unwrap();

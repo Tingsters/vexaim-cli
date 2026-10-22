@@ -304,10 +304,13 @@ def _vx_macro(args, a, job):
         elif objects:
             obj = objects[0]
             # Native detection coordinates, not camera JPEG coordinates.
-            if behavior == 'collect' and target == globals().get('SPORTS_BALL') and robot.vision.has_sports_ball():
-                return {'collected': True}
-            if behavior == 'collect' and robot.vision.has_any_barrel():
-                return {'collected': True}
+            if behavior == 'collect':
+                collected = (
+                    (target == globals().get('SPORTS_BALL') and robot.vision.has_sports_ball()) or
+                    (target == globals().get('ORANGE_BARREL') and robot.vision.has_orange_barrel()) or
+                    (target == globals().get('BLUE_BARREL') and robot.vision.has_blue_barrel()))
+                if collected:
+                    return {'collected': True}
             if behavior == 'approach' and obj.width >= 100:
                 return {'approached': _vx_plain(obj)}
             if abs(obj.centerX - 160) > 20:

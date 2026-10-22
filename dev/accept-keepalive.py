@@ -287,6 +287,12 @@ def main(args):
             camera()
             call(["screen", "show-emoji", "HAPPY"])
             if getattr(args, "capture_lcd", False):
+                display_before = (
+                    power_checkpoint(reset=True)
+                    if getattr(args, "require_power_lease", False)
+                    else None
+                )
+                display_started = time.monotonic()
                 lcd = call(
                     [
                         "screen",
@@ -298,7 +304,38 @@ def main(args):
                     raise RuntimeError("Control not ready after LCD capture")
                 report["lcd_path"] = lcd["path"]
                 save()
+                if display_before:
+                    display_after = power_checkpoint()
+                    validate_power_evidence(
+                        display_after,
+                        display_before["watchdog_ticks"],
+                        time.monotonic() - display_started,
+                    )
             call(["stop"])
+            if getattr(args, "require_power_lease", False):
+                recovered = call(["info"])["robot_state"]
+                if recovered.get("stopped") is not True:
+                    raise RuntimeError("Poststop live state is not stopped")
+                # 1.0.4 native display/REPL program transitions replace the
+                # interpreter. Verify persistence within each quiet context;
+                # sample() separately requires continuous robot system time.
+                nonce = str(uuid.uuid4())
+                call(
+                    [
+                        "exec",
+                        "--no-preamble",
+                        "_va_endurance_nonce = "
+                        + repr(nonce)
+                        + "; print(_va_endurance_nonce)",
+                    ]
+                )
+                report.setdefault("context_transitions", []).append(
+                    {
+                        "reason": "explicit display and stop program transition",
+                        "elapsed_s": time.monotonic() - start,
+                    }
+                )
+                save()
             sample()
             phase("quiet_after_stop")
             observed_quiet(args.after_stop_quiet)

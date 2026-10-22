@@ -380,11 +380,55 @@ defines these as console-mode operations; Ctrl-D is the separate soft-reset
 operation. The AIM port still requires hardware validation. No Ctrl-C fallback
 is used for this waiting entry.
 
-Fourteen simulated SDK tests cover expiry without renewal, original True/False
+Fifteen simulated SDK tests cover expiry without renewal, original True/False
 restoration, failed/stalled worker startup, foreign/old owners and counter wrap.
 They do not prove actual Thread scheduling. Candidate acceptance still requires
 a hardware watchdog-expiry check, camera/display/stop recovery and two clean-boot
 20-minute runs. No release is accepted from software tests alone.
+
+The first packaged CLI acceptance run proved actual robot-side watchdog expiry:
+a 1500 ms test lease expired and released itself during a 3.5-second host gap,
+then live info established a new lease. The first 420-second quiet interval kept
+the same lease, advancing its watchdog from 45 to 4237 ticks. A native 640x480
+camera image showed the controller and returned control ready. The run then
+**failed** at 458 seconds during display activation; it is not an endurance pass.
+The diagnostic raw response included a new raw-REPL banner and a NameError for
+`_va_json`. Starting the display had replaced the interpreter.
+
+The follow-up re-enters that waiting console without Ctrl-C, loads the CLI
+helpers, then creates a fresh power watchdog. A local LCD screenshot confirmed
+the rendered emoji. Stop exposed a second issue: the owned system slot was
+reported as program byte 43/screen 20 and incorrectly rejected as foreign.
+The installed official Windows parser (`VexSerialDevice` / `VexCDC` SYS_FLAGS
+handler) masks AIM `currentProgram` with 15. Its low-nibble slot is 11 for both
+observed program bytes 27 and 43. Display entry also briefly reported byte 32
+(empty slot) on screen 20. Ownership remains explicit: the CLI must have started
+the system REPL and its display, and screen/slot checks reject other programs.
+Recovery retains that already-owned system slot and refreshes its watchdog;
+it does not stop/restart the native program between ordinary requests. A prototype
+which stopped that program during recovery lost its connection even though a
+fresh scan still found AIM6518. That prototype was discarded. The native file-stop
+command remains confined to actual session cleanup. No unowned program is adopted.
+
+The corrected short display → stop → live-info sequence passed on the same boot.
+The acceptance harness now tests nonce persistence within each quiet interpreter
+context and permits a new nonce only at its explicit display/stop transition.
+Continuous robot system time remains required across the transition, so a reboot
+cannot pass. The retained-context recovery smoke completed 135.828 seconds,
+including a quiet minute after stop with its watchdog advancing 66→674 ticks.
+A second 98-second smoke verified LCD output, camera/stop recovery and the same
+watchdog advancing 10→486 ticks during LCD transfer.
+
+The revised packaged candidate (`fbfb9ac`; acceptance harness `4ccc82d`) then
+completed its first clean-boot acceptance run in **1214.266 seconds**. Real
+watchdog expiry passed, both 420-second quiet intervals preserved their lease
+and advancing watchdog, native camera captures and LCD output passed, and live
+state remained stopped. Robot system time advanced 50648→1254792 ms across the
+expected interpreter transition, with battery 41%→28%. After close, an independent
+read-only SYS_FLAGS check confirmed native program 0. The local evidence is
+`power-fbfb9ac-cleanboot-1/endurance-63f63add-7df9-469d-8648-31dcef70e085.json`
+and its postclose report. Images and reports remain excluded from Git.
+One charged clean-boot 20-minute run remains before full candidate acceptance.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares source-derived controls:

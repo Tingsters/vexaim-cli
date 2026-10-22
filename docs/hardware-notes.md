@@ -2,6 +2,18 @@
 
 ## Windows AIM 1.0.4 investigation (2026-10-21)
 
+The revised packaged Windows candidate (`fbfb9ac`, harness `4ccc82d`) has now
+passed its first clean-boot acceptance run: **1214.266 seconds**. A second charged
+clean-boot run remains pending; this is not yet a two-run acceptance result.
+The earlier controls and failures below explain why the follow-up was needed.
+
+The 2026-10-22 source sync combines the merged Mac camera/constants/pairing fixes
+with the fresh-namespace imports and raw-banner parsing from PR #10, retaining
+the Windows ownership and display recovery path. The combined source passes
+73 CLI tests, 25 USB-only tests, 17 acceptance-harness tests and 15 lease tests.
+It has not been retested on the robot. The first acceptance result above belongs
+to `fbfb9ac`; a new matching package needs hardware acceptance after this sync.
+
 AIM6518 now reports `1.0.4.b0` from GATT firmware/software revisions, VEXos and
 both CPUs. The unchanged rc.6 baseline disabled its monitor for that unfamiliar
 profile, then failed its live check after 420 silent seconds; discovery found no
@@ -17,8 +29,8 @@ existing health, camera and display operations, retaining `prevents_sleep:false`
 Its first new-profile endurance run failed after 86.7 measured seconds, before
 camera/display checks. The monitor reached 124 acknowledged System Alive polls
 then three failures; live recovery and discovery found no robot. Enabling this
-known request on 1.0.4 is not a sleep fix. The new-profile display and two
-fresh-boot 20-minute acceptance runs remain pending. No wheels, kicker, firmware
+known request on 1.0.4 is not a sleep fix. At that stage, new-profile display and
+fresh-boot acceptance still needed verification. No wheels, kicker, firmware
 write or saved-project upload ran.
 A background waiting Thread subsequently lost its link after 162.343 seconds;
 the operator independently confirmed power-off. A standalone finite main-loop
@@ -54,9 +66,29 @@ candidate passes are still pending.
 
 The integration candidate now automatically prepares that context on the exact
 complete 1.0.4 profile and uses a finite robot-side power lease tied to client
-inactivity. Watchdog execution, normal camera/display/stop recovery and two
-clean-boot 20-minute candidate runs remain hardware gates. The standalone
+inactivity. Its acceptance gates cover real watchdog execution, normal
+camera/display/stop recovery and two clean-boot 20-minute runs. The standalone
 mechanism control does not certify the integration.
+The first packaged integration run proved robot-side watchdog expiry and passed
+420 quiet seconds with the same lease, then returned a verified camera image.
+It failed at 458 seconds when display activation replaced its interpreter.
+Diagnostic output also exposed a program-status-bit ownership rejection after
+stop. The follow-up rebuilds helpers at display entry and follows the official
+AIM low-nibble program-slot parsing while retaining explicit ownership guards.
+A short display/stop/live-info recovery passed, followed by 135.828-second and
+98-second smoke checks. During the latter's LCD transfer, the same watchdog
+advanced from 10 to 486 ticks.
+
+The first full revised run then passed both 420-second quiet intervals, retaining
+the same watchdog within each context (47→4238 ticks before display, 41→4233
+after stop). Actual 1500 ms watchdog expiry/restoration also passed. Both native
+640x480 camera images showed the controller; the LCD frame showed the rendered
+emoji and its watchdog advanced 9→494 ticks during capture. Robot system time
+advanced continuously from 50648 to 1254792 ms, battery changed 41%→28%, and all
+samples reported stopped. Independent read-only inspection after session close
+confirmed native program 0. No motor, kicker, firmware or saved-project operation
+ran. The second run is awaiting a recharge/restart to avoid low-battery ambiguity.
+See the investigation for the full chronology and failed-run evidence.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)
