@@ -193,13 +193,47 @@ promise. Each report requires a persistent marker, advancing loop count, full
 robot/host interval and final live stopped state. A passing seven-minute control
 would still not satisfy the full acceptance gate or justify a release claim.
 
-Prepare both modes before asking for power-on; run `thread` only after `main`
-passes on the same connection:
+The persistent-session API limits an individual `exec` request to 120 seconds.
+Thread startup therefore uses a 30-second request regardless of the observation
+duration. A short `main` control can use 60 through 90 seconds. For a longer
+`main` comparison, explicitly select the verified robot with `--standalone-name`:
+the probe checks identity and stopped state, closes the session, waits for its
+local endpoint to disappear, then uses one standalone Bluetooth execution.
+That comparison has no background System Alive monitor. No production timeout
+or motion deadline is increased. Select unused report paths; old reports cannot
+be overwritten.
 
 ```powershell
-uv run --no-project python dev/probe-python-lifecycle.py <candidate.exe> --session <ID> --mode main --duration 420 --output .vexaim/keepalive/python-main-104.json
 uv run --no-project python dev/probe-python-lifecycle.py <candidate.exe> --session <ID> --mode thread --duration 420 --output .vexaim/keepalive/python-thread-104.json
+uv run --no-project python dev/probe-python-lifecycle.py <candidate.exe> --session <ID> --mode main --duration 420 --standalone-name AIM6518 --output .vexaim/keepalive/python-main-104.json
 ```
+
+On the next power-on, a first `main` attempt was rejected locally because the
+probe requested 450 seconds through the session API. No long Python ran; this
+is a harness failure, not robot sleep evidence. After correcting thread startup
+to 30 seconds, the background Thread returned its marker successfully, starting
+at 69% battery and stopped. Its link monitor failed after 162.343 seconds; the
+operator independently saw the robot power off and switched it on again.
+Starting a background Thread therefore did not solve the observed problem.
+
+The first standalone handoff was also refused locally while its closing session
+endpoint still existed. The probe now observes endpoint release before opening
+another connection. A fresh report then ran the main-loop comparison with a
+finite 420-second waiting loop, starting at 66% battery and stopped. It returned
+no final Python frame; after 466.218 host seconds the CLI failed with Bluetooth
+HRESULT `0x80000013`, "The object has been closed," during a write. A new named
+diagnostic found no AIM6518. This is failed connectivity evidence; the exact
+disconnect time and physical power state were not independently recorded for
+this run. The local reports are `python-lifecycle104-thread-1.json` and
+`python-lifecycle104-main-3.json` under `.vexaim/keepalive`.
+
+The already sourced next control combines acknowledged System Alive with the
+official Back input on verified home screen zero. Its fixed packet and guards
+are described in the [earlier investigation](keepalive-investigation.md). This
+tests the remaining UI-inactivity hypothesis without a guessed power API; the
+firmware-1.0.4 run is pending. It must complete seven acknowledged home-only
+inputs, 420 seconds and final live stopped/system-time checks. A lost input ACK
+aborts without replay.
 
 The ignored `stationary_source_lifecycle_control` test in
 `dev/aim-lifecycle-rust.rs` prepares two separate source-derived controls:

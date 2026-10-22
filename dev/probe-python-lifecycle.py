@@ -63,9 +63,68 @@ def cli_result(result):
     return value
 
 
+def execution_command(tool, session, source, seconds, mode, standalone_name=None):
+    timeout = 30 if mode == "thread" else seconds + 30
+    if mode != "main" and standalone_name:
+        raise ValueError("Standalone mode is only for the main-thread control")
+    if timeout > 120 and not standalone_name:
+        raise ValueError(
+            "Session main-thread control must fit the existing 120-second exec limit; "
+            "use --duration 60..90 or explicitly select --standalone-name for a long control"
+        )
+    if standalone_name:
+        return [
+            tool,
+            "--json",
+            "--transport",
+            "bluetooth",
+            "--name",
+            standalone_name,
+            "exec",
+            "--timeout",
+            str(timeout),
+            source,
+        ]
+    return [
+        tool,
+        "--json",
+        "--session",
+        session,
+        "exec",
+        "--no-preamble",
+        "--timeout",
+        str(timeout),
+        source,
+    ]
+
+
+def wait_for_close(tool, session):
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            [tool, "--json", "--session", session, "session", "status"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=4,
+            check=False,
+        )
+        if result.returncode:
+            value = json.loads(result.stdout)
+            if "Session unavailable (" in value.get("error", ""):
+                return
+            cli_result(result)
+        time.sleep(0.1)
+    raise RuntimeError("Previous session did not release its connection in time")
+
+
 def run(args):
     tool = str(args.tool.resolve(strict=True))
     output = args.output.resolve()
+    if output.exists():
+        raise FileExistsError(
+            "Preserve the previous report; choose a new --output path"
+        )
     output.parent.mkdir(parents=True, exist_ok=True)
     token = "_va_lifecycle_" + uuid.uuid4().hex
     source = source_for(token, args.duration, args.mode)
@@ -83,6 +142,7 @@ def run(args):
     started = time.monotonic()
     child = None
     thread_created = False
+    standalone_name = getattr(args, "standalone_name", None)
 
     def save():
         report["elapsed_s"] = time.monotonic() - started
@@ -104,6 +164,9 @@ def run(args):
 
     try:
         save()
+        command = execution_command(
+            tool, args.session, source, args.duration, args.mode, standalone_name
+        )
         context = call(["session", "status"])
         identity = context.get("device_info", {})
         if (
@@ -118,19 +181,17 @@ def run(args):
         before = call(["info"])["robot_state"]
         if before.get("stopped") is not True or before.get("imu_calibrating"):
             raise RuntimeError("Robot must be stopped and not calibrating")
+        if standalone_name:
+            if context.get("name") != standalone_name:
+                raise RuntimeError(
+                    "Standalone name differs from the verified session robot"
+                )
+            call(["session", "close"])
+            wait_for_close(tool, args.session)
+            report["session_closed_for_control"] = True
+            report["background_link_monitor_during_control"] = False
         report["before"] = before
         report["phase"] = "executing_python"
-        command = [
-            tool,
-            "--json",
-            "--session",
-            args.session,
-            "exec",
-            "--no-preamble",
-            "--timeout",
-            str(args.duration + 30),
-            source,
-        ]
         child = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -183,7 +244,27 @@ def run(args):
         value = json.loads(result.get("stdout", ""))
         report["worker"] = value
         validate_result(value, token, args.duration, measured_elapsed)
-        after = call(["info"])["robot_state"]
+        if standalone_name:
+            after_call = subprocess.run(
+                [
+                    tool,
+                    "--json",
+                    "--transport",
+                    "bluetooth",
+                    "--name",
+                    standalone_name,
+                    "info",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=45,
+                check=False,
+            )
+            after = json.loads(cli_result(after_call)["stdout"])
+            report["after_reconnect"] = True
+        else:
+            after = call(["info"])["robot_state"]
         if after.get("stopped") is not True:
             raise RuntimeError("Stopped state was not confirmed after the control")
         report.update(after=after, state="passed", passed=True)
@@ -241,6 +322,10 @@ if __name__ == "__main__":
     parser.add_argument("tool", type=Path)
     parser.add_argument("--session", required=True)
     parser.add_argument("--mode", choices=("main", "thread"), required=True)
+    parser.add_argument(
+        "--standalone-name",
+        help="Long main control only: verify this name, close its session, then use a standalone connection",
+    )
     parser.add_argument("--duration", type=int, choices=range(60, 1201), default=420)
     parser.add_argument("--output", type=Path, required=True)
     raise SystemExit(run(parser.parse_args()))

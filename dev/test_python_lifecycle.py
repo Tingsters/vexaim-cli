@@ -19,6 +19,70 @@ spec.loader.exec_module(probe)
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_thread_endurance_uses_a_short_session_request(self):
+        command = probe.execution_command("tool", "session", "source", 1200, "thread")
+        self.assertEqual(command[command.index("--timeout") + 1], "30")
+        self.assertIn("--session", command)
+        with self.assertRaisesRegex(ValueError, "120-second"):
+            probe.execution_command("tool", "session", "source", 420, "main")
+
+    def test_long_main_control_requires_explicit_standalone_selection(self):
+        command = probe.execution_command(
+            "tool", "session", "source", 420, "main", "AIM6518"
+        )
+        self.assertNotIn("--session", command)
+        self.assertEqual(command[command.index("--timeout") + 1], "450")
+        self.assertEqual(command[command.index("--name") + 1], "AIM6518")
+        with self.assertRaisesRegex(ValueError, "only for the main"):
+            probe.execution_command(
+                "tool", "session", "source", 420, "thread", "AIM6518"
+            )
+
+    def test_close_wait_observes_ipc_release_without_another_robot_connection(self):
+        replies = [
+            subprocess.CompletedProcess(
+                [], 0, json.dumps({"ok": True, "state": "closing"}), ""
+            ),
+            subprocess.CompletedProcess(
+                [],
+                1,
+                json.dumps({"error": "Session: Session unavailable (closed)"}),
+                "",
+            ),
+        ]
+        with (
+            patch.object(probe.subprocess, "run", side_effect=replies) as command,
+            patch.object(probe.time, "sleep"),
+        ):
+            probe.wait_for_close("tool", "session")
+        self.assertEqual(command.call_count, 2)
+        self.assertTrue(
+            all(
+                call.args[0][-2:] == ["session", "status"]
+                for call in command.call_args_list
+            )
+        )
+
+    def test_ambiguous_close_error_does_not_authorize_a_second_connection(self):
+        result = subprocess.CompletedProcess(
+            [], 1, json.dumps({"error": "Session response timed out"}), ""
+        )
+        with (
+            patch.object(probe.subprocess, "run", return_value=result),
+            self.assertRaisesRegex(RuntimeError, "response timed out"),
+        ):
+            probe.wait_for_close("tool", "session")
+
+    def test_existing_report_is_preserved(self):
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            tool, report = root / "tool", root / "report.json"
+            tool.touch()
+            report.write_text('{"state":"failed"}')
+            with self.assertRaises(FileExistsError):
+                probe.run(SimpleNamespace(tool=tool, output=report))
+            self.assertEqual(report.read_text(), '{"state":"failed"}')
+
     def test_python_tracebacks_survive_cli_failure(self):
         reply = subprocess.CompletedProcess(
             [], 1, json.dumps({"ok": False, "stderr": "NameError: wait"}), ""
@@ -96,7 +160,11 @@ class LifecycleTests(unittest.TestCase):
                 probe.validate_result({**valid, **changes}, "token", 60, elapsed)
 
     def test_unknown_profile_and_movement_refuse_execution(self):
-        for known, moving in [(False, False), (True, True)]:
+        for known, moving, wrong_name in [
+            (False, False, False),
+            (True, True, False),
+            (True, False, True),
+        ]:
             with (
                 self.subTest(known=known, moving=moving),
                 TemporaryDirectory() as folder,
@@ -107,6 +175,7 @@ class LifecycleTests(unittest.TestCase):
                 replies = [
                     {
                         "ok": True,
+                        "name": "AIM6518",
                         "transport": "bluetooth",
                         "device_info": {
                             "model": "AIM",
@@ -130,6 +199,7 @@ class LifecycleTests(unittest.TestCase):
                     duration=60,
                     mode="main",
                     session="test",
+                    standalone_name="WRONG" if wrong_name else None,
                 )
                 with (
                     patch.object(probe.subprocess, "run", side_effect=command),

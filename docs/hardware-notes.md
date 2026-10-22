@@ -20,6 +20,12 @@ then three failures; live recovery and discovery found no robot. Enabling this
 known request on 1.0.4 is not a sleep fix. The new-profile JPEG/display and two
 fresh-boot 20-minute acceptance runs remain pending. No wheels, kicker, firmware
 write or saved-project upload ran.
+A background waiting Thread subsequently lost its link after 162.343 seconds;
+the operator independently confirmed power-off. A standalone finite main-loop
+wait also failed to return its final frame, ending with a closed Bluetooth
+object error after 466.218 host seconds; discovery then found no robot. Local
+timeout and connection-handoff rejections are recorded separately as harness
+failures. Neither Python control is accepted as sleep prevention.
 See [source provenance, controls and measured status](firmware-1.0.4-investigation.md).
 
 ## Session keepalive candidate (2026-10-21)
