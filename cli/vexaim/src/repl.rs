@@ -13,7 +13,10 @@ pub const CTRL_D: u8 = 0x04; // execute (raw REPL)
 
 // An existing robot does not imply constants were imported in this REPL.
 // Refresh API names on every prepared exec, but preserve the robot instance.
-pub const PREAMBLE: &str = "from vex import *\nfrom vex_globals import *\ntry:\n    robot\nexcept NameError:\n    robot = Robot()\n";
+/// Imports the VEX API and creates `robot`. If the constants are missing after the wildcard
+/// imports (seen once on a freshly connected robot: `NameError: ALL_LEDS`), drop the cached
+/// modules and import them again.
+pub const PREAMBLE: &str = "from vex import *\nfrom vex_globals import *\ntry:\n    ALL_LEDS\nexcept NameError:\n    import sys\n    sys.modules.pop('vex_globals', None)\n    from vex_globals import *\ntry:\n    robot\nexcept NameError:\n    robot = Robot()\n";
 
 #[derive(Debug)]
 pub enum Fail {
@@ -426,6 +429,14 @@ mod tests {
         let plain = b"OK42\r\n\x04\x04>";
         assert!(complete_raw_frame(plain));
         assert_eq!(parse_frame(plain).0, "42\r\n");
+    }
+    
+    #[test]
+    fn preamble_reimports_constants_before_creating_robot() {
+        let reimport = PREAMBLE.find("sys.modules.pop('vex_globals'").unwrap();
+        let robot = PREAMBLE.find("robot = Robot()").unwrap();
+        assert!(reimport < robot);
+        assert!(PREAMBLE.starts_with("from vex import *\nfrom vex_globals import *\n"));
     }
 
     #[cfg(feature = "bluetooth")]

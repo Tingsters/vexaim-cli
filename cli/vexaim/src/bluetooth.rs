@@ -40,7 +40,7 @@ fn decode_pin(code: &str) -> Result<[u8; 4], Fail> {
     let bytes = code.as_bytes();
     if bytes.len() != 4 || !bytes.iter().all(u8::is_ascii_digit) {
         return Err(fail(
-            "Enter exactly four digits in the local masked prompt; never put the code in chat or command arguments.",
+            "Enter exactly four digits; never put the code in command arguments.",
         ));
     }
     Ok([
@@ -246,15 +246,35 @@ pub(crate) async fn add_system_versions<C: Connection>(conn: &mut C, info: &mut 
     }
 }
 
+/// Read the pairing code from the first line of `input` (used by `pair --code-stdin`).
+fn read_code_line(mut input: impl std::io::BufRead) -> Result<String, Fail> {
+    let mut line = String::new();
+    input
+        .read_line(&mut line)
+        .map_err(|_| fail("Reading the code failed; no credential was saved."))?;
+    Ok(line.trim().to_string())
+}
+
 pub(crate) async fn authenticate(
     conn: &mut BluetoothConnection,
     id: &str,
     pair: bool,
+    code_stdin: bool,
 ) -> Result<(), Fail> {
     if !pair && conn.is_paired().await.map_err(io)? {
         return Ok(());
     }
-    let code = if pair {
+    let code = if pair && code_stdin {
+        conn.request_pairing().await.map_err(io)?;
+        eprintln!("Read the four-digit code on the selected robot's LCD and send it on stdin.");
+        tokio::time::timeout(
+            Duration::from_secs(120),
+            tokio::task::spawn_blocking(|| read_code_line(std::io::stdin().lock())),
+        )
+        .await
+        .map_err(|_| fail("Pairing input timed out; no credential was saved."))?
+        .map_err(|_| fail("Reading the code failed; no credential was saved."))??
+    } else if pair {
         if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
             return Err(fail(
                 "Pairing needs a local interactive terminal with masked input. Run `vexaim --name NAME bluetooth pair` there; do not send the code in chat.",
@@ -301,8 +321,9 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
         let mut conn = device.connect().await.map_err(io)?;
         let operation = async {
             let info = identity(&conn).await?;
-            let pair = matches!(cli.cmd, Cmd::Bluetooth { command: BluetoothCmd::Pair });
-            authenticate(&mut conn, &id, pair).await?;
+            let pair = matches!(cli.cmd, Cmd::Bluetooth { command: BluetoothCmd::Pair { .. } });
+            let code_stdin = matches!(cli.cmd, Cmd::Bluetooth { command: BluetoothCmd::Pair { code_stdin: true } });
+            authenticate(&mut conn, &id, pair, code_stdin).await?;
             if pair {
                 out(cli.json, json!({"ok":true,"transport":"bluetooth","name":name,"id":id,"credential_saved":true}), || format!("Paired {name}; credential saved in the native OS store."));
                 return Ok(0);
@@ -591,6 +612,12 @@ pub(crate) fn save_atomic(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn code_line_reads_only_the_first_line() {
+        let input = std::io::Cursor::new(b" 1234 \r\nignored\n".to_vec());
+        assert_eq!(read_code_line(input).unwrap(), "1234");
+        assert_eq!(read_code_line(std::io::Cursor::new(Vec::new())).unwrap(), "");
+    }
     #[test]
     fn pin_validation_never_echoes_input() {
         assert_eq!(decode_pin("0123").unwrap(), [0, 1, 2, 3]);

@@ -75,7 +75,7 @@ impl Robot {
         let mut conn = device.connect().await.map_err(failure)?;
         let setup = async {
             let mut identity = bluetooth::identity(&conn).await?;
-            bluetooth::authenticate(&mut conn, &id, false).await?;
+            bluetooth::authenticate(&mut conn, &id, false, false).await?;
             // Keep this request alive in the patched backend for the connection.
             let _ = tokio::time::timeout(
                 Duration::from_secs(3),
