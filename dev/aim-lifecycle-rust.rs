@@ -39,6 +39,10 @@ fn check_profile(identity: &Value, current_program: u8) -> Result<(), std::io::E
     Ok(())
 }
 
+fn repl_mode_confirmed(program: u8, flags: u32) -> bool {
+    program == 27 && flags.to_le_bytes()[3] == 19
+}
+
 #[tokio::test]
 #[ignore = "stationary AIM hardware control; requires explicit readiness/name/output env"]
 async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error::Error>> {
@@ -86,7 +90,7 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
             }
             report["subscribed_remote_characteristics"] = json!(3);
         } else if adopt_owned {
-            if before_flags.current_program != 27 {
+            if !repl_mode_confirmed(before_flags.current_program, before_flags.flags) {
                 return Err(std::io::Error::other("The prior control's owned REPL program 27 is no longer active").into());
             }
             started = true;
@@ -111,7 +115,7 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         tokio::time::sleep(Duration::from_millis(100)).await;
         let flags = conn.handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
         report["current_program_started"] = json!(flags.current_program);
-        if flags.current_program != 27 {
+        if !repl_mode_confirmed(flags.current_program, flags.flags) {
             return Err(std::io::Error::other("Built-in REPL program 27 was not confirmed; start was not replayed").into());
         }
         }
@@ -123,7 +127,8 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
         if before["stopped"] != true { return Err(std::io::Error::other("Robot is not stopped").into()); }
         let flags = repl.connection_mut().handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0).await??;
         report["current_program_after_raw_entry"] = json!(flags.current_program);
-        if mode == "builtin-repl" && flags.current_program != 27 {
+        report["screen_after_raw_entry"] = json!(flags.flags.to_le_bytes()[3]);
+        if mode == "builtin-repl" && !repl_mode_confirmed(flags.current_program, flags.flags) {
             return Err(std::io::Error::other("Raw console entry did not retain built-in REPL program 27").into());
         }
         report["before"] = before.clone(); report["state"] = json!("quiet");
@@ -159,7 +164,7 @@ async fn stationary_source_lifecycle_control() -> Result<(), Box<dyn std::error:
             .handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0)
             .await
         {
-            if flags.current_program == 27 {
+            if repl_mode_confirmed(flags.current_program, flags.flags) {
                 report["stop_confirmed"] = json!(matches!(
                     conn.handshake(
                         FileLoadActionPacket {
@@ -221,6 +226,14 @@ fn builtin_start_matches_the_installed_official_packet_builder() {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 203
         ]
     );
+}
+
+#[test]
+fn repl_activation_requires_both_observed_program_and_screen() {
+    assert!(repl_mode_confirmed(27, 0x13000600));
+    for (program, flags) in [(0, 0x13000600), (2, 0x13000600), (27, 0), (27, 0x14000600)] {
+        assert!(!repl_mode_confirmed(program, flags));
+    }
 }
 
 #[tokio::test]
