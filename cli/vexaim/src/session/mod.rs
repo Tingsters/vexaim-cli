@@ -417,7 +417,7 @@ async fn actor_with_idle<B: Backend>(
             .unwrap_or_else(error);
             cache.borrow_mut()["state"] = json!(backend.connection_state());
             cache.borrow_mut()["needs_check"] =
-                json!(halted["needs_check"] == true || halted["ok"] != true);
+                json!(halted["needs_check"] != false || halted["ok"] != true);
             for key in ["robot_state", "keepalive"] {
                 if let Some(value) = halted.get(key) {
                     cache.borrow_mut()[key] = value.clone();
@@ -502,11 +502,18 @@ async fn actor_with_idle<B: Backend>(
                 let halted = if matches!(&other, Outcome::Stop(stop) if matches!(stop.request, Request::Takeover)) {
                     replace_program(&mut backend).await
                 } else { halt(&mut backend).await }.unwrap_or_else(error);
-                cache.borrow_mut()["needs_check"] = json!(true);
+                let needs_check = halted["ok"] != true || halted["needs_check"] != false;
+                cache.borrow_mut()["needs_check"] = json!(needs_check);
+                for key in ["robot_state", "keepalive"] {
+                    if let Some(value) = halted.get(key) {
+                        cache.borrow_mut()[key] = value.clone();
+                    }
+                }
                 let mut cancelled =
                     error("Operation interrupted; not retried. Read info before another action.");
-                cancelled["needs_check"] = json!(true);
-                cancelled["stopped_confirmed"] = json!(halted["stopped"] == true);
+                cancelled["needs_check"] = json!(needs_check);
+                cancelled["stopped_confirmed"] =
+                    json!(halted["stopped"] == true || halted["robot_state"]["stopped"] == true);
                 cache.borrow_mut()["last_result"] = cancelled.clone();
                 result(&job.events, cancelled, job.received);
                 if let Outcome::Stop(stop) = other {

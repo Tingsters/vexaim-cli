@@ -529,6 +529,43 @@ async fn requested_takeover_is_not_skipped_because_cached_state_says_ready() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn takeover_of_a_running_activity_retains_the_new_live_readiness() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("busy-takeover").await;
+            let call_id = id.clone();
+            let old = tokio::task::spawn_local(async move {
+                client(
+                    &call_id,
+                    &Request::Exec {
+                        source: "hold".into(),
+                        timeout: 30,
+                        preamble: true,
+                    },
+                    false,
+                    false,
+                )
+                .await
+                .unwrap()
+            });
+            wait_calls(&counters, 1).await;
+            let replacement = client(&id, &Request::Takeover, false, false).await.unwrap();
+            assert_eq!(replacement["robot_state"]["stopped"], true);
+            let previous = old.await.unwrap();
+            assert_eq!(previous["ok"], false);
+            assert_eq!(previous["stopped_confirmed"], true);
+            let status = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(status["needs_check"], false);
+            assert_eq!(status["keepalive"]["healthy"], true);
+            assert_eq!(counters.calls.get(), 1);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn connection_owner_is_reused_and_busy_motion_is_never_queued() {
     tokio::task::LocalSet::new()
         .run_until(async {
