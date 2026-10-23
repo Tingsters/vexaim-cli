@@ -157,9 +157,9 @@ pub(super) trait Backend {
 
 async fn halt<B: Backend>(backend: &mut B) -> Result<Value, Fail> {
     if backend.connection_state() == "auth_required" {
-        return Ok(
-            json!({"ok":false,"rejected":true,"delivery":"not_sent","error":"Pairing changed; no stop was sent to another owner"}),
-        );
+        return Err(Fail::AuthenticationRequired(
+            "Pairing changed; no stop was sent to another owner".into(),
+        ));
     }
     tokio::time::timeout(Duration::from_secs(15), backend.halt())
         .await

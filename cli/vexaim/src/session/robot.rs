@@ -22,7 +22,6 @@ pub struct Robot {
     power: crate::power::Power,
     name: String,
     connection_state: &'static str,
-    persistent: bool,
     recovery_attempt: usize,
     retry_at: Instant,
     last_owner_check: Instant,
@@ -70,7 +69,6 @@ impl Robot {
                 camera_usable: true,
                 name: name.into(),
                 connection_state: "ready",
-                persistent: false,
                 recovery_attempt: 0,
                 retry_at: Instant::now(),
                 last_owner_check: Instant::now(),
@@ -124,7 +122,6 @@ impl Robot {
             camera_usable: true,
             name: name.into(),
             connection_state: "ready",
-            persistent: false,
             recovery_attempt: 0,
             retry_at: Instant::now(),
             last_owner_check: Instant::now(),
@@ -280,11 +277,6 @@ impl Robot {
             }
             device
         };
-        if self.identity["id"] != id {
-            return Err(failure(
-                "Robot identity changed; no replacement device was selected",
-            ));
-        }
         let mut conn = device.connect().await.map_err(failure)?;
         // Authenticate before any native stop or Python, and never overwrite a changed code.
         if let Err(error) = bluetooth::authenticate(&mut conn, &id, false, false).await {
@@ -462,7 +454,6 @@ impl Robot {
 
 impl Backend for Robot {
     fn set_persistent(&mut self) {
-        self.persistent = true;
         self.power.set_persistent(true);
     }
     fn connection_state(&self) -> &'static str {
