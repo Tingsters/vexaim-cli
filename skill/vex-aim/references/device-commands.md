@@ -1,6 +1,6 @@
 # Native VEX AIM commands
 
-Requires the matching 0.3 command release. Use `--json` and `--session ID` before
+Use the matching 0.4 executable and skill. Use `--json` and `--session ID` before
 the command. `catalog [GROUP]` works offline and lists exact positional parameters,
 native VEX method names, constants and operation kinds. `capabilities --live`
 reports API presence on this firmware; presence is not a hardware test.
@@ -63,7 +63,7 @@ Other command groups:
 as LCD content and a postcapture `control_ready` check. It requires a session and
 stopped wheels. It is not a camera observation, and never changes display modes.
 
-With 0.3.0-rc.5, Bluetooth screen writes automatically activate the program
+Bluetooth screen writes automatically activate the program
 display and maintain its required status keepalive. This fixes the earlier
 successful-but-hidden REPL drawing on AIM REV1 / BLE firmware 1.0.0.b0. The first
 screen write may briefly show the firmware's startup face and chirp. Activation
@@ -71,12 +71,12 @@ requires stopped wheels and no calibration; it preserves heading and position.
 An ordinary camera photograph never activates the display.
 
 Reuse a session so emojis/drawings remain visible across agent turns. Stop/close
-ends the display program, as does 60 seconds without traffic. The rc.7 power
-candidate may then show REPL Mode until session close. One-shot commands clean
+ends the display program, as does 60 seconds without traffic. The firmware-gated power
+lease may then show REPL Mode until session close. One-shot commands clean
 up when they finish. `exec` also activates display
 for scripts referring to `.screen`; prefer native screen commands for dynamic
 Python that does not contain that reference. No stored project or USB is needed.
-On the 1.0.4 power candidate, display/system-REPL transitions may create a fresh
+On supported 1.0.4 firmware, display/system-REPL transitions may create a fresh
 interpreter. The CLI restores its helpers automatically; custom Python variables
 must be recreated after those transitions. Ordinary same-context exec retains them.
 Use named emoji constants (HAPPY/LOOK_FORWARD), not numeric IDs: the observed
@@ -84,10 +84,12 @@ firmware's numeric 6 selected a sunglasses face. For text, choose contrasting
 pen and fill colors; white text on white fill appears as a solid white bar.
 Confirm actual visible output rather than treating an API acknowledgment as proof.
 
-The experimental rc.6 release adds separate System Alive link probes. Hardware
-still lost the robot despite acknowledged replies; `prevents_sleep:false` means
-this is not a verified sleep fix. Returning the LCD to its menu through `stop` does
-not end session liveness. Camera-only work never needs to activate the display.
+Link probes and power management are separate. `prevents_sleep:false` labels the
+System Alive link monitor; the `power` object reports the finite firmware-gated
+REPL/SDK power lease. Persistent owners renew that lease while alive and recover
+ordinary link loss automatically. Closing the session releases both; a display
+expiry does not close Bluetooth ownership. Camera-only work never needs to
+activate the display. See `sessions-and-motion.md` for lifecycle and recovery.
 
 For maintainer diagnostics, see the
 [stationary display investigation](https://github.com/Tingsters/vexaim-cli/blob/main/docs/display-investigation.md).
