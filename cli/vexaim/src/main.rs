@@ -45,7 +45,7 @@ struct Cli {
     /// Exact Bluetooth robot name from `bluetooth scan` (for example AIM6518)
     #[arg(long, global = true, conflicts_with = "device")]
     name: Option<String>,
-    /// Reuse an agent-managed USB/Bluetooth session; never reconnect or replay implicitly
+    /// Reuse an agent-managed USB/Bluetooth session; never replay an action implicitly
     #[arg(long, global = true, conflicts_with_all = ["device", "transport"])]
     session: Option<String>,
     #[command(subcommand)]
