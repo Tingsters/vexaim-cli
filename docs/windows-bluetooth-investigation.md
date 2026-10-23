@@ -53,7 +53,7 @@ a second hour-long soak. Final measured battery was 37%; all investigative
 connections exited before the 90-minute window ended. The pre-existing v0.4
 close contract still does not expose independent power-restoration evidence.
 
-## Established evidence
+## Earlier evidence and hypothesis
 
 The 22 October one-hour core test recorded 33 automatic recoveries. Its 32
 sampled outages averaged 21.63 seconds, totaled 692.30 seconds and reached
@@ -71,13 +71,14 @@ not a newly established driver failure. No driver or power setting was changed.
 BTHUSB 18 describes controller link-key storage; 34 describes unsupported
 peripheral-role capabilities. Neither message alone proves the cause of a
 central/client connection failure. Repeated initialization plus independent
-PnP arrival changes is stronger evidence. The exact trigger is unresolved.
+PnP arrival changes is stronger evidence. The exact trigger was unresolved at
+that stage; the later controlled comparisons above isolate an avoidable request.
 
 The v0.4.0 owner retains `ThroughputOptimized` for its whole lifetime, even
 while idle. Microsoft's [connection parameter guidance](https://learn.microsoft.com/en-us/uwp/api/windows.devices.bluetooth.bluetoothledevice.requestpreferredconnectionparameters)
 recommends using that request sparingly for bulk transfers. The investigation
-compares it with no application parameter request. This is a hypothesis, not
-evidence that the request caused the radio to reset. MaintainConnection and the
+compares it with no application parameter request. Historical correlation alone
+did not establish that the request caused the radio to reset. MaintainConnection and the
 validated AIM power lease remain unchanged in both comparisons.
 
 ## Developer builds and one-time setup
@@ -87,7 +88,7 @@ Build with `cargo build --locked --release --manifest-path cli/Cargo.toml
 Only this feature reads `VEXAIM_DIAGNOSTIC_CONNECTION_PROFILE`, accepting
 `throughput` or `os-default`. Normal builds ignore the override.
 Owner health records requested/accepted/actual parameters and request errors.
-Student commands are unchanged. The proposed v0.4.1 Windows default is
+Student commands are unchanged. The v0.4.1 Windows default is
 `os-default`; other platforms retain their existing policy. Diagnostic builds
 use that platform default when no override is supplied. Use `throughput`
 explicitly when reproducing the old Windows request.
