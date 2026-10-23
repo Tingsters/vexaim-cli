@@ -411,7 +411,11 @@ async fn run_python(
             Cmd::Doctor => (STATUS.to_string(),10,true),
             Cmd::Info => (STATE.to_string(),10,true),
             Cmd::Stop => (crate::STOP_CODE.to_string(),5,true),
-            Cmd::Exec { code,inputs,file,timeout,no_preamble } => (crate::with_inputs(crate::exec_source(code,file)?,inputs)?,*timeout,!*no_preamble),
+            Cmd::Exec { code,inputs,file,timeout,no_preamble,behaviors } => {
+                let source = crate::with_inputs(crate::exec_source(code,file)?,inputs)?;
+                let source = if *behaviors {format!("{}\n{}\n{}", crate::device::RUNTIME, crate::device::BEHAVIORS, crate::device::behavior_exec(&source, *timeout))} else {source};
+                (source,*timeout,!*no_preamble)
+            },
             Cmd::Turn { direction, degrees, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::turn_source(*direction, *degrees, *speed)?), 23, true),
             Cmd::Move { distance, angle, speed } => (format!("{}{}", crate::motion::helpers(), crate::motion::move_source(*distance, *angle, *speed)?), 23, true),
             Cmd::Capabilities {..} => (crate::device::capability_source(),30,true),

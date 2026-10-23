@@ -1,6 +1,6 @@
 [package]
 name = "vexaim"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 description = "Run MicroPython and capture camera frames on a VEX AIM over USB or Bluetooth"
 license = "Apache-2.0"

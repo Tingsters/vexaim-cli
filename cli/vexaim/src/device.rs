@@ -5,6 +5,24 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub const RUNTIME: &str = include_str!("device.py");
+pub const BEHAVIORS: &str = include_str!("behaviors.py");
+
+pub fn needs_behaviors(action: &Action) -> bool {
+    action.kind == "macro"
+        && matches!(
+            action.args.first().and_then(Value::as_str),
+            Some("collect" | "approach" | "search-left" | "search-right")
+        )
+}
+
+pub fn behavior_exec(source: &str, timeout: u64) -> String {
+    // The matching runtime is cached by the session owner. User text stays data.
+    format!(
+        "_vx_behavior_exec({}, {})\n",
+        serde_json::to_string(source).unwrap(),
+        timeout * 1000
+    )
+}
 // Result pacing is outside the robot action deadline (16 KiB at 128 B/100 ms).
 // Include helper upload and final cleanup when used without a persistent owner.
 pub const RESULT_TIMEOUT_SECS: u64 = 25;
@@ -92,13 +110,15 @@ pub fn python_json(value: &Value) -> String {
 #[cfg(test)]
 pub fn source(a: &Action) -> String {
     format!(
-        "{RUNTIME}\n_vx_print(_vx_dispatch({}))\n",
+        "{RUNTIME}\n{}\n_vx_print(_vx_dispatch({}))\n",
+        if needs_behaviors(a) { BEHAVIORS } else { "" },
         python_json(&serde_json::to_value(a).unwrap())
     )
 }
 pub fn standalone(a: &Action) -> String {
     format!(
-        "{RUNTIME}\n_vx_result = _vx_dispatch({})\nif 'action' in _vx_result:\n    _vx_print(_vx_action_wait(_vx_result['action']['id'], {}))\nelse:\n    _vx_print(_vx_result)\n",
+        "{RUNTIME}\n{}\n_vx_result = _vx_dispatch({})\nif 'action' in _vx_result:\n    _vx_print(_vx_action_wait(_vx_result['action']['id'], {}))\nelse:\n    _vx_print(_vx_result)\n",
+        if needs_behaviors(a) { BEHAVIORS } else { "" },
         python_json(&serde_json::to_value(a).unwrap()),
         (a.timeout + 2) * 1000
     )
@@ -568,6 +588,18 @@ mod tests {
         assert_eq!(a.args, json!([200.0, 270.0]).as_array().unwrap().clone());
         assert!(parse("motion move-with-vectors 0 25 -20 --duration 2s --no-wait").is_ok());
         assert_eq!(parse("motion turn-for left 360").unwrap().args[1], 360.);
+    }
+    #[test]
+    fn standalone_loads_vision_helpers_only_for_vision_macros() {
+        // Ordinary effects must not pay the vision controller upload cost.
+        for command in ["led on all BLUE", "macro act-happy"] {
+            let action = parse(command).unwrap();
+            assert!(!standalone(&action).contains("class _VxBehaviors:"));
+        }
+        for command in ["macro get-blue-barrel", "macro turn-right-until-blue-barrel"] {
+            let action = parse(command).unwrap();
+            assert!(standalone(&action).contains("class _VxBehaviors:"));
+        }
     }
     #[test]
     fn invalid_never_transmits() {

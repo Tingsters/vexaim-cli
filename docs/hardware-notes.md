@@ -1,5 +1,61 @@
 # Hardware evidence
 
+## Composed behavior investigation (Windows, 2026-10-23)
+
+AIM9E18, firmware 1.0.4.b0, was prepared once with USB unplugged and a persistent
+Bluetooth owner. All subsequent checks were autonomous. No saved robot project,
+firmware write or Wi-Fi transport was used. Results below are development
+candidate evidence, not acceptance of successful pickup/delivery.
+
+- Six stationary samples in each normal/display context advanced the private
+  Timer and system clock together. Native reads took 0–2 ms. A 400 ms native
+  timer callback fired after 403 ms and 406 ms respectively. Display preparation
+  took 23.142 seconds; it was separate from 1.026 seconds of Python execution.
+- The first 0.5.0 candidate found a blue barrel after 161.1 degrees of search,
+  aligned by its detected bearing and reported stopped. Robot execution was
+  5.383 seconds, with 1.148 seconds preparation and 0.495 seconds upload.
+- The initial pickup attempt completed two bounded contact strokes, then failed
+  `not_collected` after 9.348 seconds, with stop confirmed. It did not reach the
+  CLI timeout or claim possession. Native-camera images before/after a 60 mm
+  reverse showed the barrel amid shoes/laces, with an obstructed approach.
+  Attachment was not independently confirmed; native possession remained false.
+- A sideways viewpoint test ended `target_lost_before_contact` after 6.709
+  seconds. Subsequent controller changes were loaded transiently into the same
+  candidate for investigation: asynchronous stop confirmation, a short detection
+  grace interval, a wider recent-alignment gate for cropped cargo, and a lateral
+  offset during the single contact retry. The first follow-up stopped after
+  3.877 seconds on target loss. A later scan stopped after 361.4 measured degrees
+  and 9.408 seconds with `not_found`, without circling to the 60-second fallback.
+- Native JPEG diagnostics completed in 15.185 and 18.556 seconds and left control
+  ready. No successful release/kicker operation was reached. The session stayed
+  healthy through these checks, with no reconnects after candidate startup.
+
+After closing that owner for a binary update, two new-candidate startup attempts
+failed (`Not connected`, then `Packet timeout`). Discovery still found AIM9E18;
+a third attempt using the previous released binary found no matching robot.
+Testing checkpointed without requesting another physical setup. This does not
+establish a new sleep or transport diagnosis. The final loader caches the vision
+controller on first use rather than adding it to every session startup; that
+change has automated coverage but has not had a fresh hardware acceptance run.
+
+The short clock controls did not reproduce Goose's missed internal deadlines.
+The new callbacks, finite phase loops and system-clock checks are tested bounds,
+not a claimed diagnosis of that earlier failure. A clear-path physical pickup,
+orange/ball pickup and complete tag delivery still require hardware acceptance.
+The 15-second pickup / 30-second delivery values are targets, not measured passes.
+An obscured or cropped native detection cannot guarantee arbitrary-clutter
+navigation. Do not replace missing possession evidence with a success claim.
+Photos, JSONL traces and investigation scripts remain local under
+`.vexaim/behaviors/` and are not included in the release.
+
+For a future short repeat, prepare the robot/session/objects at the beginning,
+then use `python dev/accept-behaviors.py --tool PATH --session ID --output-dir LOCAL`.
+That defaults to stationary timing/helper checks. Add `--motion-ready --cargo
+BLUE_BARREL --tag 0` only after the initial floor/object setup. It checkpoints
+on failure, does not replay motion or request later human help, and preserves
+the persistent owner. It checks at least 35% starting battery and reports native
+evidence separately from independently verified physical attachment.
+
 ## Windows AIM 1.0.4 investigation (2026-10-21)
 
 The revised packaged Windows candidate (`fbfb9ac`, harness `4ccc82d`) has now

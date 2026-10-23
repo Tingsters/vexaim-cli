@@ -92,6 +92,8 @@ jobs:
       - name: Test robot motion helpers and independent benchmark evaluation (no hardware)
         run: |
           python -m unittest discover -s dev -p test_device_runtime.py -v
+          python -m unittest discover -s dev -p test_behaviors.py -v
+          python -m unittest discover -s dev -p test_behavior_acceptance.py -v
           python -m unittest discover -s dev -p test_device_acceptance.py -v
           python -m unittest discover -s dev -p test_motion_helpers.py -v
           python -m unittest discover -s dev -p test_motion_benchmark.py -v
@@ -114,6 +116,7 @@ jobs:
           cli/target/release/${{ matrix.exe }} --version
           python -c "import subprocess; help_text = subprocess.check_output(['cli/target/release/${{ matrix.exe }}', 'bluetooth', 'pair', '--help'], text=True); assert '--code-stdin' in help_text, help_text"
           python -c "import subprocess; h=subprocess.check_output(['cli/target/release/${{ matrix.exe }}','session','start','--help'],text=True); assert '--persistent' in h and '--takeover' in h, h"
+          python -c "import subprocess; h=subprocess.check_output(['cli/target/release/${{ matrix.exe }}','exec','--help'],text=True); assert '--behaviors' in h, h"
 
       - name: shellcheck (Linux)
         if: runner.os == 'Linux'

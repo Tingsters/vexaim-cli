@@ -1,4 +1,26 @@
-# vexaim 0.4.2
+# vexaim 0.5.0
+
+Compose supported object search, magnetic pickup and tag delivery in one
+`exec --behaviors` activity. The CLI supplies `behaviors.find`, `collect`,
+`approach` and `deliver`; no saved robot program or student Python installation
+is needed. Existing vision macros share the same controller.
+
+Collection now checks possession independently of temporary detection loss,
+continues bounded near-field contact, verifies retention and permits one local
+retry. Searches stop after one sweep, marker stand-offs match VEX (60 pixels
+for tags, 140 for AIM robots), and macros honor session velocity settings.
+Activity deadlines use the robot system clock where available and a gated timer
+callback; expired callbacks cannot stop a later activity. Progress identifies
+the phase and deadline errors retain the last native call.
+
+The vision controller loads on first use, preserving ordinary session startup.
+Hardware testing confirmed bounded search and explicit pickup failures in an
+obstructed layout; successful physical pickup/delivery remains unverified.
+Later reconnection attempts failed and were checkpointed. Details and measured
+timings are in docs/hardware-notes.md; simulation does not certify physical
+pickup accuracy or resolve the earlier Goose timeout's root cause.
+
+## Previous release: 0.4.2
 
 Windows Bluetooth camera downloads now authorize a read-only transfer at its
 boundaries instead of reading the pairing characteristic before every small

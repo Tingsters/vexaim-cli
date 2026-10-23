@@ -150,6 +150,9 @@ enum Cmd {
         /// Do not auto-create `robot = Robot()` (and the vex imports)
         #[arg(long)]
         no_preamble: bool,
+        /// Expose bounded, composable find/collect/approach/deliver helpers
+        #[arg(long, conflicts_with = "no_preamble")]
+        behaviors: bool,
     },
     /// Request interruption and stop wheels/sound; needs a working link
     Stop,
@@ -238,9 +241,32 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
             );
             return Ok(0);
         }
+    } else if cli.emit_python
+        && let Cmd::Exec {
+            code,
+            inputs,
+            file,
+            timeout,
+            behaviors,
+            no_preamble,
+        } = &cli.cmd
+    {
+        let source = with_inputs(exec_source(code, file)?, inputs)?;
+        let source = if *behaviors {
+            format!(
+                "{}\n{}\n{}",
+                device::RUNTIME,
+                device::BEHAVIORS,
+                device::behavior_exec(&source, *timeout)
+            )
+        } else {
+            source
+        };
+        println!("{}{}", if *no_preamble { "" } else { PREAMBLE }, source);
+        return Ok(0);
     } else if cli.emit_python {
         return Err(device::fail(
-            "--emit-python is available for native catalogue commands",
+            "--emit-python is available for exec and native catalogue commands",
         ));
     }
     if cli.session.is_some() || matches!(cli.cmd, Cmd::Session { .. }) {
@@ -350,8 +376,19 @@ fn run(cli: &Cli) -> Result<i32, Fail> {
             file,
             timeout,
             no_preamble,
+            behaviors,
         } => {
             let src = with_inputs(exec_source(code, file)?, inputs)?;
+            let src = if *behaviors {
+                format!(
+                    "{}\n{}\n{}",
+                    device::RUNTIME,
+                    device::BEHAVIORS,
+                    device::behavior_exec(&src, *timeout)
+                )
+            } else {
+                src
+            };
             run_exec(cli, &src, *timeout, !*no_preamble)
         }
     }
@@ -559,6 +596,27 @@ fn validate_status(result: &repl::ExecResult) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn composed_behaviors_are_explicit_and_keep_native_preamble() {
+        let cli = Cli::try_parse_from(["vexaim", "exec", "--behaviors", "print('ok')"]).unwrap();
+        assert!(matches!(
+            cli.cmd,
+            Cmd::Exec {
+                behaviors: true,
+                no_preamble: false,
+                ..
+            }
+        ));
+        assert!(
+            Cli::try_parse_from(["vexaim", "exec", "--behaviors", "--no-preamble", "pass"])
+                .is_err()
+        );
+        let source = device::behavior_exec("print('line 1')\nprint('line 2')", 60);
+        assert!(source.contains("_vx_behavior_exec("));
+        assert!(source.contains("60000"));
+        assert!(source.contains("\\n"));
+    }
 
     #[test]
     fn bluetooth_is_explicit_and_never_uses_usb_indices_or_pin_arguments() {

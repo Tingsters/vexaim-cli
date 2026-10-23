@@ -56,6 +56,8 @@ class DeviceRuntime(unittest.TestCase):
         )
         self.ns = dict(robot=robot, Timer=Timer, Thread=Thread, wait=wait, MSEC=0, DPS='dps', MMPS='mmps', RIGHT='right', LEFT='left', BLUE='blue', ALL_LEDS=6, ALL_AIOBJS=100)
         exec(compile(RUNTIME.read_text(), str(RUNTIME), 'exec'), self.ns)
+        behavior_runtime = RUNTIME.with_name('behaviors.py')
+        exec(compile(behavior_runtime.read_text(), str(behavior_runtime), 'exec'), self.ns)
 
     def action(self, method='robot.move_for', args=None, kind='motion', **options):
         return dict(command='test', method=method, args=[200,90] if args is None else args, kind=kind,
@@ -133,10 +135,10 @@ class DeviceRuntime(unittest.TestCase):
                 job = self.ns['_vx_action_status'](result['action']['id'])
                 if requested == held:
                     self.assertEqual(job['state'], 'completed')
-                    self.assertEqual(job['value'], {'collected': True})
+                    self.assertTrue(job['value']['collected'])
                 else:
                     self.assertEqual(job['state'], 'failed')
-                    self.assertIn('deadline', job['error'])
+                    self.assertIn('wrong_cargo', job['error'])
                     self.assertIsNone(job.get('value'))
                 self.assertTrue(job['stopped_confirmed'])
 

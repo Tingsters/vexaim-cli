@@ -109,7 +109,7 @@ def _vx_actions():
 
 
 def _vx_public(job):
-    return {k: v for k, v in job.items() if k not in ('thread', 'clock')}
+    return {k: v for k, v in job.items() if k not in ('thread', 'clock') and not k.startswith('_')}
 
 
 def _vx_action_status(identifier):
@@ -291,35 +291,7 @@ def _vx_macro(args, a, job):
                     return {'cancelled': True}
                 wait(20, MSEC)
         return {'behavior': behavior}
-    target = args[1]
-    while True:
-        _vx_deadline(job, a)
-        if job['cancel_requested']:
-            return {'cancelled': True}
-        objects = [o for o in robot.vision.get_data(target, 8) if getattr(o, 'exists', False)]
-        if behavior.startswith('search-'):
-            if objects:
-                return {'found': _vx_plain(objects[0])}
-            robot.turn(LEFT if behavior == 'search-left' else RIGHT, 30, DPS)
-        elif objects:
-            obj = objects[0]
-            # Native detection coordinates, not camera JPEG coordinates.
-            if behavior == 'collect':
-                collected = (
-                    (target == globals().get('SPORTS_BALL') and robot.vision.has_sports_ball()) or
-                    (target == globals().get('ORANGE_BARREL') and robot.vision.has_orange_barrel()) or
-                    (target == globals().get('BLUE_BARREL') and robot.vision.has_blue_barrel()))
-                if collected:
-                    return {'collected': True}
-            if behavior == 'approach' and obj.width >= 100:
-                return {'approached': _vx_plain(obj)}
-            if abs(obj.centerX - 160) > 20:
-                robot.turn(LEFT if obj.centerX < 160 else RIGHT, 20, DPS)
-            else:
-                robot.move_at(0, 60, MMPS)
-        else:
-            robot.stop_all_movement()
-        wait(50, MSEC)
+    return _vx_behavior_macro(args, a, job)
 
 
 def _vx_worker(a, job):
@@ -329,6 +301,8 @@ def _vx_worker(a, job):
         terminal = 'cancelled' if job['cancel_requested'] else 'completed'
     except Exception as error:
         job['error'] = str(error)
+        if job.get('cancel_requested'):
+            terminal = 'cancelled'
     finally:
         if job['resource'] == 'motion':
             try:
@@ -402,4 +376,4 @@ def _vx_cancel_all():
             job['cancel_requested'] = True
 
 
-_vx_runtime_version = 1
+_vx_runtime_version = 2

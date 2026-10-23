@@ -19,6 +19,7 @@ pub struct Robot {
     identity: Value,
     needs_check: bool,
     camera_usable: bool,
+    behaviors_ready: bool,
     power: crate::power::Power,
     name: String,
     connection_state: &'static str,
@@ -69,6 +70,7 @@ impl Robot {
                 identity: json!({"transport":"usb","system_port":port}),
                 needs_check: false,
                 camera_usable: true,
+                behaviors_ready: false,
                 name: name.into(),
                 connection_state: "ready",
                 recovery_attempt: 0,
@@ -120,6 +122,7 @@ impl Robot {
             identity,
             needs_check: false,
             camera_usable: true,
+            behaviors_ready: false,
             name: name.into(),
             connection_state: "ready",
             recovery_attempt: 0,
@@ -194,6 +197,7 @@ impl Robot {
     }
 
     async fn prepare(&mut self) -> Result<(), Fail> {
+        self.behaviors_ready = false;
         let result = self
             .repl
             .exec(
@@ -206,6 +210,18 @@ impl Robot {
             )
             .await?;
         checked(&result)
+    }
+
+    async fn ensure_behaviors(&mut self) -> Result<(), Fail> {
+        if !self.behaviors_ready {
+            let result = self
+                .repl
+                .exec(crate::device::BEHAVIORS, Duration::from_secs(15))
+                .await?;
+            checked(&result)?;
+            self.behaviors_ready = true;
+        }
+        Ok(())
     }
     async fn cleanup_open(&mut self) {
         // Startup failure must not interrupt an unowned student program.
@@ -353,6 +369,9 @@ impl Robot {
         let a = crate::device::parse(words, true)?;
         if a.command.starts_with("screen ") && a.kind != "read" {
             self.activate_display().await?;
+        }
+        if crate::device::needs_behaviors(&a) {
+            self.ensure_behaviors().await?;
         }
         let source = format!(
             "_vx_print(_vx_dispatch({}))\n",
@@ -712,6 +731,15 @@ impl Backend for Robot {
         {
             self.activate_display().await?;
         }
+        if matches!(
+            request,
+            Request::Exec {
+                behaviors: true,
+                ..
+            }
+        ) {
+            self.ensure_behaviors().await?;
+        }
         let (source, timeout) = match request {
             Request::Turn {
                 left,
@@ -738,8 +766,14 @@ impl Backend for Robot {
                 source,
                 timeout,
                 preamble,
+                behaviors,
             } => (
-                if *preamble {
+                if *behaviors {
+                    format!(
+                        "{PREAMBLE}{}",
+                        crate::device::behavior_exec(source, *timeout)
+                    )
+                } else if *preamble {
                     format!("{PREAMBLE}{source}")
                 } else {
                     source.clone()

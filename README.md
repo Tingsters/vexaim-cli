@@ -3,7 +3,11 @@
 Control a VEX AIM robot over USB or Bluetooth. Run MicroPython, read sensors,
 move, stop, and save native camera photographs. The command is **`vexaim`**.
 
-The 0.4 release adds persistent workshop sessions, automatic Bluetooth recovery,
+The 0.5 release adds [composable native vision behaviors](skill/vex-aim/references/behaviors.md):
+find kit objects, collect a barrel or ball, approach a marker, and deliver cargo
+in one `exec --behaviors` script. Existing macros share the same implementation.
+
+The 0.4 release added persistent workshop sessions, automatic Bluetooth recovery,
 explicit program takeover and separate preparation/upload/execution timing. It includes the [VEX AIM device catalogue](docs/device-commands.md)
 and [agent image workflow](skill/vex-aim/references/agent-vision.md): strafing and
 vector motion, sensors, vision, LEDs, screen, sound and bounded actions.

@@ -68,6 +68,12 @@ assets and actions. Use native commands where applicable and compose actions for
 ideas; arbitrary Python is available. Do not require surface labels, targets or
 calibration before ordinary movement.
 
+For kit-cargo pickup, native search and tag delivery, read
+`references/behaviors.md` and use `exec --behaviors` (0.5.0+). Compose tested
+`find`, `collect`, `approach` and `deliver` helpers with native effects in one
+execution instead of regenerating vision loops. A helper failure stops the
+sequence. These helpers belong to the CLI; `robot` retains its VEX API.
+
 For Bluetooth faces, messages and drawings, use the reusable session. Screen
 writes activate the program display automatically and camera capture is independent
 of LCD mode. Stop/close or 60 seconds without display activity ends the drawing;
@@ -155,6 +161,7 @@ robot. Actual coverage: https://github.com/Tingsters/vexaim-cli/blob/main/docs/h
 - `references/api.md`: available Python APIs, constants and observed limitations.
 - `references/examples.md`: short Python examples for creative compositions.
 - `references/device-commands.md`: VEX-style native command catalogue and actions.
+- `references/behaviors.md`: compose bounded kit-object search, pickup and delivery.
 - `references/agent-vision.md`: capture, inspect, decide, act and observe again.
 - `references/unattended-work.md`: front-loaded setup and audible intervention.
 

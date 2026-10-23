@@ -63,6 +63,8 @@ pub(super) enum Request {
         source: String,
         timeout: u64,
         preamble: bool,
+        #[serde(default)]
+        behaviors: bool,
     },
     Snap {
         output: String,
@@ -113,6 +115,13 @@ impl Request {
                 return Err(failure(
                     "Session exec is limited to 48 KiB and 1..120 seconds",
                 ));
+            }
+            Self::Exec {
+                behaviors: true,
+                preamble: false,
+                ..
+            } => {
+                return Err(failure("Behavior helpers require the VEX preamble"));
             }
             Self::Snap { output } if !std::path::Path::new(output).is_absolute() => {
                 return Err(failure(
@@ -905,10 +914,12 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                 file,
                 timeout,
                 no_preamble,
+                behaviors,
             } => Request::Exec {
                 source: crate::with_inputs(crate::exec_source(code, file)?, inputs)?,
                 timeout: *timeout,
                 preamble: !*no_preamble,
+                behaviors: *behaviors,
             },
             Cmd::Snap { output } => {
                 let path = std::path::PathBuf::from(crate::snap::output_path(output.as_deref()));

@@ -1,9 +1,13 @@
 # Native VEX AIM commands
 
-Use the matching 0.4 executable and skill. Use `--json` and `--session ID` before
+Use the matching executable and skill (0.5.0+ for composed behaviors). Use `--json` and `--session ID` before
 the command. `catalog [GROUP]` works offline and lists exact positional parameters,
 native VEX method names, constants and operation kinds. `capabilities --live`
 reports API presence on this firmware; presence is not a hardware test.
+
+For compound kit-object tasks use `exec --behaviors` and read `behaviors.md`.
+The named vision macros use the same controller; do not copy the control loops
+into a student activity. Native calls and effects can be composed around helpers.
 
 ```sh
 vexaim --session ID forward 20 --units cm
