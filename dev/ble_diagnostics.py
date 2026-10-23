@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import struct
 import subprocess
+import sys
 import time
 import urllib.request
 
@@ -101,8 +102,9 @@ class Limits:
 
 
 class HostMonitor:
-    def __init__(self, journal, duration=5500):
+    def __init__(self, journal, duration=5500, require_bluetooth_only=False):
         self.journal = journal
+        self.require_bluetooth_only = require_bluetooth_only
         self.began = time.monotonic()
         self.path = journal.directory / 'windows-events.jsonl'
         self.stop_file = journal.directory / 'monitor.stop'
@@ -133,12 +135,23 @@ class HostMonitor:
         if self.process.poll() is not None:
             raise Incomplete('Windows metadata monitor stopped unexpectedly')
         rows = self.rows()
+        if getattr(self, 'require_bluetooth_only', False) and any(row.get('aim_usb_present') is True for row in rows):
+            raise Incomplete('An AIM USB data connection was detected; Bluetooth-only measurement invalidated')
         if rows:
             last = datetime.fromisoformat(rows[-1]['utc'].replace('Z', '+00:00'))
             if (datetime.now(timezone.utc)-last).total_seconds() > 20:
                 raise Incomplete('Windows metadata monitor stopped progressing')
         elif time.monotonic()-self.began > 20:
             raise Incomplete('Windows metadata monitor produced no evidence')
+
+    def verify_setup(self):
+        deadline = time.monotonic()+20
+        while time.monotonic() < deadline:
+            self.check()
+            if any(row.get('event') == 'monitor_health' and row.get('aim_usb_present') is False for row in self.rows()):
+                return
+            time.sleep(.2)
+        raise Incomplete('USB-disconnected setup was not independently verified')
 
     def close(self):
         self.stop_file.touch()
@@ -235,7 +248,7 @@ class CliClient:
             if self.session is None:
                 # A failed startup exits on its own. Never invent a named-close
                 # interface or send a new command without a returned session ID.
-                exited = not self.process_ids() and self.wait_owner_exit()
+                exited = self.wait_owner_exit() and not self.process_ids()
                 return {'confirmed': exited, 'owner_exited': exited, 'startup_incomplete': True,
                     'power_cleanup_verified': False}
             value = self.call('--session', self.session, 'session', 'close', timeout=30, cleanup=True)
@@ -278,8 +291,9 @@ def official_ble_chunk(archive):
 
 class OfficialClient:
     """CDP observation of installed VEXcode; no copied proprietary source."""
-    def __init__(self, name, port=9223):
+    def __init__(self, name, port=9223, auth_code=None):
         self.name, self.port = name, port
+        self.auth_code = auth_code
         self.socket = None
         self.process = None
         self.sequence = 0
@@ -345,22 +359,52 @@ class OfficialClient:
         chunk = official_ble_chunk(executable.parent/'resources/app.asar')
         self.evaluate('self.__bleRequire.e('+json.dumps(chunk)+').then(()=>true)')
         self.evaluate('''(() => {
-          const m=self.__bleModule=self.__bleRequire('./node_modules/@vexcode/vex-ble-device-manager/dist_lib/src/index.js');
-          self.__bleDiag={selected:false,lastNotification:0,count:0};
+          const C=self.__bleRequire('./node_modules/@vexcode/vex-ble-device-manager/dist_lib/src/VEXBLEDeviceManager.js').VEXBLEDeviceManager;
+          const m=self.__bleModule=new C('AIM');
+          self.__bleDiag={selected:false,lastNotification:0,count:0,subscriptions:[]};
           const original=BluetoothRemoteGATTCharacteristic.prototype.startNotifications;
           BluetoothRemoteGATTCharacteristic.prototype.startNotifications=async function(...args){
+            self.__bleDiag.subscriptions.push(this.uuid);
             if(!this.__bleObserved){this.__bleObserved=true;this.addEventListener('characteristicvaluechanged',()=>{
               if(this.uuid==='6c7851a0-adf7-4de6-881d-1ce2cd0fecf9'){
                 self.__bleDiag.lastNotification=Date.now();self.__bleDiag.count++;
               }
             });}return original.apply(this,args);
           };
+          m.getLockCode=async()=>{self.__bleDiag.authFailed=true;};
           return {ready:!!m};
         })()''')
         self.evaluate('''window.electronAPI.bluetooth.onDownloadDeviceListUpdate(list=>{
           const d=list.find(x=>x.deviceName==='''+json.dumps(self.name)+''');
           if(d&&!self.__bleDiag.selected){self.__bleDiag.selected=true;window.electronAPI.bluetooth.selectDevice(d.deviceId)}
         }); true''')
+        if self.auth_code is not None:
+            # Only the already supplied setup credential, transiently in RAM.
+            # Never request a new code, read the vault, or include this in logs.
+            expected = [int(digit) for digit in self.auth_code]
+            self.evaluate('''self.__bleModule.getLockCode=async()=>{
+              self.__bleDiag.authAttempted=true;
+              try {
+                const characteristic=self.__bleModule.characteristics['08590f7e-db05-467e-8757-72f6faeb13e5'];
+                let value=await characteristic.readValue();
+                const expected='''+json.dumps(expected)+''';
+                if(value.byteLength===4&&value.getUint32(0)===0xdeadface){
+                  // Restore the existing credential on a fresh GATT link, just
+                  // as the CLI does. Never overwrite a different owner's code.
+                  await characteristic.writeValueWithResponse(new Uint8Array(expected));
+                  await new Promise(resolve=>setTimeout(resolve,500));
+                  value=await characteristic.readValue();
+                  self.__bleDiag.authRestored=true;
+                }
+                const matched=value.byteLength===4&&expected.every((d,i)=>value.getUint8(i)===d);
+                self.__bleDiag.authFailed=!matched;
+                if(matched){
+                  self.__bleModule.deviceInfo.unlocked=true;
+                  await self.__bleModule.updateDeviceInfoOnConnect();
+                }
+              } catch (e) {self.__bleDiag.authFailed=true;self.__bleDiag.authErrorName=e?.name||'request_failed';}
+            }; true''')
+            self.auth_code = None
 
     def connect(self):
         self.opened = True
@@ -372,11 +416,16 @@ class OfficialClient:
             if value.get('connected') and isinstance(age, (int, float)) and age < 12000:
                 return value
             time.sleep(.5)
-        raise Incomplete('Official Bluetooth setup needs attention; no unattended pairing attempted')
+        raise Incomplete('Official setup incomplete; no new pairing requested: '+json.dumps(value))
 
     def status(self):
         return self.evaluate('''(() => ({connected:self.__bleModule.getConnectionState()===2,
           notifications:self.__bleDiag.count,
+          auth_failed:self.__bleDiag.authFailed===true,
+          auth_attempted:self.__bleDiag.authAttempted===true,
+          auth_restored:self.__bleDiag.authRestored===true,
+          auth_error_name:self.__bleDiag.authErrorName||null,
+          state:self.__bleModule.getConnectionState(),subscriptions:self.__bleDiag.subscriptions,
           notification_age_ms:self.__bleDiag.lastNotification?Date.now()-self.__bleDiag.lastNotification:null}))()''')
 
     def disconnect(self):
@@ -513,6 +562,9 @@ class Runner:
                         or final.get('keepalive', {}).get('reconnect_count', 0) != initial_reconnects):
                     raise PhaseFailed('Link/adapter reset during measurement or final functional checks')
             finally:
+                pending = sys.exception()
+                if pending is not None:
+                    self.journal.record('cli_error', phase=label, error=str(pending)[:500])
                 cleanup = client.close()
                 self.journal.record('cli_cleanup', phase=label, **cleanup)
                 if not cleanup['confirmed']:
@@ -553,6 +605,7 @@ def main():
     parser.add_argument('--baseline-seconds', type=int, default=0)
     parser.add_argument('--baseline-only', action='store_true')
     parser.add_argument('--recovery-test-exe', type=Path)
+    parser.add_argument('--official-auth-stdin', action='store_true', help='Read the existing setup code once from stdin; never request a new code unattended')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows-only host investigation')
@@ -564,14 +617,22 @@ def main():
         parser.error('Measurement durations must be positive')
     if (args.output/'events.jsonl').exists() or (args.output/'result.json').exists():
         parser.error('Use a fresh output directory; failed runs are never overwritten')
+    setup_code = None
+    if args.official_auth_stdin:
+        setup_code = sys.stdin.readline().strip()
+        if not re.fullmatch(r'[0-9]{4}', setup_code):
+            parser.error('Supply four setup digits on stdin; no credential is logged')
     journal = Journal(args.output)
     job_handle = contain_children()  # Kept open until Windows exits this runner.
     limits = Limits()
-    host = HostMonitor(journal)
+    host = HostMonitor(journal, require_bluetooth_only=not args.baseline_only)
     runner = Runner(journal, host, limits)
     outcome, extra = 'incomplete', {}
     try:
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)
+        journal.record('configuration', harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            official_seconds=args.official_seconds, comparison_seconds=args.comparison_seconds,
+            confirmation_seconds=args.confirmation_seconds, whole_run_seconds=5400)
         for label, path in [('released', args.released), ('candidate', args.candidate)]:
             journal.record('binary', label=label, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
         if args.baseline_seconds:
@@ -579,12 +640,16 @@ def main():
         if args.baseline_only:
             outcome = 'baseline_complete'
         else:
+            host.verify_setup()
+            journal.record('physical_setup', robot_usb_connected=False, robot_power='battery_or_external_power_without_data')
             # The operator is present for preflight; absence is never treated as pairing consent.
             preflight = CliClient(args.released, args.name, limits)
             runner.cli_phase('setup-live-check', preflight, 0, initial=True)
             if runner.phases[-1]['outcome'] != 'passed':
                 raise Incomplete('Initial connection verification failed')
-            official_ok = runner.official_phase(OfficialClient(args.name), args.official_seconds)
+            official = OfficialClient(args.name, auth_code=setup_code)
+            setup_code = None
+            official_ok = runner.official_phase(official, args.official_seconds)
             released_ok = runner.cli_phase('released-throughput', CliClient(args.released, args.name, limits), args.comparison_seconds)
             candidate_ok = runner.cli_phase('candidate-os-default', CliClient(args.candidate, args.name, limits, 'os-default'), args.comparison_seconds)
             extra.update(official_passed=official_ok, released_passed=released_ok, candidate_passed=candidate_ok)

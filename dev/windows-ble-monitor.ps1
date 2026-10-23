@@ -41,7 +41,8 @@ try {
             $lastEvent = $entry.RecordId
         }
         if ($clock.Elapsed.TotalSeconds - $lastHeartbeat -ge 5) {
-            Record @{event='monitor_health';radio_nodes=$radios.Count}
+            $aimUsb = @(Get-PnpDevice -PresentOnly -ErrorAction Stop | Where-Object InstanceId -like 'USB\VID_2888&PID_0700*')
+            Record @{event='monitor_health';radio_nodes=$radios.Count;aim_usb_present=($aimUsb.Count -gt 0)}
             $lastHeartbeat = $clock.Elapsed.TotalSeconds
         }
         Start-Sleep -Seconds 1

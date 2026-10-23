@@ -223,6 +223,27 @@ print(child.pid,flush=True)
         with self.assertRaisesRegex(Incomplete, 'stopped progressing'):
             monitor.check()
 
+    def test_usb_data_connection_invalidates_a_bluetooth_only_run(self):
+        monitor = HostMonitor.__new__(HostMonitor)
+        monitor.process = Mock()
+        monitor.process.poll.return_value = None
+        monitor.require_bluetooth_only = True
+        monitor.rows = lambda: [{'event': 'monitor_health', 'aim_usb_present': True}]
+        with self.assertRaisesRegex(Incomplete, 'USB data connection'):
+            monitor.check()
+
+    def test_failed_startup_waits_for_its_owner_before_confirming_cleanup(self):
+        client = CliClient.__new__(CliClient)
+        client.session = None
+        exited = False
+        def wait():
+            nonlocal exited
+            exited = True
+            return True
+        client.wait_owner_exit = wait
+        client.process_ids = lambda: [] if exited else [123]
+        self.assertTrue(client.close()['confirmed'])
+
 
 if __name__ == '__main__':
     unittest.main()

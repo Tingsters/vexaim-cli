@@ -47,13 +47,30 @@ unplug its USB cable and leave it stationary with an object in view. Close
 VEXcode and any old CLI owner. Pair/verify access while the operator is present;
 do not depend on a new code or operating-system prompt after they leave.
 
+Distinguish robot power from the computer's power: a robot cable to the computer
+enumerates AIM serial ports and its USB camera even when intended only for
+charging. Remove it for the Bluetooth-only comparison. A wall charger can
+support a separately labeled powered-link test, but cannot establish battery-only
+sleep prevention. The runner checks Windows PnP for an AIM USB data connection
+before starting clients and throughout measurement; detecting one invalidates
+the Bluetooth-only result. Record external charging separately; PnP cannot see
+a wall charger.
+
 Maintainer runner (Python and websocket-client are **not student dependencies**):
 
 ```powershell
 uv run --no-project --with websocket-client==1.8.0 python dev/ble_diagnostics.py `
   --released PATH_TO_RELEASED_EXE --candidate PATH_TO_DIAGNOSTIC_EXE `
-  --name AIM6518 --output dist/ble-investigation/RUN --stationary-ready
+  --name AIM6518 --output dist/ble-investigation/RUN --stationary-ready `
+  --official-auth-stdin
 ```
+
+Provide the existing setup code once on native stdin (use the agent tool's
+retained input or a local masked prompt), never as an argument or saved file.
+The code stays in memory for the official control and is not printed or saved.
+No new pairing request is made. If the fresh link reports the source-defined
+unpaired marker, restore this existing credential once and verify the readback;
+a different active credential stops the run without overwriting it.
 
 Use a fresh output directory for every run. `--baseline-only --baseline-seconds
 180` collects a host-only baseline without connecting either application; it
@@ -70,10 +87,20 @@ approval up front before adding it. Do not disable USB selective suspend globall
 ## Automatic phases and interpretation
 
 After initial live stopped/battery verification, the runner observes official
-VEXcode for three minutes, the release for five, and the OS-default candidate
-for five. Only one client is connected. An initial connection/authentication
+VEXcode's bundled Bluetooth library for three minutes, the release for five,
+and the OS-default candidate for five. Only one client is connected. An initial connection/authentication
 problem is incomplete, not an unattended request to pair. Both CLI variants use
 the same firmware-gated finite power lease. A failed phase stays failed.
+
+The official control launches its own hidden installed Windows VEXcode instance
+and uses its AIM device-manager class through local Chrome debugging. It replaces
+only the credential UI callback with the existing-code verification described
+above and observes status-notification freshness without recording payloads.
+This is a library control, not an untouched UI workflow or an official power-lease
+test. It runs no student project. The installed lazy BLE chunk is read in place;
+no proprietary source is committed. Missing bundles, failed authentication or
+missing fresh notifications make setup incomplete rather than passing a cached
+connection state. `setup_verified` marks the start of unattended measurements.
 
 If the release passes, confirm that released configuration on the current host
 path. If only the candidate passes, confirm the candidate. If neither passes,
