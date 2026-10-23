@@ -58,6 +58,7 @@ try {
   foreach ($agent in @('.agents', '.claude')) {
     $skill = Join-Path $allHome "$agent/skills/vex-aim"
     Assert-True ((Test-Path "$skill/bin/vexaim.exe") -and (Test-Path "$skill/SKILL.md")) "installed $agent skill and executable"
+    Assert-True (Test-Path "$skill/scripts/pair.ps1") "installed $agent stdin pairing bridge"
     Assert-True ((Test-Path "$skill/references/sessions-and-motion.md") -and (Select-String -LiteralPath "$skill/SKILL.md" -SimpleMatch 'references/sessions-and-motion.md' -Quiet)) "installed $agent prompt/session guidance with the tool"
     Assert-True ((Test-Path "$skill/LICENSE") -and (Test-Path "$skill/licenses/btleplug-LICENSE.md")) "installed $agent distribution notices"
     $version = & "$skill/bin/vexaim.exe" --version

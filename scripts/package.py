@@ -20,7 +20,7 @@ def package(target, binary, output):
     files = [(Path(binary), 'vexaim.exe' if windows else 'vexaim')]
     files += [(repo / name, name) for name in ('VERSION', 'install.sh', 'install.ps1', 'LICENSE', 'NOTICE.md')]
     files += [(p, p.relative_to(repo).as_posix()) for p in sorted((repo / 'skill').rglob('*'))
-              if p.is_file() and p.suffix in ('.md', '.sh', '.rules')]
+              if p.is_file() and p.suffix in ('.md', '.sh', '.ps1', '.rules')]
     for name in ('LICENSE-vex-v5-serial-MIT', 'btleplug/LICENSE', 'btleplug/LICENSE.md'):
         path = repo / 'cli/vendor' / name
         if path.is_file():

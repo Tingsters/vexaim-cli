@@ -261,7 +261,18 @@ pub(crate) async fn authenticate(
     pair: bool,
     code_stdin: bool,
 ) -> Result<(), Fail> {
-    if !pair && conn.is_paired().await.map_err(io)? {
+    if !pair {
+        let code = saved_code(id)?.ok_or_else(|| {
+            Fail::AuthenticationRequired(
+                "Authentication is required on this computer; pair the selected robot once.".into(),
+            )
+        })?;
+        let pin = decode_pin(&code)?;
+        if conn.is_paired().await.map_err(io)? {
+            return verify_owner(conn, id).await;
+        }
+        conn.authenticate_pairing(pin).await.map_err(|_| Fail::AuthenticationRequired(
+            "Stored authentication was rejected. Automatic reconnect is paused; pair explicitly to claim this robot. No credential was erased.".into()))?;
         return Ok(());
     }
     let code = if pair && code_stdin {
@@ -297,6 +308,29 @@ pub(crate) async fn authenticate(
     conn.authenticate_pairing(pin).await.map_err(|_| fail("Robot rejected the code or authentication failed; no credential was saved. Pair again locally."))?;
     entry(id)?.set_password(&code).map_err(|_| fail("Robot accepted the code, but the native credential store could not save it. Unlock the store and pair again."))?;
     Ok(())
+}
+
+/// Read-only ownership evidence. A changed application code must never be
+/// overwritten by a background reconnect from the previous computer.
+pub(crate) async fn verify_owner(conn: &BluetoothConnection, id: &str) -> Result<(), Fail> {
+    let code = saved_code(id)?.ok_or_else(|| {
+        Fail::AuthenticationRequired(
+            "No saved credential for this robot; automatic reconnect is paused.".into(),
+        )
+    })?;
+    let expected = decode_pin(&code)?;
+    let actual = tokio::time::timeout(Duration::from_secs(5), conn.peripheral.read(&conn.pairing))
+        .await
+        .map_err(|_| fail("Authentication read timed out"))?
+        .map_err(io)?;
+    if actual != expected {
+        return Err(Fail::AuthenticationRequired(
+            "Robot authentication changed or was released. Automatic reconnect is paused to allow handoff; saved credentials were retained.".into()));
+    }
+    Ok(())
+}
+pub(crate) fn authentication_required(error: &Fail) -> bool {
+    matches!(error, Fail::AuthenticationRequired(_))
 }
 
 pub fn run(cli: &Cli) -> Result<i32, Fail> {
@@ -616,7 +650,10 @@ mod tests {
     fn code_line_reads_only_the_first_line() {
         let input = std::io::Cursor::new(b" 1234 \r\nignored\n".to_vec());
         assert_eq!(read_code_line(input).unwrap(), "1234");
-        assert_eq!(read_code_line(std::io::Cursor::new(Vec::new())).unwrap(), "");
+        assert_eq!(
+            read_code_line(std::io::Cursor::new(Vec::new())).unwrap(),
+            ""
+        );
     }
     #[test]
     fn pin_validation_never_echoes_input() {

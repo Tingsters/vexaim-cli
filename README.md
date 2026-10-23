@@ -3,7 +3,8 @@
 Control a VEX AIM robot over USB or Bluetooth. Run MicroPython, read sensors,
 move, stop, and save native camera photographs. The command is **`vexaim`**.
 
-The 0.3 release includes the [VEX AIM device catalogue](docs/device-commands.md)
+The 0.4 release adds persistent workshop sessions, automatic Bluetooth recovery,
+explicit program takeover and separate preparation/upload/execution timing. It includes the [VEX AIM device catalogue](docs/device-commands.md)
 and [agent image workflow](skill/vex-aim/references/agent-vision.md): strafing and
 vector motion, sensors, vision, LEDs, screen, sound and bounded actions.
 Agent-assisted Bluetooth pairing can read the displayed code from standard input
@@ -57,7 +58,7 @@ agent skill. The default locations are:
 
 Use `--agents claude` / `-Agents claude` to select an agent, `--dry-run` /
 `-DryRun` to preview, or `--from-dir DIR` / `-FromDir DIR` to use local release
-archives plus checksums. `--version 0.3.0` / `-Version 0.3.0` selects a release.
+archives plus checksums. `--version 0.4.0` / `-Version 0.4.0` selects a release.
 No shell profile or agent settings are changed. To update, rerun the one-line
 command for your computer. An extracted bundle installs its own version offline;
 download a fresh bundle when updating offline. Close active sessions first.
@@ -68,29 +69,14 @@ To pass options without a checkout, use `curl -fsSL <installer-URL> | sh -s --
 above. To review the installer first, open that URL or download it without
 executing it.
 
-To try the device commands, agent camera workflow and Bluetooth display in
-**0.3.0-rc.6**, select the experimental prerelease explicitly. Windows PowerShell:
-
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Tingsters/vexaim-cli/v0.3.0-rc.6/install.ps1))) -Version 0.3.0-rc.6
-```
-
-macOS (Apple Silicon or Intel) and Linux:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Tingsters/vexaim-cli/v0.3.0-rc.6/install.sh | sh -s -- --version 0.3.0-rc.6
-```
-
-Both commands verify the release archive and install its matching basic skill.
-The [hardware notes](docs/hardware-notes.md) distinguish Windows robot checks
-from CI coverage. Unversioned installers continue to select the stable release.
-
-This release supports cross-platform verification; macOS hardware remains
-unverified. Follow the [Mac verification checklist](docs/macos-verification.md).
-The rc.6 keepalive investigation is not a verified sleep fix: acknowledged link
-probes did not prevent shutdown on hardware. See the
-[investigation](docs/keepalive-investigation.md); successful poll counts do not
-prove that the AIM will stay awake.
+Bluetooth workshop sessions use `session start --persistent --takeover`. The
+background owner survives closed chats and agent applications and renews its
+finite power lease while running. It reconnects to the same paired robot after
+ordinary link loss without replaying a movement. Explicitly close the session
+to hand the robot to another computer; pairing credentials remain saved.
+See [session and recovery guidance](skill/vex-aim/references/sessions-and-motion.md).
+Two-computer AIM pairing/handoff remains unverified; do not assume new pairing
+can evict an existing connection without releasing it first.
 
 Start a **new agent session** so it discovers the skill, then try:
 
@@ -111,7 +97,7 @@ copies, invoke its full path under the selected skill's `bin/` directory.
 ./vexaim info
 ./vexaim exec 'print(robot.get_battery_level())'
 ./vexaim snap -o photo.jpg
-./vexaim --name AIM1234 session start
+./vexaim --name AIM1234 session start --persistent --takeover
 ./vexaim --session SESSION_ID info
 ./vexaim --session SESSION_ID session close
 ```

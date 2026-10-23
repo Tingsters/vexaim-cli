@@ -57,6 +57,9 @@ impl BLEDevice {
         let async_op = GattSession::FromDeviceIdAsync(&device.BluetoothDeviceId()?)
             .map_err(|_| Error::DeviceNotFound)?;
         let gatt_session = async_op.await.map_err(|_| Error::DeviceNotFound)?;
+        // Hold the application's GATT interest for this device's lifetime. Throughput
+        // preferences do not maintain the connection or recover an idle radio link.
+        gatt_session.SetMaintainConnection(true)?;
 
         let connection_status_handler =
             TypedEventHandler::<BluetoothLEDevice, _>::new(move |sender, _| {
@@ -72,11 +75,13 @@ impl BLEDevice {
             .ConnectionStatusChanged(&connection_status_handler)
             .map_err(|_| Error::Other("Could not add connection status handler".into()))?;
 
-        max_pdu_size_changed(gatt_session.MaxPduSize().unwrap());
+        max_pdu_size_changed(gatt_session.MaxPduSize()?);
         let max_pdu_size_changed_handler =
             TypedEventHandler::<GattSession, _>::new(move |sender, _| {
                 if let Some(sender) = sender.as_ref() {
-                    max_pdu_size_changed(sender.MaxPduSize().unwrap());
+                    if let Ok(size) = sender.MaxPduSize() {
+                        max_pdu_size_changed(size);
+                    }
                 }
                 Ok(())
             });
@@ -291,6 +296,7 @@ impl BLEDevice {
 
 impl Drop for BLEDevice {
     fn drop(&mut self) {
+        let _ = self.gatt_session.SetMaintainConnection(false);
         if let Some(request) = self.preferred_parameters_request.take() {
             let _ = request.Close();
         }

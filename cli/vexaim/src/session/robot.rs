@@ -20,6 +20,15 @@ pub struct Robot {
     needs_check: bool,
     camera_usable: bool,
     power: crate::power::Power,
+    name: String,
+    connection_state: &'static str,
+    persistent: bool,
+    recovery_attempt: usize,
+    retry_at: Instant,
+    last_owner_check: Instant,
+    last_error: Option<String>,
+    last_disconnect_error: Option<String>,
+    reconnect_count: usize,
 }
 
 fn checked(result: &crate::repl::ExecResult) -> Result<(), Fail> {
@@ -43,7 +52,7 @@ impl Robot {
             Ok(Ok(true))
         )
     }
-    pub async fn open(name: &str) -> Result<(Self, Value), Fail> {
+    pub async fn open_options(name: &str, takeover: bool) -> Result<(Self, Value), Fail> {
         if let Some(port) = name.strip_prefix("usb:") {
             let dev = crate::repl::devices()?
                 .into_iter()
@@ -59,6 +68,15 @@ impl Robot {
                 identity: json!({"transport":"usb","system_port":port}),
                 needs_check: false,
                 camera_usable: true,
+                name: name.into(),
+                connection_state: "ready",
+                persistent: false,
+                recovery_attempt: 0,
+                retry_at: Instant::now(),
+                last_owner_check: Instant::now(),
+                last_error: None,
+                last_disconnect_error: None,
+                reconnect_count: 0,
                 power: crate::power::Power::new(&Value::Null),
             };
             robot.prepare().await?;
@@ -104,7 +122,19 @@ impl Robot {
             identity,
             needs_check: false,
             camera_usable: true,
+            name: name.into(),
+            connection_state: "ready",
+            persistent: false,
+            recovery_attempt: 0,
+            retry_at: Instant::now(),
+            last_owner_check: Instant::now(),
+            last_error: None,
+            last_disconnect_error: None,
+            reconnect_count: 0,
         };
+        if takeover {
+            robot.power.take_over(&mut robot.repl).await?;
+        }
         if let Err(error) = robot.power.arm(&mut robot.repl).await {
             robot.cleanup_open().await;
             return Err(error);
@@ -195,7 +225,115 @@ impl Robot {
     fn health(&self) -> Value {
         let mut health = self.repl.connection().keepalive_status();
         health["power"] = self.power.status();
+        health["needs_check"] = json!(self.needs_check);
+        health["connection_state"] = json!(self.connection_state);
+        health["reconnect_attempts"] = json!(self.recovery_attempt);
+        health["last_error"] = json!(self.last_error);
+        health["last_disconnect_error"] = json!(self.last_disconnect_error);
+        health["reconnect_count"] = json!(self.reconnect_count);
+        health["healthy"] = json!(
+            self.connection_state == "ready"
+                && (!self.repl.connection().inner().is_bluetooth() || health["healthy"] == true)
+        );
         health
+    }
+    fn lost(&mut self, error: impl ToString) {
+        if self.connection_state != "reconnecting" {
+            self.last_disconnect_error = Some(error.to_string());
+        }
+        self.last_error = Some(error.to_string());
+        self.connection_state = "reconnecting";
+        self.needs_check = true;
+        self.power.suspend();
+        self.repl.connection_mut().end_keepalive();
+        self.repl.connection_mut().pause();
+    }
+    async fn yield_authentication(&mut self, error: impl ToString) {
+        self.lost(error);
+        self.connection_state = "auth_required";
+        // Never interrupt the newly controlling program merely to release our link.
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
+            let _ = tokio::time::timeout(Duration::from_secs(2), conn.close()).await;
+        }
+    }
+    async fn recover(&mut self) -> Result<(), Fail> {
+        let mut known_device = None;
+        // Discard closed WinRT objects before allocating their replacement.
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
+            known_device = Some(vex_v5_serial::bluetooth::BluetoothDevice(
+                conn.peripheral.clone(),
+            ));
+            let _ = tokio::time::timeout(Duration::from_secs(2), conn.close()).await;
+        }
+        // An already selected peripheral need not advertise again or wait through
+        // another full eight-second discovery for every transient disconnect.
+        let id = self.identity["id"].as_str().unwrap_or("").to_owned();
+        let device = if self.recovery_attempt < 3 {
+            known_device
+                .ok_or_else(|| failure("Bluetooth recovery is unavailable for this transport"))?
+        } else {
+            let (found_id, device) = bluetooth::select(&self.name).await?;
+            if found_id != id {
+                return Err(failure(
+                    "Discovery found a different robot; no fallback selected",
+                ));
+            }
+            device
+        };
+        if self.identity["id"] != id {
+            return Err(failure(
+                "Robot identity changed; no replacement device was selected",
+            ));
+        }
+        let mut conn = device.connect().await.map_err(failure)?;
+        // Authenticate before any native stop or Python, and never overwrite a changed code.
+        if let Err(error) = bluetooth::authenticate(&mut conn, &id, false, false).await {
+            let _ = conn.close().await;
+            return Err(error);
+        }
+        let mut info = bluetooth::identity(&conn).await?;
+        bluetooth::add_system_versions(&mut conn, &mut info).await;
+        if info["model"] != self.identity["model"] || info["hardware"] != self.identity["hardware"]
+        {
+            let _ = conn.close().await;
+            return Err(failure(
+                "Reconnected device identity does not match the selected AIM",
+            ));
+        }
+        for key in ["firmware", "vexos_version", "cpu0_version", "cpu1_version"] {
+            if info[key] != self.identity[key] {
+                let _ = conn.close().await;
+                return Err(Fail::AuthenticationRequired("Robot firmware identity changed; explicitly start a fresh session before private SDK power management".into()));
+            }
+        }
+        let _ = tokio::time::timeout(
+            Duration::from_secs(3),
+            conn.peripheral
+                .request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized),
+        )
+        .await;
+        self.repl =
+            Repl::from_connection(DisplayConnection::new(GenericConnection::Bluetooth(conn)));
+        self.power.resume();
+        self.power.request_arm();
+        self.power.touch(Instant::now());
+        self.ensure_power(true).await?;
+        let state = self.state().await?;
+        if state["robot_state"]["stopped"] != true {
+            self.halt().await?;
+            self.state().await?;
+        }
+        self.repl
+            .connection_mut()
+            .enable_keepalive(&self.identity)
+            .await?;
+        self.camera_usable = true;
+        self.connection_state = "ready";
+        self.recovery_attempt = 0;
+        self.reconnect_count += 1;
+        self.last_error = None;
+        self.last_owner_check = Instant::now();
+        Ok(())
     }
     async fn ensure_power(&mut self, reinstall: bool) -> Result<(), Fail> {
         let repair = self.power.repair_pending();
@@ -323,16 +461,51 @@ impl Robot {
 }
 
 impl Backend for Robot {
+    fn set_persistent(&mut self) {
+        self.persistent = true;
+        self.power.set_persistent(true);
+    }
+    fn connection_state(&self) -> &'static str {
+        self.connection_state
+    }
+    async fn takeover(&mut self) -> Result<Value, Fail> {
+        if self.connection_state == "auth_required" {
+            return Err(Fail::AuthenticationRequired(
+                "Previous pairing no longer owns this robot; explicitly pair before takeover"
+                    .into(),
+            ));
+        }
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection().inner() {
+            bluetooth::verify_owner(conn, self.identity["id"].as_str().unwrap_or("")).await?;
+        }
+        if !self.connected().await {
+            return Err(failure("No link; native program takeover was not sent"));
+        }
+        self.repl.connection_mut().pause();
+        self.power.take_over(&mut self.repl).await?;
+        self.ensure_power(true).await?;
+        self.prepare().await?;
+        self.needs_check = false;
+        self.power.resume();
+        self.repl
+            .connection_mut()
+            .enable_keepalive(&self.identity)
+            .await?;
+        self.connection_state = "ready";
+        self.state().await
+    }
     async fn perform(
         &mut self,
         request: &Request,
         events: &UnboundedSender<Value>,
         received: Instant,
     ) -> Result<Value, Fail> {
+        let _ = events.send(json!({"event":"progress","phase":"preparing"}));
         if !self.connected().await {
-            return Err(failure(
-                "Bluetooth link is down; robot may be asleep. Close/start the session after checking power. No action was sent or replayed.",
-            ));
+            self.lost("Bluetooth link unavailable; reconnecting to the selected robot");
+            return Ok(
+                json!({"ok":false,"rejected":true,"delivery":"not_sent","needs_check":true,"error":"Bluetooth reconnecting; this request was not sent or queued. Retry this fresh request after ready."}),
+            );
         }
         self.power.touch(received);
         if !self.repl.connection().active() {
@@ -565,8 +738,15 @@ impl Backend for Robot {
             ),
             _ => return Err(failure("Unsupported session request")),
         };
+        let source = format!(
+            "print('{}{{\"event\":\"progress\",\"phase\":\"running\"}}')\n{source}",
+            motion::EVENT_PREFIX
+        );
         let mut seen = 0;
         let mut dispatch_ms = None;
+        let preparation_ms = received.elapsed().as_millis() as u64;
+        let _ = events
+            .send(json!({"event":"progress","phase":"uploading","preparation_ms":preparation_ms}));
         let result = self
             .repl
             .exec_observed(&source, Duration::from_secs(timeout), |buffer| {
@@ -581,7 +761,7 @@ impl Backend for Robot {
                         && let Ok(mut event) = serde_json::from_str::<Value>(body.trim())
                     {
                         // Robot output cannot impersonate an IPC result/close event.
-                        if event["event"] != "started" {
+                        if event["event"] != "started" && event["event"] != "progress" {
                             continue;
                         }
                         if event["event"] == "started" {
@@ -612,7 +792,9 @@ impl Backend for Robot {
         Ok(
             json!({"ok":ok,"stdout":stdout,"stderr":result.stderr,"timed_out":result.timed_out,
             "needs_check":self.needs_check,"measurement":measurement,
-            "timings":{"dispatch_ms":dispatch_ms,"execution_ms":result.elapsed.as_millis() as u64}}),
+            "delivery":"started","phase":if result.timed_out {"execution"} else {"complete"},
+            "timings":{"preparation_ms":preparation_ms,"upload_ms":result.upload_elapsed.as_millis() as u64,
+                "dispatch_ms":dispatch_ms,"execution_ms":result.elapsed.saturating_sub(result.upload_elapsed).as_millis() as u64}}),
         )
     }
 
@@ -629,6 +811,24 @@ impl Backend for Robot {
     }
 
     async fn halt(&mut self) -> Result<Value, Fail> {
+        if self.connection_state == "auth_required" {
+            return Err(Fail::AuthenticationRequired(
+                "Pairing changed; stop was not sent to another owner".into(),
+            ));
+        }
+        if let GenericConnection::Bluetooth(conn) = self.repl.connection().inner() {
+            if let Err(error) =
+                bluetooth::verify_owner(conn, self.identity["id"].as_str().unwrap_or("")).await
+            {
+                if bluetooth::authentication_required(&error) {
+                    self.yield_authentication(error).await;
+                    return Err(Fail::AuthenticationRequired(
+                        "Pairing changed; stop was not sent to another owner".into(),
+                    ));
+                }
+                return Err(error);
+            }
+        }
         // Stop bytes take priority over both display and liveness traffic.
         let display_active = self.repl.connection_mut().pause();
         let session_alive = self.repl.connection_mut().end_keepalive();
@@ -666,6 +866,12 @@ impl Backend for Robot {
     async fn close(&mut self) {
         self.repl.connection_mut().end_keepalive();
         let _ = self.halt().await;
+        if self.connection_state == "auth_required" {
+            if let GenericConnection::Bluetooth(conn) = self.repl.connection_mut().inner_mut() {
+                let _ = conn.close().await;
+            }
+            return;
+        }
         if let Err(error) = self.power.release(&mut self.repl).await {
             eprintln!("Power lease cleanup was not confirmed: {error}");
         }
@@ -673,55 +879,168 @@ impl Backend for Robot {
         self.disconnect().await;
     }
     async fn idle(&mut self) -> Result<Option<Value>, Fail> {
-        let display_was_active = self.repl.connection().active();
-        if self.repl.connection().lease_expired() {
-            self.power.request_arm();
-        }
-        if let Err(error) = self.repl.connection_mut().idle().await {
-            self.needs_check = true;
-            self.repl.invalidate();
-            self.power.request_arm();
-            self.power.suspend();
-            return Err(failure(error));
-        }
-        if display_was_active && !self.repl.connection().active() {
-            self.power.request_arm();
-            // Begin the write phase on the next tick so the actor can defer
-            // ordinary clients before borrowing this mutating future.
+        if matches!(self.connection_state, "auth_required" | "program_running") {
             return Ok(Some(self.health()));
         }
-        if self.power.background_due() {
-            let repair = async {
-                if !self.repl.is_raw() {
-                    return Err(failure(
-                        "Live info is required before power-context recovery",
-                    ));
+        if self.connection_state == "reconnecting" {
+            if Instant::now() >= self.retry_at {
+                self.recovery_attempt += 1;
+                let outcome = tokio::time::timeout(Duration::from_secs(45), self.recover())
+                    .await
+                    .unwrap_or_else(|_| Err(failure("Bluetooth recovery attempt timed out")));
+                if let Err(error) = outcome {
+                    if bluetooth::authentication_required(&error) {
+                        self.yield_authentication(error).await;
+                    } else if matches!(error, Fail::ProgramOwned(_)) {
+                        self.lost(error);
+                        self.connection_state = "program_running";
+                    } else {
+                        self.lost(error);
+                        let delays = [1, 2, 5, 10, 30];
+                        self.retry_at = Instant::now()
+                            + Duration::from_secs(delays[(self.recovery_attempt - 1).min(4)]);
+                    }
                 }
-                self.power.check_role(&mut self.repl).await?;
-                let state = self
-                    .repl
-                    .exec("print(robot.is_stopped())\n", Duration::from_secs(5))
-                    .await?;
-                checked(&state)?;
-                if state.stdout.trim() == "True" {
-                    self.ensure_power(true).await?;
-                }
-                Ok::<_, Fail>(())
             }
-            .await;
-            if let Err(error) = repair {
+            return Ok(Some(self.health()));
+        }
+        if self.power.renewal_due() {
+            self.power.touch(Instant::now());
+            self.power.request_arm();
+        }
+        if self.last_owner_check.elapsed() >= Duration::from_secs(15) {
+            if let GenericConnection::Bluetooth(conn) = self.repl.connection().inner() {
+                match bluetooth::verify_owner(conn, self.identity["id"].as_str().unwrap_or(""))
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(error) if bluetooth::authentication_required(&error) => {
+                        self.yield_authentication(error).await;
+                        return Ok(Some(self.health()));
+                    }
+                    Err(error) => {
+                        self.lost(error);
+                        return Ok(Some(self.health()));
+                    }
+                }
+            }
+            self.last_owner_check = Instant::now();
+        }
+        let maintained = async {
+            let display_was_active = self.repl.connection().active();
+            if self.repl.connection().lease_expired() {
+                self.power.request_arm();
+            }
+            if let Err(error) = self.repl.connection_mut().idle().await {
+                self.needs_check = true;
+                self.repl.invalidate();
+                self.power.request_arm();
                 self.power.suspend();
+                return Err(failure(error));
+            }
+            if display_was_active && !self.repl.connection().active() {
+                self.power.request_arm();
+                // Begin the write phase on the next tick so the actor can defer
+                // ordinary clients before borrowing this mutating future.
+                return Ok(Some(self.health()));
+            }
+            if self.power.background_due() {
+                let repair = async {
+                    if !self.repl.is_raw() {
+                        return Err(failure(
+                            "Live info is required before power-context recovery",
+                        ));
+                    }
+                    self.power.check_role(&mut self.repl).await?;
+                    let state = self
+                        .repl
+                        .exec("print(robot.is_stopped())\n", Duration::from_secs(5))
+                        .await?;
+                    checked(&state)?;
+                    if state.stdout.trim() == "True" {
+                        self.ensure_power(true).await?;
+                    }
+                    Ok::<_, Fail>(())
+                }
+                .await;
+                if let Err(error) = repair {
+                    self.power.suspend();
+                    self.needs_check = true;
+                    return Err(error);
+                }
+            }
+            Ok(Some(self.health()))
+        }
+        .await;
+        if let Err(error) = maintained {
+            if matches!(self.repl.connection().inner(), GenericConnection::Serial(_)) {
+                // USB failures require a live check, never Bluetooth discovery.
                 self.needs_check = true;
                 return Err(error);
             }
+            if bluetooth::authentication_required(&error) {
+                self.yield_authentication(error).await;
+            } else if matches!(error, Fail::ProgramOwned(_)) {
+                self.lost(error);
+                self.connection_state = "program_running";
+            } else {
+                self.lost(error);
+            }
+            return Ok(Some(self.health()));
         }
-        Ok(Some(self.health()))
+        maintained
     }
 
     fn client_activity(&mut self, received: Instant) {
         self.power.touch(received);
     }
     fn idle_is_read_only(&self) -> bool {
-        !self.power.repair_pending() && !self.repl.connection().lease_expired()
+        self.connection_state != "reconnecting"
+            && !self.power.repair_pending()
+            && !self.repl.connection().lease_expired()
+    }
+}
+
+#[cfg(test)]
+mod acceptance {
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    #[ignore = "stationary hardware check; requires explicit readiness and no existing owner"]
+    async fn stationary_closed_link_recovers_without_pairing_or_movement() {
+        assert_eq!(
+            std::env::var("VEXAIM_STATIONARY_READY").as_deref(),
+            Ok("yes")
+        );
+        let name =
+            std::env::var("VEXAIM_STATIONARY_NAME").expect("Select the prepared robot explicitly");
+        crate::session::guard_one_shot(&name).await.unwrap();
+        let (mut robot, _) = Robot::open_options(&name, true).await.unwrap();
+        robot.set_persistent();
+        let before = robot.state().await.unwrap();
+        assert_eq!(before["robot_state"]["stopped"], true);
+        let GenericConnection::Bluetooth(conn) = robot.repl.connection_mut().inner_mut() else {
+            panic!("Expected BLE");
+        };
+        conn.close().await.unwrap();
+        robot.lost("Controlled transport close; no movement requested");
+        let started = Instant::now();
+        tokio::time::timeout(Duration::from_secs(60), async {
+            while robot.connection_state != "ready" {
+                robot.idle().await.unwrap();
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("Automatic recovery did not finish");
+        let after = robot.state().await.unwrap();
+        assert_eq!(after["robot_state"]["stopped"], true);
+        assert!(robot.health()["healthy"] == true);
+        assert!(robot.health()["power"]["active"] == true);
+        println!(
+            "{}",
+            json!({"event":"controlled_reconnect_passed","recovery_ms":started.elapsed().as_millis(),"robot_state":after["robot_state"],"health":robot.health()})
+        );
+        robot.close().await;
     }
 }

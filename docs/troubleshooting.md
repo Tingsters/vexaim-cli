@@ -1,5 +1,12 @@
 # Troubleshooting
 
+An awake AIM with a persistent face can still have a dead Bluetooth connection.
+With 0.4, check `session status`: `reconnecting` waits for automatic same-robot
+recovery; `auth_required` yields to changed/missing pairing; `program_running`
+waits for explicit `session start --takeover`. Do not unpair for an ordinary
+outage. A stopped display is independent of link and power health. See
+[persistent sessions and measured evidence](persistent-workshops.md).
+
 Use the installed executable, not a stale development checkout. Check --version
 and update executable and basic skill together through the installer. The
 [generic skill troubleshooting reference](../skill/vex-aim/references/troubleshooting.md)

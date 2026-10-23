@@ -7,11 +7,11 @@ mod device;
 mod display;
 mod motion;
 mod observation;
+#[cfg(feature = "bluetooth")]
+mod power;
 mod repl;
 #[cfg(feature = "bluetooth")]
 mod session;
-#[cfg(feature = "bluetooth")]
-mod power;
 mod snap;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -162,7 +162,14 @@ enum Cmd {
 #[derive(Subcommand)]
 enum SessionCmd {
     /// Start/reuse the named Bluetooth robot or selected USB robot
-    Start,
+    Start {
+        /// Keep the background connection across chats and idle workshop breaks.
+        #[arg(long)]
+        persistent: bool,
+        /// Replace a running student program on the selected robot, if necessary.
+        #[arg(long)]
+        takeover: bool,
+    },
     /// Read cached connection status without rescanning or touching the robot
     Status,
     /// Stop, disconnect and close the selected session
@@ -171,6 +178,10 @@ enum SessionCmd {
     Serve {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        persistent: bool,
+        #[arg(long)]
+        takeover: bool,
     },
 }
 
@@ -596,6 +607,7 @@ mod tests {
     #[test]
     fn readiness_requires_a_complete_successful_status_response() {
         let mut result = repl::ExecResult {
+            upload_elapsed: Duration::ZERO,
             stdout: String::new(),
             stderr: String::new(),
             timed_out: false,
