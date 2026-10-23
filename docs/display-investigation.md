@@ -87,7 +87,9 @@ The successful Python path works both before and after REPL synchronization;
 it preserves the existing Robot object and needs no undocumented layer selection.
 
 For a promising case, repeat with `--capture .vexaim/display-spike/drawing.png`.
-It captures the final drawing, never changes LCD modes, and adds up to 55 seconds.
+It captures the final drawing and never changes LCD modes. v0.4.1 permits up to
+240 seconds of transfer time on slower Bluetooth links; allow 360 seconds for
+the host call including preparation and cleanup.
 The read-only 240x240 RGB565 buffer is decoded to PNG; no FILE_EXIT is sent.
 Open the PNG in the agent's image reader and inspect its actual pixels.
 

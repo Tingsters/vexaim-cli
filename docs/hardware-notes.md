@@ -515,6 +515,14 @@ they do not contain pairing codes. Do not commit the local Showtail trail.
 
 ## Known limits
 
+The later [Windows Bluetooth investigation](windows-bluetooth-investigation.md)
+records the 22 October 2026 OS-default connection-policy acceptance: a
+60-minute interval without resets, the retained initial LCD deadline failure,
+its successful corrected recheck, CI-built Windows camera/stop/cleanup and
+10.1-second controlled recovery. It also records the image-transfer performance
+trade-off and the exact build/firmware boundaries. It does not extend the older
+coverage below to other platforms or second-computer handoff.
+
 - Output bursts over about 2 KB are lost (robot firmware).
 - No software safety limits on motion. Physical supervision is required.
 - Uploading and running a stored program through the library was tried and **not** made to work; it is not needed.

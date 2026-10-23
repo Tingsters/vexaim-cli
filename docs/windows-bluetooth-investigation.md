@@ -5,6 +5,54 @@ robot, a final LCD image and a cached ready result do not establish a live link.
 The robot communicates over Bluetooth; "USB radio" refers to the computer's
 Bluetooth dongle, not a cable to the robot.
 
+## 22 October 2026 Windows follow-up
+
+A fully charged AIM9E18 (REV1, firmware 1.0.4.b0) was tested with USB removed,
+on the same CSR-compatible `0a12:0001` radio and ASMedia hub path. Drivers,
+Windows power settings and the disabled MediaTek radio were unchanged.
+
+| Configuration | Observation |
+| --- | --- |
+| Installed VEXcode Bluetooth library, three minutes | Fresh notifications; no radio resets |
+| Released v0.4.0 CLI | Two radio re-enumerations; one measured recovery took 18.265 seconds |
+| Diagnostic executable, explicit throughput request, three minutes | One re-enumeration and a 20.36-second outage; failed even though recovered |
+| Same diagnostic executable, OS-default policy, five minutes | No outages or resets |
+| OS-default policy, 60-minute interval | No outages, reconnects or radio resets; two subsequent native camera captures passed |
+| Corrected production capture deadlines | Two camera frames, LCD drawing/screenshot, stop, live state and cleanup passed without a reset |
+| CI-built Windows v0.4.1 package | Connection, 640x480 camera, stop, live state and cleanup passed; camera latency 34.394 seconds |
+| Stationary OS-default controlled GATT disconnect | Recovered in 10.071 seconds with no USB-radio reset; stopped state and power lease restored |
+
+The same-executable control strengthens attribution to the retained Windows
+parameter request on this host. Controller/driver internals remain unverified.
+The v0.4.1 Windows policy leaves parameters to the OS; other platforms retain
+their prior policy. This is single-computer Windows evidence, not a verified
+second-computer handoff or new macOS/Linux hardware coverage.
+
+The original complete hour-long report remains **failed**: its final LCD download
+exceeded the old 55-second limit, after the uninterrupted interval and successful
+camera captures. A separately labeled recheck passed with corrected transfer
+deadlines; it does not rewrite that original failure or claim a second full hour
+with a byte-identical shipping executable. Local reports are under
+`dist/ble-investigation/` and stay outside Git.
+
+Performance matters: on this radio a ~21 KiB JPEG took about 36 seconds, and the
+115200-byte RGB565 LCD download took about three minutes. The startup parameter
+snapshot reported a 60 ms interval; it is not a continuous parameter trace.
+Transfers now have a 240-second inner budget, 250-second capture guard,
+300-second actor limit and 330-second IPC wait. Agent shell calls need 360
+seconds. Motion/Python execution limits, size/CRC checks and atomic artifact
+replacement are unchanged. Use on-robot AI Vision for fast tracking rather than
+repeated full-frame host transfers. No later human action was requested after
+setup verification, and no wheels or kicker ran.
+
+The last two checks used the package from CI run `39899863687`, commit
+`2ba0941`, executable SHA-256
+`a7ee7d7499ebe6cd9127f375334fd66b46b3ac53fa668ef15b1c8e9c1562cc93`,
+and a separately labeled diagnostic recovery fixture. The package check is not
+a second hour-long soak. Final measured battery was 37%; all investigative
+connections exited before the 90-minute window ended. The pre-existing v0.4
+close contract still does not expose independent power-restoration evidence.
+
 ## Established evidence
 
 The 22 October one-hour core test recorded 33 automatic recoveries. Its 32
