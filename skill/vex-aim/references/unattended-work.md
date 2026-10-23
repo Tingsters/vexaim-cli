@@ -3,6 +3,15 @@
 Use this workflow when the user wants to leave a stationary investigation
 running. Ordinary short robot requests do not need an alert rehearsal.
 
+If the user requires involvement only at the beginning, complete dependencies,
+builds, permissions and authentication verification before they leave. Arrange
+all physical setup together. Do not schedule a later restart, pairing code,
+adapter move or return cue. An unexpected need for attendance makes that phase
+incomplete: checkpoint it, release investigative connections and continue only
+independent work. Use a whole-run deadline, live battery checkpoints and cleanup
+of detached children. State clearly when setup has been verified and the user
+can leave. This preference replaces the return-cue workflow below.
+
 Prepare binaries and diagnostics before waking the robot. Gather charge,
 power-on/restart, exact robot, requested transport, USB state, competing
 applications, controller state and pairing permissions together at the start.

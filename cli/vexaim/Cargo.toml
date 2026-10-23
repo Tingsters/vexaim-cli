@@ -11,6 +11,8 @@ default = ["bluetooth"]
 bluetooth = ["vex-v5-serial/bluetooth", "dep:btleplug", "dep:tokio", "dep:keyring", "dep:rpassword", "dep:uuid", "dep:windows-sys", "dep:libc"]
 # Use the thread-based serial adapter that Windows uses, on any OS (for testing it).
 blocking-io = ["vex-v5-serial/blocking-io"]
+# Maintainer-only A/B builds; released binaries do not read diagnostic overrides.
+ble-diagnostics = ["bluetooth"]
 
 [dependencies]
 vex-v5-serial = { workspace = true, features = ["serial", "file-commands"], default-features = false }
