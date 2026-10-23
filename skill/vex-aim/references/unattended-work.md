@@ -6,7 +6,8 @@ running. Ordinary short robot requests do not need an alert rehearsal.
 Prepare binaries and diagnostics before waking the robot. Gather charge,
 power-on/restart, exact robot, requested transport, USB state, competing
 applications, controller state and pairing permissions together at the start.
-Keep pairing codes in masked local input. State what will run and its duration.
+Keep pairing codes out of arguments and files. Use masked local input or the
+workshop's one-process stdin/pipe workflow. State what will run and its duration.
 After a firmware update, record the actual reported revisions before measuring.
 An active link monitor or visible REPL screen does not prove sleep prevention.
 Keep failed runs failed, and separate a firmware compatibility rejection from

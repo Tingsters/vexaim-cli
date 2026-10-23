@@ -31,6 +31,8 @@ pub enum Fail {
     Session(String),
     #[cfg(feature = "bluetooth")]
     ProgramOwned(String),
+    #[cfg(feature = "bluetooth")]
+    AuthenticationRequired(String),
 }
 
 impl std::fmt::Display for Fail {
@@ -67,6 +69,8 @@ impl std::fmt::Display for Fail {
             Fail::Session(e) => write!(f, "Session: {e}"),
             #[cfg(feature = "bluetooth")]
             Fail::ProgramOwned(e) => write!(f, "{e}"),
+            #[cfg(feature = "bluetooth")]
+            Fail::AuthenticationRequired(e) => write!(f, "{e}"),
         }
     }
 }
@@ -136,6 +140,7 @@ pub struct ExecResult {
     pub stderr: String,
     pub timed_out: bool,
     pub elapsed: Duration,
+    pub upload_elapsed: Duration,
 }
 
 pub(crate) fn is_timeout(e: &(dyn std::error::Error + 'static)) -> bool {
@@ -311,8 +316,9 @@ where
         let t = Instant::now();
         self.write_all(code.as_bytes()).await?;
         self.write_all(&[CTRL_D]).await?;
+        let uploaded = Instant::now();
         let (buf, done) = self
-            .read_observed(t + timeout, complete_raw_frame, observe)
+            .read_observed(uploaded + timeout, complete_raw_frame, observe)
             .await?;
         if !done {
             // stop the running program, then return to a known state
@@ -326,6 +332,7 @@ where
                 stderr: String::new(),
                 timed_out: true,
                 elapsed: t.elapsed(),
+                upload_elapsed: uploaded.duration_since(t),
             });
         }
         let (stdout, stderr) = parse_frame(&buf);
@@ -334,6 +341,7 @@ where
             stderr,
             timed_out: false,
             elapsed: t.elapsed(),
+            upload_elapsed: uploaded.duration_since(t),
         })
     }
 
@@ -455,6 +463,7 @@ mod tests {
             writes: Vec<Vec<u8>>,
             raw_reply: bool,
             friendly_reply: bool,
+            upload_delay: Duration,
         }
         impl Connection for Console {
             type Error = GenericError;
@@ -476,6 +485,9 @@ mod tests {
                 Err(BluetoothError::Timeout.into())
             }
             async fn write_user(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+                if bytes == b"slow upload" {
+                    smol::Timer::after(self.upload_delay).await;
+                }
                 self.writes.push(bytes.to_vec());
                 if bytes == [CTRL_B] && self.friendly_reply {
                     self.incoming.push_back(b"MicroPython\r\n>>> ".to_vec());
@@ -497,6 +509,7 @@ mod tests {
                 writes: Vec::new(),
                 raw_reply,
                 friendly_reply,
+                upload_delay: Duration::ZERO,
             })
         }
 
@@ -517,6 +530,20 @@ mod tests {
                 ]
             );
             assert!(!repl.conn.writes.iter().flatten().any(|b| *b == CTRL_C));
+        }
+
+        #[tokio::test]
+        async fn upload_does_not_consume_the_python_execution_deadline() {
+            let mut repl = console(&[], true, true);
+            repl.raw = true;
+            repl.conn.upload_delay = Duration::from_millis(200);
+            let result = repl
+                .exec("slow upload", Duration::from_millis(100))
+                .await
+                .unwrap();
+            assert!(!result.timed_out);
+            assert!(result.upload_elapsed >= Duration::from_millis(200));
+            assert_eq!(result.stdout.trim(), "1");
         }
 
         #[tokio::test]

@@ -1,71 +1,79 @@
-# Sessions and movement (agent instructions)
+# Sessions, recovery and movement
 
-Translate ordinary prompts into robot actions. These commands are agent tools;
-users need no calibration mat, agent settings or Python dependencies.
+Translate prompts into robot behavior through the installed, matching binary.
+Use its full path. A source checkout alone does not update installed tools.
 
-## One connection
+## One background connection
 
-Bluetooth requires vexaim 0.2.0 or newer; USB sessions and native catalogue actions
-require the matching 0.3 command release. For USB start with `vexaim --json session
-start` (optionally `--device N`). For Bluetooth use the named start below.
-Use this skill's installed executable after installing its matching release;
-a repository checkout alone does not update it. Pair as described in `bluetooth.md`.
-Use the exact robot name; do not fall back to another robot/USB.
-
-PowerShell example (replace NAME with the selected name, not a secret):
+For Bluetooth select the exact name and use:
 
 ```powershell
 $vexaim = Join-Path $env:USERPROFILE '.agents/skills/vex-aim/bin/vexaim.exe'
-$connection = & $vexaim --json --name NAME session start | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or -not $connection.ok) { throw 'Robot connection failed' }
-$robotSession = $connection.session
+& $vexaim --json --name NAME session start --persistent --takeover
 ```
 
-For Claude use `.claude`. On macOS/Linux use the same executable-relative flags.
-Keep the returned ID in the current agent context; no student session management.
-Startup discovers/authenticates, retains both notifications, initializes helpers
-and returns battery/stopped/gyro state. It does not move or recalibrate the robot.
-Repeated start for the same name reuses the owner. Normal standalone Bluetooth
-commands refuse to take over an active session; use its ID instead.
+For Claude use `.claude`; macOS/Linux use their executable path with the same
+flags. Retain the returned session ID. Persistent mode is explicit, survives
+chat/app exit and idle breaks, and keeps the same robot selected. A computer
+restart needs a new owner, using saved credentials. No startup service, project
+upload, agent settings or compiler installation is required.
 
-```powershell
-& $vexaim --json --session $robotSession session status  # cached, no radio I/O
-& $vexaim --json --session $robotSession info            # live status
-& $vexaim --json --session $robotSession exec "print(robot.get_battery_level())"
-```
+Without `--persistent`, ordinary owners close after 30 minutes without client
+work. Explicit `session close` always releases the owner and stops reconnecting;
+it does not forget credentials. Don't close a persistent session just because
+an activity or conversation finished. A request to disconnect/hand over does close it.
 
-No separate doctor/info before each movement when the current session is healthy.
-Never call session close at the end of every prompt. Close when robot work is
-finished or before a fresh connection after sleep/failure. Idle owners close after
-30 minutes without client work. The experimental 0.3.0-rc.6 release sends
-acknowledged System Alive requests every two seconds, independently of
-the LCD and without renewing this 30-minute deadline. Stop releases display and
-movement but preserves session liveness. Close ends both. This does not extend a
-robot-side movement deadline or replay an action after an interruption.
+`--takeover` authorizes the native stop of a running student program when needed.
+A healthy idle owner is reused. To replace an active routine use `stop`, live
+`info` and one fresh execution. If native ownership blocks initialization, use
+`session start --persistent --takeover`. Do not use `exec robot.stop_program()`:
+that can terminate the interpreter before the expected response frame returns.
 
-Hardware testing showed sleep/link loss despite successful replies. This
-candidate is not a verified sleep fix: `prevents_sleep:false` distinguishes its
-link health checks from power management. Do not infer sleep prevention from
-`active` or `healthy`.
+`session status` reads cached state without radio traffic. `ready` indicates the
+last monitored usable connection; it is not a new sensor or power measurement.
+`reconnecting` rejects new activity as `delivery:not_sent` while the owner
+recreates/authenticates the same device and restores notifications/console.
+Background retry delays are 1, 2, 5, 10, then 30 seconds. Never queue a stale
+movement to run minutes later. After recovery, read live `info` and issue fresh work.
 
-Startup/live info include `keepalive.active`, `method` and `period_ms`. Unknown
-firmware reports inactive. A failed heartbeat marks `needs_check`; an explicit
-live info can re-establish the read-only heartbeat, while lost links require a
-fresh session. Power loss still needs a person to switch the AIM on.
-After firmware changes, inspect `device_info` once. The rc.7 candidate recognizes
-the observed `1.0.4.b0` profile alongside `1.0.0.b0`; earlier guards can report
-inactive monitoring despite a working Python console. This compatibility change
-does not establish sleep prevention. Keep the measured hardware coverage and
-matching installed skill/binary version explicit.
+`auth_required` pauses background reconnect after missing/rejected/changed
+credentials or foreign program ownership. Do not fight another student by
+re-pairing automatically. Explicit handoff releases the old connection. Native
+pairing while another computer is connected and credential validity after
+handoff need hardware verification; do not present them as guaranteed behavior.
 
-The rc.7 integration candidate also owns the existing system REPL and a finite
-SDK power lease on the exact complete `1.0.4.b0` profile. Its first mechanism
-control passed 20 quiet minutes, but full CLI acceptance remains pending. See
-the Bluetooth reference for `keepalive.power`, the REPL Mode screen and expiry.
-No student project upload or additional student command is required. Preserve
-the same session across prompts so the CLI can manage that context automatically.
+A transport failure alone does not prove sleep. Windows closed-object errors
+need a fresh connection, not an automatic physical power-cycle request. Only
+request physical help after evidence of unavailability; use an agreed audible
+cue for unattended work.
+
+System Alive monitors link health. The firmware-gated robot-side power lease is
+separate; persistent owners renew it every five minutes while keeping its finite
+30-minute robot watchdog. If the host disappears, that finite lease can expire.
+Unknown firmware is not given private SDK power writes.
+
+## Timeouts and retained evidence
+
+Default composed activities: 30 seconds of bounded robot behavior, CLI
+`exec --timeout 60`, outer tool timeout 120 seconds. Execution timeout starts
+after source submission; setup/upload and cleanup have additional bounded time.
+The session limit remains 48 KiB and 1..120 execution seconds. For larger budgets,
+allow at least execution timeout +60 seconds in the outer tool.
+
+JSON output is a stream: preparing/running progress events, optional robot
+`__VEXAIM_EVENT__` progress lines, then a final result. Parse the final event rather
+than assuming stdout is one JSON document. Results separate preparation, upload
+and execution timing. `last_result`/`last_progress` remain in cached status after
+caller cancellation. `ok:true` proves Python completed, not that a custom
+activity physically achieved its goal; check its measurement/outcome too.
 
 ## Translate ideas into actions
+
+`program_running` is different from changed authentication: the background owner
+leaves that program alone until a fresh `session start --takeover` replaces it.
+No pairing code or student confirmation is needed for an authorized new workshop
+activity on the selected robot. `auth_required` yields the Bluetooth connection;
+even closing that former owner must not stop another computer's program.
 
 "Spin in a circle" -> announce one full turn in place, then:
 
@@ -119,11 +127,11 @@ Helpers have a robot-side maximum 20-second action deadline even if the owner
 dies. Arbitrary `exec` does not inherit their bounds. A second movement is rejected
 as busy, never silently queued. Caller disconnection interrupts its active action.
 
-After interruption/error, run live `info` to verify stopped state before a fresh
-action. Never retry a movement whose delivery is uncertain. If the link is down,
-check power, close/start the session, then require live state before a *new*
-movement. Give an explicit power-on cue when needed; never ask for a USB replug to
-fix wireless use. Cached status is not a new power/battery measurement.
+After interruption/error, verify live stopped state before fresh action. Explicit
+student retry permits a new revised routine; uncertainty alone never triggers
+movement replay. Let automatic connection recovery complete first and consult
+cached outcome/progress. A `delivery:not_sent` request can be resubmitted after
+readiness. Don't demand a power cycle while the robot is visibly awake.
 
 ## Camera is optional
 

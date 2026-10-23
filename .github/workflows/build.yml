@@ -80,6 +80,7 @@ jobs:
           python -m unittest discover -s dev -p test_python_lifecycle.py -v
           python -m unittest discover -s dev -p test_power_lease.py -v
           python -m unittest discover -s dev -p test_attention.py -v
+          python -m unittest discover -s dev -p test_pair_bridge.py -v
           python -m unittest discover -s dev -p test_inspect_vexcode.py -v
           python -m unittest discover -s dev -p test_aim_idle_probe.py -v
 
@@ -106,6 +107,7 @@ jobs:
         run: |
           cli/target/release/${{ matrix.exe }} --version
           python -c "import subprocess; help_text = subprocess.check_output(['cli/target/release/${{ matrix.exe }}', 'bluetooth', 'pair', '--help'], text=True); assert '--code-stdin' in help_text, help_text"
+          python -c "import subprocess; h=subprocess.check_output(['cli/target/release/${{ matrix.exe }}','session','start','--help'],text=True); assert '--persistent' in h and '--takeover' in h, h"
 
       - name: shellcheck (Linux)
         if: runner.os == 'Linux'

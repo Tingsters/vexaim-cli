@@ -45,6 +45,8 @@ pub(super) enum Request {
     Status,
     Info,
     Doctor,
+    Persist,
+    Takeover,
     Stop,
     Close,
     Turn {
@@ -122,14 +124,23 @@ impl Request {
         Ok(())
     }
     fn priority(&self) -> bool {
-        matches!(self, Self::Stop | Self::Close)
+        matches!(self, Self::Stop | Self::Close | Self::Takeover)
     }
 }
 
 type Events = mpsc::UnboundedSender<Value>;
 pub(super) trait Backend {
+    fn set_persistent(&mut self) {}
+    fn connection_state(&self) -> &'static str {
+        "ready"
+    }
+    async fn takeover(&mut self) -> Result<Value, Fail> {
+        self.halt().await
+    }
     fn client_activity(&mut self, _: Instant) {}
-    fn idle_is_read_only(&self) -> bool { true }
+    fn idle_is_read_only(&self) -> bool {
+        true
+    }
     async fn perform(
         &mut self,
         request: &Request,
@@ -144,20 +155,47 @@ pub(super) trait Backend {
     }
 }
 
+async fn halt<B: Backend>(backend: &mut B) -> Result<Value, Fail> {
+    if backend.connection_state() == "auth_required" {
+        return Err(Fail::AuthenticationRequired(
+            "Pairing changed; no stop was sent to another owner".into(),
+        ));
+    }
+    tokio::time::timeout(Duration::from_secs(15), backend.halt())
+        .await
+        .unwrap_or_else(|_| {
+            Err(failure(
+                "Stop cleanup exceeded 15 seconds; stopped state is unknown",
+            ))
+        })
+}
+
 struct Job {
     request: Request,
     events: Events,
     received: Instant,
 }
+async fn replace_program<B: Backend>(backend: &mut B) -> Result<Value, Fail> {
+    tokio::time::timeout(Duration::from_secs(45), backend.takeover())
+        .await
+        .unwrap_or_else(|_| {
+            Err(failure(
+                "Program takeover exceeded 45 seconds; check live state before a fresh request",
+            ))
+        })
+}
 type Cache = Rc<RefCell<Value>>;
 
 fn result(events: &Events, mut value: Value, received: Instant) {
+    if value["ok"] == false && value.get("delivery").is_none() {
+        value["delivery"] = json!("unknown");
+    }
     value["event"] = json!("result");
     value["total_ms"] = json!(received.elapsed().as_millis() as u64);
     let _ = events.send(value);
 }
 fn error(error: impl std::fmt::Display) -> Value {
-    json!({"ok":false,"error":error.to_string()})
+    json!({"ok":false,"error":error.to_string(),"delivery":"unknown"})
 }
 
 async fn read_frame<S: AsyncRead + Unpin>(stream: &mut S) -> std::io::Result<Value> {
@@ -215,10 +253,13 @@ async fn handle(
         let _ = write_frame(&mut stream, &value).await;
         return;
     }
-    if cache.borrow()["state"] != "ready" {
+    if cache.borrow()["state"] != "ready"
+        && !request.priority()
+        && !matches!(request, Request::Persist)
+    {
         let _ = write_frame(
             &mut stream,
-            &error("Session is not ready; no action was queued"),
+            &json!({"ok":false,"error":"Connection recovery is in progress or authentication is required; no action was queued","delivery":"not_sent","needs_check":true}),
         )
         .await;
         return;
@@ -253,6 +294,9 @@ async fn handle(
         tokio::select! {
             event = receiver.recv() => {
                 let Some(event) = event else {break};
+                if event["event"] == "progress" || event["event"] == "started" {
+                    cache.borrow_mut()["last_progress"] = event.clone();
+                }
                 let done = event["event"] == "result";
                 if !matches!(tokio::time::timeout(Duration::from_secs(2),write_frame(&mut stream,&event)).await,Ok(Ok(()))) || done {break;}
             },
@@ -287,11 +331,14 @@ async fn actor_with_idle<B: Backend>(
     idle_timeout: Duration,
 ) {
     let mut idle_deadline = tokio::time::Instant::now() + idle_timeout;
+    if cache.borrow()["persistent"] == true {
+        backend.set_persistent();
+    }
     loop {
         let job = tokio::select! { biased;
             job = priority.recv() => job,
             job = normal.recv() => job,
-            _ = tokio::time::sleep_until(idle_deadline) => { let _ = backend.halt().await; break; }
+            _ = tokio::time::sleep_until(idle_deadline), if cache.borrow()["persistent"] != true => { let _ = halt(&mut backend).await; break; }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
                 let ordinary_preempts = backend.idle_is_read_only();
                 let health = backend.idle();
@@ -300,7 +347,7 @@ async fn actor_with_idle<B: Backend>(
                 tokio::select! { biased;
                     job = priority.recv() => job,
                     job = normal.recv(), if ordinary_preempts => job,
-                    _ = tokio::time::sleep_until(idle_deadline) => { continue; }
+                    _ = tokio::time::sleep_until(idle_deadline), if cache.borrow()["persistent"] != true => { continue; }
                     result = &mut health => {
                         match result {
                             Err(e) => {
@@ -311,6 +358,16 @@ async fn actor_with_idle<B: Backend>(
                             Ok(Some(health)) => {
                                 if health["healthy"] == true {
                                     cache.borrow_mut().as_object_mut().unwrap().remove("keepalive_error");
+                                }
+                                if let Some(state) = health.get("connection_state") {
+                                    cache.borrow_mut()["state"] = state.clone();
+                                }
+                                if health["last_error"].is_string() {
+                                    cache.borrow_mut()["keepalive_error"] = health["last_error"].clone();
+                                    cache.borrow_mut()["needs_check"] = json!(true);
+                                }
+                                if health.get("needs_check").is_some() {
+                                    cache.borrow_mut()["needs_check"] = health["needs_check"].clone();
                                 }
                                 cache.borrow_mut()["keepalive"] = health;
                             }
@@ -325,6 +382,14 @@ async fn actor_with_idle<B: Backend>(
         let Some(job) = job else { break };
         busy.set(true);
         cache.borrow_mut()["busy"] = json!(true);
+        if matches!(job.request, Request::Persist) {
+            backend.set_persistent();
+            cache.borrow_mut()["persistent"] = json!(true);
+            result(&job.events, cache.borrow().clone(), job.received);
+            busy.set(false);
+            cache.borrow_mut()["busy"] = json!(false);
+            continue;
+        }
         if job.request.priority() {
             backend.client_activity(job.received);
             if matches!(job.request, Request::Close) {
@@ -340,7 +405,25 @@ async fn actor_with_idle<B: Backend>(
                     pending.received,
                 );
             }
-            let halted = backend.halt().await.unwrap_or_else(error);
+            let halted = if backend.connection_state() == "auth_required"
+                && matches!(job.request, Request::Close)
+            {
+                Ok(json!({"ok":true,"released":true,"yielded_authentication":true}))
+            } else if matches!(job.request, Request::Takeover) {
+                replace_program(&mut backend).await
+            } else {
+                halt(&mut backend).await
+            }
+            .unwrap_or_else(error);
+            cache.borrow_mut()["state"] = json!(backend.connection_state());
+            cache.borrow_mut()["needs_check"] =
+                json!(halted["needs_check"] != false || halted["ok"] != true);
+            for key in ["robot_state", "keepalive"] {
+                if let Some(value) = halted.get(key) {
+                    cache.borrow_mut()[key] = value.clone();
+                }
+            }
+            cache.borrow_mut()["last_result"] = halted.clone();
             result(&job.events, halted, job.received);
             busy.set(false);
             cache.borrow_mut()["busy"] = json!(false);
@@ -353,9 +436,15 @@ async fn actor_with_idle<B: Backend>(
         let outcome = {
             let operation = backend.perform(&job.request, &job.events, job.received);
             tokio::pin!(operation);
+            let deadline = tokio::time::sleep(Duration::from_secs(match &job.request {
+                Request::Exec { timeout, .. } => timeout + 30,
+                _ => 135,
+            }));
+            tokio::pin!(deadline);
             tokio::select! { biased;
                 stop = priority.recv() => match stop {Some(stop)=>Outcome::Stop(stop),None=>Outcome::CallerGone},
                 _ = job.events.closed() => Outcome::CallerGone,
+                _ = &mut deadline => Outcome::Complete(Err(failure("Request deadline expired during preparation, upload or execution; inspect last_result before a fresh request"))),
                 result = &mut operation => Outcome::Complete(result),
             }
         };
@@ -364,7 +453,7 @@ async fn actor_with_idle<B: Backend>(
             Outcome::Complete(Ok(mut value)) => {
                 if value["ok"] == false && value["rejected"] != true {
                     backend.interrupted(&job.request);
-                    let stopped = backend.halt().await;
+                    let stopped = halt(&mut backend).await;
                     value["needs_check"] = json!(true);
                     value["stopped_confirmed"] = json!(stopped.is_ok());
                 }
@@ -380,6 +469,7 @@ async fn actor_with_idle<B: Backend>(
                         .remove("keepalive_error");
                 }
                 cache.borrow_mut()["needs_check"] = json!(value["needs_check"] == true);
+                cache.borrow_mut()["last_result"] = value.clone();
                 result(&job.events, value, job.received);
             }
             Outcome::Complete(Err(Fail::ProgramOwned(message))) => {
@@ -389,16 +479,18 @@ async fn actor_with_idle<B: Backend>(
                 cache.borrow_mut()["needs_check"] = json!(true);
                 let mut value = error(message);
                 value["rejected"] = json!(true);
+                value["delivery"] = json!("not_sent");
                 value["needs_check"] = json!(true);
                 result(&job.events, value, job.received);
             }
             Outcome::Complete(Err(e)) => {
                 backend.interrupted(&job.request);
-                let halted = backend.halt().await;
+                let halted = halt(&mut backend).await;
                 cache.borrow_mut()["needs_check"] = json!(true);
                 let mut value = error(e);
                 value["needs_check"] = json!(true);
                 value["stopped_confirmed"] = json!(halted.is_ok());
+                cache.borrow_mut()["last_result"] = value.clone();
                 result(&job.events, value, job.received);
             }
             other => {
@@ -407,12 +499,22 @@ async fn actor_with_idle<B: Backend>(
                     idle_deadline = tokio::time::Instant::now() + idle_timeout;
                 }
                 backend.interrupted(&job.request);
-                let halted = backend.halt().await.unwrap_or_else(error);
-                cache.borrow_mut()["needs_check"] = json!(true);
+                let halted = if matches!(&other, Outcome::Stop(stop) if matches!(stop.request, Request::Takeover)) {
+                    replace_program(&mut backend).await
+                } else { halt(&mut backend).await }.unwrap_or_else(error);
+                let needs_check = halted["ok"] != true || halted["needs_check"] != false;
+                cache.borrow_mut()["needs_check"] = json!(needs_check);
+                for key in ["robot_state", "keepalive"] {
+                    if let Some(value) = halted.get(key) {
+                        cache.borrow_mut()[key] = value.clone();
+                    }
+                }
                 let mut cancelled =
                     error("Operation interrupted; not retried. Read info before another action.");
-                cancelled["needs_check"] = json!(true);
-                cancelled["stopped_confirmed"] = json!(halted["stopped"] == true);
+                cancelled["needs_check"] = json!(needs_check);
+                cancelled["stopped_confirmed"] =
+                    json!(halted["stopped"] == true || halted["robot_state"]["stopped"] == true);
+                cache.borrow_mut()["last_result"] = cancelled.clone();
                 result(&job.events, cancelled, job.received);
                 if let Outcome::Stop(stop) = other {
                     close = matches!(stop.request, Request::Close);
@@ -425,23 +527,24 @@ async fn actor_with_idle<B: Backend>(
         }
         busy.set(false);
         cache.borrow_mut()["busy"] = json!(false);
+        cache.borrow_mut()["state"] = json!(backend.connection_state());
         if close {
             break;
         }
     }
     busy.set(true);
     cache.borrow_mut()["state"] = json!("closing");
-    backend.close().await;
+    let _ = tokio::time::timeout(Duration::from_secs(15), backend.close()).await;
     cache.borrow_mut()["state"] = json!("closed");
 }
 
-async fn serve(id: &str, name: &str) -> Result<(), Fail> {
+async fn serve(id: &str, name: &str, persistent: bool, takeover: bool) -> Result<(), Fail> {
     if ipc::id_for(name)? != id {
         return Err(failure("Session identity does not match selected name"));
     }
     let mut listener = ipc::Listener::bind(id).await.map_err(failure)?;
     let cache = Rc::new(RefCell::new(
-        json!({"ok":true,"protocol":PROTOCOL,"session":id,"name":name,"state":"connecting","busy":false,"tool_version":env!("CARGO_PKG_VERSION")}),
+        json!({"ok":true,"protocol":PROTOCOL,"session":id,"name":name,"state":"connecting","busy":false,"persistent":persistent,"tool_version":env!("CARGO_PKG_VERSION")}),
     ));
     let busy = Rc::new(Cell::new(false));
     let (normal_tx, normal_rx) = mpsc::unbounded_channel();
@@ -458,7 +561,7 @@ async fn serve(id: &str, name: &str) -> Result<(), Fail> {
             ));
         }
     });
-    match robot::Robot::open(name).await {
+    match robot::Robot::open_options(name, takeover).await {
         Ok((robot, details)) => {
             for (key, value) in details.as_object().unwrap() {
                 cache.borrow_mut()[key] = value.clone();
@@ -494,7 +597,7 @@ async fn client(
         let response_timeout = if matches!(request, Request::Status) {
             2
         } else {
-            165
+            180
         };
         let value = tokio::time::timeout(
             Duration::from_secs(response_timeout),
@@ -529,7 +632,11 @@ async fn client(
     }
 }
 
+#[cfg(test)]
 async fn start(name: &str) -> Result<Value, Fail> {
+    start_options(name, false, false).await
+}
+async fn start_options(name: &str, persistent: bool, takeover: bool) -> Result<Value, Fail> {
     let id = ipc::id_for(name)?;
     let mut connecting = false;
     let closing_deadline = Instant::now() + Duration::from_secs(15);
@@ -537,8 +644,51 @@ async fn start(name: &str) -> Result<Value, Fail> {
         if value["name"] != name || value["protocol"] != PROTOCOL {
             return Err(failure("Existing session identity/protocol mismatch"));
         }
-        if value["state"] == "ready" {
-            return Ok(value);
+        if value["tool_version"]
+            .as_str()
+            .is_some_and(|version| version != env!("CARGO_PKG_VERSION"))
+        {
+            return Err(failure(
+                "Existing owner uses a different CLI version; close it using that executable before starting this version",
+            ));
+        }
+        if value["state"] == "ready" && value["keepalive"]["healthy"] != false {
+            if takeover {
+                let result = client(&id, &Request::Takeover, false, false).await?;
+                if result["ok"] != true {
+                    return Err(failure(result));
+                }
+            }
+            if persistent {
+                client(&id, &Request::Persist, false, false).await?;
+            }
+            return client(&id, &Request::Status, false, false).await;
+        }
+        if value["state"] == "auth_required" {
+            return Err(Fail::AuthenticationRequired("This session yielded authentication; explicitly close it and pair to reclaim the selected robot".into()));
+        }
+        if value["state"] == "program_running" {
+            if !takeover {
+                return Err(Fail::ProgramOwned(
+                    "A student program is running; use session start --takeover to replace it"
+                        .into(),
+                ));
+            }
+            let result = client(&id, &Request::Takeover, false, false).await?;
+            if result["ok"] != true {
+                return Err(failure(result));
+            }
+            if persistent {
+                client(&id, &Request::Persist, false, false).await?;
+            }
+            return client(&id, &Request::Status, false, false).await;
+        }
+        if value["state"] == "reconnecting" || value["keepalive"]["healthy"] == false {
+            if persistent {
+                client(&id, &Request::Persist, false, false).await?;
+            }
+            connecting = true;
+            break;
         }
         if value["state"] == "failed" {
             return Err(failure(
@@ -562,7 +712,7 @@ async fn start(name: &str) -> Result<Value, Fail> {
         connecting = value["state"] == "connecting";
         break;
     }
-    let arguments = [
+    let mut arguments = vec![
         "--json",
         "--transport",
         "bluetooth",
@@ -573,6 +723,12 @@ async fn start(name: &str) -> Result<Value, Fail> {
         "--id",
         &id,
     ];
+    if persistent {
+        arguments.push("--persistent");
+    }
+    if takeover {
+        arguments.push("--takeover");
+    }
     let mut child = if connecting {
         None
     } else {
@@ -584,7 +740,10 @@ async fn start(name: &str) -> Result<Value, Fail> {
             if value["name"] != name {
                 return Err(failure("Session selected a different name; no action sent"));
             }
-            if value["state"] == "ready" {
+            if value["state"] == "auth_required" {
+                return Err(Fail::AuthenticationRequired("Automatic recovery yielded to changed authentication; explicitly pair to reclaim the robot".into()));
+            }
+            if value["state"] == "ready" && value["keepalive"]["healthy"] != false {
                 return Ok(value);
             }
             if value["state"] == "failed" {
@@ -621,7 +780,7 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
         .map_err(failure)?;
     let result = tokio::task::LocalSet::new().block_on(&runtime, async {
         if let Cmd::Session {
-            command: SessionCmd::Start,
+            command: SessionCmd::Start { persistent, takeover },
         } = cli.cmd
         {
             if cli.session.is_some() {
@@ -636,7 +795,7 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
                 let dev = crate::repl::pick(crate::repl::devices()?, cli.device)?;
                 format!("usb:{}", dev.system_port().port_info.port_name)
             };
-            let value = start(&name).await?;
+            let value = start_options(&name, persistent, takeover).await?;
             crate::out(cli.json, value.clone(), || {
                 format!(
                     "Connected to {name}; session {}",
@@ -646,14 +805,14 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             return Ok(0);
         }
         if let Cmd::Session {
-            command: SessionCmd::Serve { id },
+            command: SessionCmd::Serve { id, persistent, takeover },
         } = &cli.cmd
         {
             let name = cli
                 .name
                 .as_deref()
                 .ok_or_else(|| failure("Missing robot name"))?;
-            return serve(id, name).await.map(|_| 0);
+            return serve(id, name, *persistent, *takeover).await.map(|_| 0);
         }
         let id = cli
             .session

@@ -20,19 +20,21 @@ named session and retain its returned ID across requests. Startup already reads
 live status; do not scan, reconnect and run doctor before every healthy action.
 Cached session status does not prove the robot is still awake.
 
-The experimental rc.6 release probes Bluetooth link health with acknowledged
-System Alive requests every two seconds. Hardware testing showed that the AIM
-still shut down despite successful replies: `keepalive.active` and `healthy`
-do not establish sleep prevention (`prevents_sleep:false`). Do not promise that
-sensor/motor traffic or displaying a face prevents sleep. Students should use a
-published binary/skill together. Close at actual wrap-up; 30 minutes without
-client work also closes the owner. See the session reference for evidence.
+Use 0.4.0 or newer for persistent workshop sessions:
+`--json --name NAME session start --persistent --takeover`. Persistent owners
+survive chats and agent application exit, maintain/recover the selected robot's
+connection, and have no client-inactivity cutoff. Ordinary sessions retain their
+30-minute idle limit. Explicit `session close` releases control and stops
+reconnecting without erasing pairing. Don't close a persistent owner at ordinary
+activity completion. `--takeover` authorizes replacing a running student program;
+it does not promise Bluetooth handoff from a different computer.
 
-The rc.7 candidate adds a separate firmware-gated power lease for AIM REV1 with
-all reported revisions `1.0.4.b0`. It owns the existing system REPL without
-uploading a project; the LCD may show REPL Mode. Its mechanism passed a 20-minute
-quiet control, while normal CLI acceptance is still pending. Use the matching
-candidate and read the Bluetooth reference; do not set private SDK flags yourself.
+System Alive is link monitoring, not verified power management. The separate
+firmware-gated finite power lease reports `keepalive.power`; its long-duration
+hardware evidence is recorded in docs/hardware-notes.md. Persistent owners renew
+that finite lease automatically. Do not set private SDK flags yourself or infer
+power state from the final displayed picture. Unknown firmware is not equivalent
+hardware coverage.
 
 When the user asks for unattended work, arrange physical setup, pairing and a
 rehearsed audible computer cue up front. Do not assume they watch the console.
@@ -65,11 +67,10 @@ assets and actions. Use native commands where applicable and compose actions for
 ideas; arbitrary Python is available. Do not require surface labels, targets or
 calibration before ordinary movement.
 
-For faces, messages and drawings over Bluetooth, use 0.3.0-rc.5 or newer and a
-reusable session. Screen writes activate the program display automatically;
-named emoji constants match the firmware. Stop/close or 60 seconds without
-activity ends the drawing. The rc.7 power candidate may then show REPL Mode
-until the session closes. See the device-command reference for display limits.
+For Bluetooth faces, messages and drawings, use the reusable session. Screen
+writes activate the program display automatically and camera capture is independent
+of LCD mode. Stop/close or 60 seconds without display activity ends the drawing;
+this is separate from persistent connection ownership. See the device reference.
 
 Announce movement and establish a clear, level area with a person near the power
 switch. Preserve readiness within the current interaction rather than asking
@@ -115,11 +116,18 @@ For Claude's installation use `.claude` instead of `.agents`.
 
 ## Recover carefully
 
-After an interruption, obtain live status and confirm stopped state before a new
-movement. Never automatically replay a movement whose delivery is uncertain.
-If the robot sleeps or the link fails, explicitly ask for power-on when needed,
-close/start the session and verify live state. Do not ask for USB replugging when
-the selected transport is Bluetooth. Busy actions are rejected, never queued.
+Use cached `session status` after an error. `reconnecting` means automatic
+repair is running; wait for ready and then read live `info`. Ask for power-on only
+when needed, not merely because a Bluetooth object closed. `auth_required` pauses
+background reconnection to allow changed authentication/another computer. Never
+keep pairing or overwrite changed credentials automatically. The exact robot
+identity stays fixed; no implicit USB or robot fallback.
+
+A new request or explicit retry authorizes fresh work after stop and live state
+verification. Do not automatically replay uncertain movement. A request with
+`delivery:not_sent` may be resubmitted once readiness is restored. Inspect cached
+`last_result` and `last_progress` after caller timeout. Follow the session guide
+for replacing a running student program without self-terminating Python calls.
 
 `snap` downloads a native 640x480 JPEG independently of the LCD menu. Do not reset
 the robot or navigate to AI Vision for a photograph. After cancelling a camera

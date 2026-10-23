@@ -37,6 +37,7 @@ pub struct Power {
     confirmed: Option<Instant>,
     deadline: Instant,
     last_background: Instant,
+    persistent: bool,
 }
 
 fn fail(message: impl ToString) -> Fail {
@@ -87,10 +88,68 @@ impl Power {
             confirmed: None,
             deadline: Instant::now() + LEASE,
             last_background: Instant::now() - Duration::from_secs(2),
+            persistent: false,
         }
     }
     pub fn touch(&mut self, received: Instant) {
         self.deadline = received + LEASE;
+    }
+    pub fn set_persistent(&mut self, persistent: bool) {
+        self.persistent = persistent;
+    }
+    /// Refresh a finite robot-side lease, never an unbounded SDK setting.
+    pub fn renewal_due(&self) -> bool {
+        self.persistent
+            && !self.suspended
+            && self.deadline.saturating_duration_since(Instant::now())
+                < Duration::from_secs(25 * 60)
+    }
+    pub async fn take_over(&mut self, repl: &mut Console) -> Result<(), Fail> {
+        let state = repl
+            .connection_mut()
+            .handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0)
+            .await
+            .map_err(fail)?
+            .map_err(fail)?;
+        if state.current_program & 0x0f != 0 {
+            repl.connection_mut()
+                .handshake(
+                    FileLoadActionPacket {
+                        vendor: FileVendor::User,
+                        action: FileLoadAction::Stop,
+                        file_name: FixedString::new("null").map_err(fail)?,
+                    },
+                    Duration::from_secs(2),
+                    0,
+                )
+                .await
+                .map_err(fail)?
+                .map_err(fail)?;
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                let state = repl
+                    .connection_mut()
+                    .handshake(SystemFlagsPacket {}, Duration::from_secs(2), 0)
+                    .await
+                    .map_err(fail)?
+                    .map_err(fail)?;
+                if state.current_program & 0x0f == 0 {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err(fail("Program stop was requested but not confirmed"));
+                }
+                smol::Timer::after(Duration::from_millis(100)).await;
+            }
+        }
+        self.owned_program = false;
+        self.owned_display = false;
+        self.attempted_lease = false;
+        self.needs_arm = self.supported;
+        self.suspended = false;
+        self.confirmed = None;
+        repl.invalidate();
+        Ok(())
     }
     pub fn request_arm(&mut self) {
         if self.supported {
@@ -403,6 +462,19 @@ async fn execute(repl: &mut Console, code: &str, seconds: u64) -> Result<Value, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persistent_renewal_does_not_make_a_finite_lease_infinite() {
+        let mut power = Power::new(&Value::Null);
+        power.deadline = Instant::now() + Duration::from_secs(24 * 60);
+        assert!(!power.renewal_due());
+        power.set_persistent(true);
+        assert!(power.renewal_due());
+        power.touch(Instant::now());
+        assert!(!power.renewal_due());
+        power.suspend();
+        power.deadline = Instant::now();
+        assert!(!power.renewal_due());
+    }
     #[test]
     fn timeout_failure_is_not_blank() {
         let message = power_failure(true, 12, "", "");

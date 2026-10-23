@@ -34,6 +34,7 @@ check "install from local assets" I --home "$H1" --from-dir "$ASSETS" --no-docto
 for d in .agents/skills/vex-aim .claude/skills/vex-aim; do
   [ -x "$H1/$d/bin/vexaim" ] && [ -f "$H1/$d/SKILL.md" ] && [ -f "$H1/$d/.vexaim-installed" ] && ok "installed $d" || bad "missing files in $d"
   [ -f "$H1/$d/references/sessions-and-motion.md" ] && ok "installed $d prompt/session guidance" || bad "missing session reference in $d"
+  [ -f "$H1/$d/scripts/pair.ps1" ] && ok "installed $d Windows pairing helper" || bad "missing pairing helper in $d"
 done
 check "installed binary runs" "$H1/.agents/skills/vex-aim/bin/vexaim" --version
 

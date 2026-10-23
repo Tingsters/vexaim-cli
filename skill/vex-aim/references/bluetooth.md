@@ -1,105 +1,70 @@
-# Bluetooth connection and recovery
+# Bluetooth pairing, persistent sessions and handoff
 
-Use vexaim 0.2.0 or newer. Select the exact robot name and Bluetooth explicitly;
-the CLI never silently selects another robot or falls back to USB. Close VEXcode,
-switch the AIM on, and keep it nearby. USB can be disconnected for wireless use.
+Select the exact AIM name, keep VEXcode closed and use matching CLI/basic skill
+0.4.0 or newer. Windows application authentication is distinct from OS bonding.
+No USB cable, firmware update or saved robot program is needed.
 
 ```sh
 vexaim bluetooth scan
 vexaim --name AIM1234 bluetooth pair
-vexaim --transport bluetooth --name AIM1234 doctor
+vexaim --json --name AIM1234 session start --persistent --takeover
 ```
 
-Pairing asks for the robot's displayed code in a masked local terminal. Never
-request it in chat or put it in arguments, logs or a plaintext file. Credentials
-stay in the native OS vault. Ordinary operations reuse them. Windows OS bonding
-status alone does not indicate whether VEX application authentication succeeded.
-The credential-store identity is unchanged from the original workshop builds.
+Default pairing reads a masked local terminal. `bluetooth pair --code-stdin`
+allows an agent to pair using one line of stdin; the workshop deliberately
+permits the student to report that short-lived code in chat. Never put it in a
+CLI argument, plaintext file or diagnostic output. Keep the same pairing process
+waiting: the code appears only after its pairing request starts. A wrong/expired
+code needs a fresh request. Credentials use the native OS vault and are reused
+where valid; only explicit `bluetooth forget` deletes the CLI credential.
 
-For repeated actions, follow `sessions-and-motion.md`: start/reuse one named
-session, retain the returned ID and use it for Python, movement, snapshots and
-stop. Do not repeat discovery and doctor for each healthy request.
+## Agent pairing on Windows without retained tool stdin
 
-```sh
-vexaim --json --name AIM1234 session start
-vexaim --json --session SESSION_ID info
-vexaim --session SESSION_ID snap -o photo.jpg
-vexaim --session SESSION_ID session close
+The matching skill ships `scripts/pair.ps1`. Start it through Windows PowerShell
+5.1; it creates a hidden, detached broker and a current-user-only named pipe.
+It does not inherit the agent's shell capture handles. Its temporary directory
+contains only non-secret status. No student terminal is needed.
+
+```powershell
+$bridge = Join-Path $env:USERPROFILE '.agents/skills/vex-aim/scripts/pair.ps1'
+& $bridge -Action Start -Name AIM1234
+# Retain returned directory. Poll until state is waiting; ask for the LCD code.
+& $bridge -Action Status -Directory DIRECTORY
+# Submit the displayed code as one line of stdin, never a script parameter:
+'CODE_FROM_STUDENT' | & $bridge -Action Submit -Directory DIRECTORY
+& $bridge -Action Status -Directory DIRECTORY
 ```
 
-Native camera capture downloads a 640x480 JPEG independently of the LCD mode.
-No AI Vision navigation, preview, reset, Python camera project or USB cable is
-needed. Windows captures have been verified; other OS/firmware combinations need
-their own hardware evidence. Snapshot transfers take several seconds and are
-optional; do not insert one as a prerequisite for every movement.
+For a CMD-only tool, explicitly launch `powershell.exe -NoProfile -File` with the
+bridge path; submit with a stdin pipeline. Use the tool's actual shell syntax.
+`Start` returns promptly; Status reports waiting/authenticating/paired/failed.
+The broker has a two-minute input deadline and cleans up the pipe and child.
+Delete its non-secret temporary directory after a terminal state. On macOS/Linux,
+prefer a retained native tool process stdin; otherwise use a private named FIFO
+with its read/write end kept open for the same pairing process and finite timeout.
 
-The experimental 0.3.0-rc.6 release sends and acknowledges the existing System
-Alive request every two seconds on AIM REV1 / BLE 1.0.0.b0. The tested robot still
-lost power/connectivity around five minutes despite 92 acknowledged replies.
-This is link health monitoring, not verified sleep prevention; metadata reports
-`prevents_sleep:false`. Do not recommend this candidate as a sleep fix.
-This is separate from the display heartbeat: camera/sensor work and idle prompts
-do not need a visible program screen. Startup/live info report `keepalive.active`.
-Unknown firmware reports inactive rather than claiming equivalent verification.
-Stop and the 60-second LCD lease do not end session liveness; close and the
-30-minute owner idle deadline do. Heartbeats do not renew that deadline.
-Cached health reports successful poll counts, acknowledgment age and consecutive
-failures. Only the fixed read-only probe retries, up to three failures; student
-actions are never replayed. After an error, obtain live info before fresh motion.
+## Keep ready across workshop breaks
 
-The rc.7 compatibility candidate also recognizes the observed AIM REV1 /
-`1.0.4.b0` profile. Its System Alive request is unchanged and still reports
-`prevents_sleep:false`; new-firmware endurance is not yet accepted. Older builds
-can disable their monitor or reject camera/display solely because a firmware
-revision is unfamiliar, even when Python works. Record startup/live `device_info`
-once after an update and use a documented compatible CLI/skill pair. Do not
-bypass an unknown-profile guard or downgrade firmware to silence it.
+Persistent sessions are detached background owners, independent of a single
+prompt/chat or agent application. They maintain/recover the same selected robot
+without an inactivity cutoff, never another robot/USB. Standard sessions retain
+their 30-minute idle cutoff. Explicit `session close` stops reconnection and
+retains credentials. Re-pairing is not ordinary reconnection.
 
-On the observed 1.0.4 robot, the private `_sleep_disable` helper accepted `True`
-and read back `True`, but the link still disappeared around five minutes after
-boot despite acknowledged health checks. Do not use that private setting as a
-student sleep workaround or infer its effect from its name. See the CLI's
-firmware investigation for the separate developer controls and measured limits.
+Read `sessions-and-motion.md` for cached lifecycle state, stop/retry, time budgets
+and retained results. A dropped link/closed Windows object is not proof of sleep.
+Do not ask for power cycling until automatic repair and evidence warrant it.
 
-The rc.7 integration candidate combines the existing system REPL with that SDK
-setting and enters its waiting prompt without Ctrl-C. That complete mechanism
-passed a 20-minute quiet control with final live state and cleanup. Normal CLI
-camera/display/stop recovery and two fresh-boot candidate runs are still pending;
-do not describe the integration as accepted solely from the mechanism control.
+Windows maintains its GATT session interest while owned. Closed objects are
+recreated before reconnection, and both notifications are restored. Changed or
+rejected authentication pauses retries instead of overwriting another pairing.
+This is a conservative handoff mechanism, not proof that AIM accepts new pairing
+while another computer remains connected. Until verified, explicitly release
+from the previous computer if required. Pairing another device may invalidate
+previous saved codes; do not promise otherwise.
 
-On its exact supported profile, normal session startup prepares this automatically;
-students do not upload a project, navigate menus or call a private method. The
-LCD may show REPL Mode while connected. `keepalive.power` reports the separate
-experimental power lease. System Alive's `prevents_sleep:false` still describes
-the heartbeat alone. Cached active state does not prove live connectivity.
-The robot-side lease follows the 30-minute client-idle limit and restores the
-prior setting if renewals stop; cached status and background heartbeats do not
-renew it. Close restores the prior setting and stops only the owned system REPL.
-After an interrupted operation, obtain live info before any fresh movement.
-Unsupported profiles retain their earlier behavior; do not bypass the gate.
-
-If discovery fails, check robot power and proximity before retrying. Current
-binaries can sleep despite REPL activity, and a keepalive cannot recover an
-already powered-off robot or guarantee battery/radio health. Give a clear
-power-on cue. After a link failure close/start the session, obtain live
-status and confirm stopped state before a new movement. Never replay a movement
-whose outcome is uncertain. Cached status is not proof of a live connection.
-Brief link errors can recover without physical power-on. After a failure, make
-at most three bounded read-only recovery attempts before requesting physical
-help. Record discovery loss as unavailable connectivity unless power-off was
-independently observed; a visible REPL/emoji screen is not an endurance result.
-
-The session owns its connection; standalone commands will refuse to take it over.
-Use its ID or close it deliberately. A cancelled camera transfer requires a
-fresh session before another snapshot; live info can restore movement first.
-Wireless stop depends on the connection; a nearby person must be able to use
-the physical switch.
-
-For unattended stationary diagnostics, collect charging, power-on, USB removal
-and VEXcode closure together before starting. Use bounded automated checks; do
-not deliberately exhaust an old keepalive control when recovery would require
-someone who is unavailable to press power. Never move an unattended robot.
-
-Technical protocol evidence, including the Windows notify-versus-indicate fix,
-is recorded at https://github.com/Tingsters/vexaim-cli/blob/main/docs/bluetooth.md.
-Firmware and saved programs should remain unchanged.
+Camera photographs use the native 640x480 JPEG path independently of LCD mode.
+No menu navigation, reset, preview project or USB cable is required. Firmware
+profiles and actual hardware evidence are in docs/hardware-notes.md. The finite
+power lease is independent from System Alive link monitoring; its experimental
+metadata must not be described as universal verified sleep prevention.

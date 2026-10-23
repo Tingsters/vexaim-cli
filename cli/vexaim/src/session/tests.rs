@@ -7,6 +7,7 @@ use std::process::Command;
 struct Counters {
     calls: Rc<Cell<usize>>,
     halts: Rc<Cell<usize>>,
+    takeovers: Rc<Cell<usize>>,
     closes: Rc<Cell<usize>>,
     idles: Rc<Cell<usize>>,
     fail_idle: Rc<Cell<bool>>,
@@ -15,12 +16,29 @@ struct Counters {
     write_started: Rc<Cell<bool>>,
     hold_write: Rc<Cell<bool>>,
     write_completed: Rc<Cell<bool>>,
+    link_state: Rc<Cell<&'static str>>,
 }
 struct Fake {
     counters: Counters,
     needs_check: bool,
 }
 impl Backend for Fake {
+    async fn takeover(&mut self) -> Result<Value, Fail> {
+        self.counters
+            .takeovers
+            .set(self.counters.takeovers.get() + 1);
+        self.counters.link_state.set("ready");
+        self.needs_check = false;
+        Ok(
+            json!({"ok":true,"needs_check":false,"robot_state":{"stopped":true},"keepalive":{"healthy":true}}),
+        )
+    }
+    fn connection_state(&self) -> &'static str {
+        match self.counters.link_state.get() {
+            "" => "ready",
+            state => state,
+        }
+    }
     fn idle_is_read_only(&self) -> bool {
         !self.counters.write_once.get()
     }
@@ -63,6 +81,10 @@ impl Backend for Fake {
         self.counters.closes.set(self.counters.closes.get() + 1);
     }
     async fn idle(&mut self) -> Result<Option<Value>, Fail> {
+        if !self.counters.link_state.get().is_empty() {
+            return Ok(Some(json!({"connection_state":self.connection_state(),
+                "healthy":self.connection_state()=="ready", "needs_check":self.needs_check})));
+        }
         self.counters.idles.set(self.counters.idles.get() + 1);
         if self.counters.write_once.replace(false) {
             self.counters.write_started.set(true);
@@ -282,6 +304,7 @@ async fn rejected_program_ownership_does_not_trigger_an_automatic_stop() {
             assert_eq!(counters.halts.get(), 0);
             client(&id, &Request::Close, false, false).await.unwrap();
             owner.await.unwrap();
+
             listener.abort();
         })
         .await;
@@ -332,6 +355,214 @@ async fn wait_calls(counters: &Counters, n: usize) {
     })
     .await
     .unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn persistent_owner_survives_idle_and_still_releases_explicitly() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (_normal_tx, normal) = mpsc::unbounded_channel();
+            let (priority_tx, priority) = mpsc::unbounded_channel();
+            let cache = Rc::new(RefCell::new(json!({"state":"ready","persistent":true})));
+            let counters = Counters::default();
+            let owner = tokio::task::spawn_local(actor_with_idle(
+                Fake {
+                    counters: counters.clone(),
+                    needs_check: false,
+                },
+                normal,
+                priority,
+                cache.clone(),
+                Rc::new(Cell::new(false)),
+                Duration::from_millis(100),
+            ));
+            tokio::time::sleep(Duration::from_millis(350)).await;
+            assert!(!owner.is_finished());
+            assert_eq!(counters.halts.get(), 0);
+            let (events, mut response) = mpsc::unbounded_channel();
+            priority_tx
+                .send(Job {
+                    request: Request::Close,
+                    events,
+                    received: Instant::now(),
+                })
+                .unwrap();
+            assert_eq!(response.recv().await.unwrap()["stopped"], true);
+            owner.await.unwrap();
+            assert_eq!(cache.borrow()["state"], "closed");
+            assert_eq!(counters.closes.get(), 1);
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn degraded_owner_rejects_actions_without_dispatch_and_recovers_in_place() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("recovery-state").await;
+            counters.link_state.set("reconnecting");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let before = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(before["state"], "reconnecting");
+            let rejected = client(
+                &id,
+                &Request::Move {
+                    distance: 50.0,
+                    angle: 0.0,
+                    speed: 150.0,
+                },
+                false,
+                false,
+            )
+            .await
+            .unwrap();
+            assert_eq!(rejected["delivery"], "not_sent");
+            assert_eq!(counters.calls.get(), 0);
+            counters.link_state.set("ready");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let after = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(after["state"], "ready");
+            assert_eq!(after["session"], before["session"]);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn changed_authentication_yields_without_stopping_another_student() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("handoff").await;
+            counters.link_state.set("auth_required");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            assert_eq!(
+                client(&id, &Request::Status, false, false).await.unwrap()["state"],
+                "auth_required"
+            );
+            assert_eq!(counters.calls.get(), 0);
+            assert_eq!(counters.halts.get(), 0);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            assert_eq!(
+                counters.halts.get(),
+                0,
+                "Closing a yielded owner must not stop the new owner"
+            );
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn lost_caller_result_remains_available_for_a_new_turn() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("retained-result").await;
+            let caller_id = id.clone();
+            let caller = tokio::task::spawn_local(async move {
+                client(
+                    &caller_id,
+                    &Request::Exec {
+                        source: "hold".into(),
+                        timeout: 30,
+                        preamble: true,
+                    },
+                    false,
+                    false,
+                )
+                .await
+            });
+            wait_calls(&counters, 1).await;
+            caller.abort();
+            let _ = caller.await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let value = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(value["last_result"]["ok"], false);
+            assert_eq!(value["last_result"]["stopped_confirmed"], true);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn explicit_takeover_replaces_a_paused_program_without_repairing_pairing() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("replace-program").await;
+            counters.link_state.set("program_running");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let result = client(&id, &Request::Takeover, false, false).await.unwrap();
+            assert_eq!(result["ok"], true);
+            let status = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(status["state"], "ready");
+            assert_eq!(status["keepalive"]["healthy"], true);
+            assert_eq!(status["needs_check"], false);
+            assert_eq!(counters.takeovers.get(), 1);
+            assert_eq!(counters.calls.get(), 0);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn requested_takeover_is_not_skipped_because_cached_state_says_ready() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("cached-takeover").await;
+            let name = format!("test-cached-takeover-{}", std::process::id());
+            let status = start_options(&name, true, true).await.unwrap();
+            assert_eq!(status["state"], "ready");
+            assert_eq!(status["persistent"], true);
+            assert_eq!(counters.takeovers.get(), 1);
+            assert_eq!(counters.calls.get(), 0);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn takeover_of_a_running_activity_retains_the_new_live_readiness() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("busy-takeover").await;
+            let call_id = id.clone();
+            let old = tokio::task::spawn_local(async move {
+                client(
+                    &call_id,
+                    &Request::Exec {
+                        source: "hold".into(),
+                        timeout: 30,
+                        preamble: true,
+                    },
+                    false,
+                    false,
+                )
+                .await
+                .unwrap()
+            });
+            wait_calls(&counters, 1).await;
+            let replacement = client(&id, &Request::Takeover, false, false).await.unwrap();
+            assert_eq!(replacement["robot_state"]["stopped"], true);
+            let previous = old.await.unwrap();
+            assert_eq!(previous["ok"], false);
+            assert_eq!(previous["stopped_confirmed"], true);
+            let status = client(&id, &Request::Status, false, false).await.unwrap();
+            assert_eq!(status["needs_check"], false);
+            assert_eq!(status["keepalive"]["healthy"], true);
+            assert_eq!(counters.calls.get(), 1);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
 }
 
 #[tokio::test(flavor = "current_thread")]

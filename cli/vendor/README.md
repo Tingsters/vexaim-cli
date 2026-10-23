@@ -102,6 +102,14 @@ listed Windows behavior, not hardware support on macOS/Linux.
 
 ## Provenance and upstreaming
 
+`btleplug-windows-maintain-connection.patch` additionally records the 0.4 changes
+on top of our notification patch: retain `GattSession.MaintainConnection` while
+the transport lives, release it at teardown, and propagate/ignore closed-object
+PDU reads rather than panicking. This follows Microsoft's documented Windows
+GATT lifecycle. A Windows controlled-disconnect AIM check restored connection,
+stopped state and power management in 7.339 seconds; it does not prove a radio
+cannot disconnect. The separate patch remains local pending upstream review.
+
 The local 0.3.0-rc.5 display fix additionally adds AIM-only remote lifecycle/status
 packets to `vex-cdc` and a fixed read-only keepalive method to `vex-v5-serial`.
 The method is for an already authenticated owner; normal writes keep their
