@@ -44,8 +44,9 @@ handoff need hardware verification; do not present them as guaranteed behavior.
 
 A transport failure alone does not prove sleep. Windows closed-object errors
 need a fresh connection, not an automatic physical power-cycle request. Only
-request physical help after evidence of unavailability; use an agreed audible
-cue for unattended work.
+request physical help after evidence of unavailability when later attendance
+was allowed. For setup-only unattended work, checkpoint and stop instead; see
+`unattended-work.md` for the applicable attendance policy.
 
 System Alive monitors link health. The firmware-gated robot-side power lease is
 separate; persistent owners renew it every five minutes while keeping its finite

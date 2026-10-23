@@ -564,12 +564,12 @@ class Runner:
                 self.battery(client.command('info'))
                 if confirm:
                     for index in range(2):
-                        image = client.command('camera', 'observe', '--output-dir', str(self.journal.directory/f'camera-{index}'))
+                        image = client.command('camera', 'observe', '--output-dir', str(self.journal.directory/f'camera-{index}'), timeout=360)
                         if image.get('control_ready') is not True:
                             raise PhaseFailed('Camera did not restore control readiness')
                         self.journal.record('camera', path=image.get('path'), width=image.get('width'), height=image.get('height'))
                     client.command('exec', '--timeout', '15', "robot.screen.clear_screen(BLUE); robot.screen.set_pen_color(WHITE); robot.screen.draw_circle(120,120,45); print('display complete')")
-                    lcd = client.command('screen', 'screenshot', str(self.journal.directory/'lcd.png'))
+                    lcd = client.command('screen', 'screenshot', str(self.journal.directory/'lcd.png'), timeout=360)
                     if lcd.get('control_ready') is not True:
                         raise PhaseFailed('LCD capture did not restore control readiness')
                     self.journal.record('lcd', path=lcd.get('path'), width=lcd.get('width'), height=lcd.get('height'))

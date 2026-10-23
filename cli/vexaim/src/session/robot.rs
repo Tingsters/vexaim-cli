@@ -379,7 +379,7 @@ impl Robot {
             GenericConnection::Bluetooth(_) => {
                 bluetooth::require_camera_firmware(&self.identity)?;
                 tokio::time::timeout(
-                    Duration::from_secs(60),
+                    Duration::from_secs(bluetooth::CAPTURE_GUARD_SECS),
                     bluetooth::capture_jpeg(self.repl.connection_mut()),
                 )
                 .await
@@ -545,7 +545,7 @@ impl Backend for Robot {
                 bluetooth::require_camera_firmware(&self.identity)?;
             }
             let bytes = tokio::time::timeout(
-                Duration::from_secs(60),
+                Duration::from_secs(bluetooth::CAPTURE_GUARD_SECS),
                 bluetooth::capture_lcd(self.repl.connection_mut()),
             )
             .await
@@ -632,7 +632,10 @@ impl Backend for Robot {
                     json!({"ok":false,"rejected":true,"error":"Robot is moving; finish/wait/cancel its action before a stable observation","robot_state":before["robot_state"]}),
                 );
             }
-            eprintln!("Capturing a fresh camera observation (up to 60 seconds)");
+            eprintln!(
+                "Capturing a fresh camera observation (up to {} seconds)",
+                bluetooth::CAPTURE_GUARD_SECS
+            );
             let bytes = self.capture(*camera_index).await?;
             let after = self.state().await;
             let mut ready = after

@@ -465,6 +465,14 @@ pub(crate) async fn capture_jpeg<C: Connection>(conn: &mut C) -> Result<Vec<u8>,
     capture_buffer(conn, Some(8), true).await
 }
 
+// At the observed Windows default interval, ~21 KiB takes ~36 seconds.
+// The fixed 115200-byte LCD buffer therefore needs minutes, not 55 seconds.
+// Keep nested guards ordered and every transfer finite, including complex JPEGs.
+pub(crate) const CAPTURE_TRANSFER_SECS: u64 = 240;
+pub(crate) const CAPTURE_GUARD_SECS: u64 = 250;
+pub(crate) const CAPTURE_REQUEST_SECS: u64 = 300;
+pub(crate) const CAPTURE_CLIENT_SECS: u64 = 330;
+
 pub(crate) async fn capture_lcd<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
     capture_buffer(conn, None, false).await
 }
@@ -520,7 +528,7 @@ async fn capture_buffer<C: Connection>(
     if chunk == 0 {
         return Err(fail("Camera receive window is too small."));
     }
-    let seconds = if jpeg { 45 } else { 55 };
+    let seconds = CAPTURE_TRANSFER_SECS;
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let mut bytes = Vec::with_capacity(size);
     while bytes.len() < size {
@@ -646,6 +654,14 @@ pub(crate) fn save_atomic(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn slow_link_capture_fits_before_all_enclosing_deadlines() {
+        // Independently observed ~600 bytes/s: a full RGB565 LCD needs 192s.
+        assert!(CAPTURE_TRANSFER_SECS >= (240_u64 * 240 * 2).div_ceil(600));
+        assert!(CAPTURE_GUARD_SECS >= CAPTURE_TRANSFER_SECS + 6);
+        assert!(CAPTURE_REQUEST_SECS > CAPTURE_GUARD_SECS + 20);
+        assert!(CAPTURE_CLIENT_SECS > CAPTURE_REQUEST_SECS);
+    }
     #[test]
     fn code_line_reads_only_the_first_line() {
         let input = std::io::Cursor::new(b" 1234 \r\nignored\n".to_vec());
