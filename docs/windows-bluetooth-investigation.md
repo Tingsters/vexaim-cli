@@ -78,6 +78,13 @@ does not need `--stationary-ready`. An optional `--recovery-test-exe` points to
 the diagnostic Rust unit-test executable for its separately labeled controlled
 disconnect test, after uninterrupted confirmation has finished.
 
+If a control run ends before reaching the candidate, `--candidate-only` performs
+a separately labeled follow-up using only the OS-default executable. Do not
+pass `--official-auth-stdin` for this mode. The new report records skipped
+controls as unavailable; it does not convert the earlier failed run into a pass.
+Verify that the prior runner and its contained owners exited first. The candidate
+must still pass live setup, its short comparison and uninterrupted confirmation.
+
 The Windows monitor reads PnP properties and System BTHUSB metadata. It changes
 no logging policy and needs no administrator permission. It captures no raw
 HCI/GATT data or PIN values. Fine-grained elevated USB tracing is a separate
@@ -128,6 +135,12 @@ connects. v0.4 does not return independent power-restoration confirmation; the
 report explicitly records that verification as unavailable rather than claiming
 an acknowledged stop proves it. Startup failures never use an invented
 `--name ... session close` interface.
+
+When a measurement fails during reconnection, allow the existing owner up to
+60 seconds to recover, verify live stopped state, then close it. Sending v0.4's
+close while its link is unavailable terminates that owner even if its initial
+stop fails, preventing further repair. A failed measurement remains failed;
+uncertain cleanup is recorded separately and prevents starting another client.
 
 No corrective release is justified by correlation alone. Promote a software
 change only after the controlled measurements and functional acceptance pass.

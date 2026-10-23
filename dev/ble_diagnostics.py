@@ -251,6 +251,21 @@ class CliClient:
                 exited = self.wait_owner_exit() and not self.process_ids()
                 return {'confirmed': exited, 'owner_exited': exited, 'startup_incomplete': True,
                     'power_cleanup_verified': False}
+            # A failed measurement can end while the owner is automatically
+            # reconnecting. Let that owner recover before requesting close:
+            # v0.4's close ends the owner even if its initial stop cannot read.
+            until = time.monotonic()+60
+            while True:
+                status = self.call('--session', self.session, 'session', 'status', timeout=10, cleanup=True)
+                state = status.get('state')
+                if state == 'ready':
+                    live = self.call('--session', self.session, 'info', timeout=20, cleanup=True)
+                    if live.get('robot_state', {}).get('stopped') is not True:
+                        raise Incomplete('Cleanup could not verify live stopped state')
+                    break
+                if state not in ('reconnecting', 'degraded') or time.monotonic() >= until:
+                    raise Incomplete('Cleanup could not recover a live connection in its finite budget')
+                time.sleep(2)
             value = self.call('--session', self.session, 'session', 'close', timeout=30, cleanup=True)
             # v0.4 acknowledges stopped before final lease/GATT cleanup. Wait
             # for owner exit before handing the radio to another application.
@@ -512,7 +527,10 @@ class Runner:
             operation()
             row['outcome'] = 'passed'
         except Incomplete as error:
-            row.update(outcome='incomplete', error=str(error))
+            if isinstance(error.__cause__, PhaseFailed):
+                row.update(outcome='failed', error=str(error.__cause__), cleanup_error=str(error))
+            else:
+                row.update(outcome='incomplete', error=str(error))
             raise
         except Exception as error:
             row.update(error=str(error)[:500])
@@ -568,7 +586,7 @@ class Runner:
                 cleanup = client.close()
                 self.journal.record('cli_cleanup', phase=label, **cleanup)
                 if not cleanup['confirmed']:
-                    raise Incomplete('Connection cleanup was not confirmed; further clients were not started')
+                    raise Incomplete('Connection cleanup was not confirmed; further clients were not started') from pending
         return self.phase(label, operation)
 
     def official_phase(self, official, seconds):
@@ -606,6 +624,7 @@ def main():
     parser.add_argument('--baseline-only', action='store_true')
     parser.add_argument('--recovery-test-exe', type=Path)
     parser.add_argument('--official-auth-stdin', action='store_true', help='Read the existing setup code once from stdin; never request a new code unattended')
+    parser.add_argument('--candidate-only', action='store_true', help='Separate follow-up measurement of the OS-default candidate; never relabel an earlier failed comparison')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows-only host investigation')
@@ -643,16 +662,23 @@ def main():
             host.verify_setup()
             journal.record('physical_setup', robot_usb_connected=False, robot_power='battery_or_external_power_without_data')
             # The operator is present for preflight; absence is never treated as pairing consent.
-            preflight = CliClient(args.released, args.name, limits)
+            preflight = CliClient(args.candidate if args.candidate_only else args.released, args.name, limits,
+                'os-default' if args.candidate_only else None)
             runner.cli_phase('setup-live-check', preflight, 0, initial=True)
             if runner.phases[-1]['outcome'] != 'passed':
                 raise Incomplete('Initial connection verification failed')
-            official = OfficialClient(args.name, auth_code=setup_code)
-            setup_code = None
-            official_ok = runner.official_phase(official, args.official_seconds)
-            released_ok = runner.cli_phase('released-throughput', CliClient(args.released, args.name, limits), args.comparison_seconds)
+            if args.candidate_only:
+                official_ok, released_ok = None, None
+                journal.record('setup_verified', unattended=True, later_attendance_required=False,
+                    scope='candidate-only follow-up; official and released controls not repeated')
+            else:
+                official = OfficialClient(args.name, auth_code=setup_code)
+                setup_code = None
+                official_ok = runner.official_phase(official, args.official_seconds)
+                released_ok = runner.cli_phase('released-throughput', CliClient(args.released, args.name, limits), args.comparison_seconds)
             candidate_ok = runner.cli_phase('candidate-os-default', CliClient(args.candidate, args.name, limits, 'os-default'), args.comparison_seconds)
-            extra.update(official_passed=official_ok, released_passed=released_ok, candidate_passed=candidate_ok)
+            extra.update(official_passed=official_ok, released_passed=released_ok, candidate_passed=candidate_ok,
+                comparison_scope='candidate-only' if args.candidate_only else 'full-comparison')
             if released_ok:
                 selected = CliClient(args.released, args.name, limits)
                 extra['selected_configuration'] = 'released-on-current-host-path'

@@ -9,7 +9,7 @@ import struct
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from ble_diagnostics import CliClient, HostMonitor, Incomplete, Journal, Limits, LowBattery, PhaseFailed, Runner, official_ble_chunk
 
@@ -143,6 +143,13 @@ class Unattended(unittest.TestCase):
             self.runner.cli_phase('candidate', Client(cleanup=False), 10)
         self.assertEqual(self.runner.phases[0]['outcome'], 'failed')
 
+    def test_failed_measurement_remains_failed_when_cleanup_is_also_uncertain(self):
+        with self.assertRaises(Incomplete):
+            self.runner.cli_phase('unstable', Client(error=PhaseFailed('radio reset'), cleanup=False), 10)
+        self.assertEqual(self.runner.phases[-1]['outcome'], 'failed')
+        self.assertEqual(self.runner.phases[-1]['error'], 'radio reset')
+        self.assertIn('cleanup_error', self.runner.phases[-1])
+
     def test_successful_confirmation_checks_camera_display_stop_and_closes(self):
         client = Client()
         self.assertTrue(self.runner.cli_phase('confirmation', client, 3, confirm=True))
@@ -198,7 +205,8 @@ print(child.pid,flush=True)
     def test_a_stop_acknowledgment_does_not_prove_the_owner_exited(self):
         client = CliClient.__new__(CliClient)
         client.session = 'aim-fixture'
-        client.call = Mock(return_value={'ok': True, 'stopped': True})
+        client.call = Mock(side_effect=[{'state': 'ready'}, {'robot_state': {'stopped': True}},
+            {'ok': True, 'stopped': True}])
         client.wait_owner_exit = Mock(return_value=False)
         result = client.close()
         self.assertFalse(result['confirmed'])
@@ -214,6 +222,19 @@ print(child.pid,flush=True)
         client.call = Mock(side_effect=AssertionError('no session command is valid'))
         self.assertTrue(client.close()['confirmed'])
         client.call.assert_not_called()
+
+    def test_cleanup_waits_for_existing_owner_recovery_before_closing(self):
+        client = CliClient.__new__(CliClient)
+        client.session = 'aim-fixture'
+        client.call = Mock(side_effect=[{'state': 'reconnecting'}, {'state': 'reconnecting'},
+            {'state': 'ready'}, {'robot_state': {'stopped': True}}, {'ok': True, 'stopped': True}])
+        client.wait_owner_exit = Mock(return_value=True)
+        with patch('ble_diagnostics.time.monotonic', self.clock), patch('ble_diagnostics.time.sleep', self.clock.sleep):
+            self.assertTrue(client.close()['confirmed'])
+        self.assertEqual(self.clock.now, 4)
+        commands = [c.args[2:] for c in client.call.call_args_list]
+        self.assertEqual(commands[-2:], [('info',), ('session', 'close')])
+        self.assertEqual(commands.count(('session', 'close')), 1)
 
     def test_a_running_but_stalled_windows_monitor_is_incomplete(self):
         monitor = HostMonitor.__new__(HostMonitor)
