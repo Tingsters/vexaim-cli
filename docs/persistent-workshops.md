@@ -118,6 +118,13 @@ This is still single-computer Windows evidence. Actual second-computer pairing
 and handoff, uninterrupted radio reliability, and physical cargo collection
 remain outside this acceptance.
 
+The later Windows comparison isolated a retained throughput request as an
+avoidable reset trigger on the tested radio. OS-default mode completed a
+60-minute uninterrupted interval; the original full report failed its final
+LCD deadline, followed by a passing capture-deadline recheck. See
+[Windows investigation](windows-bluetooth-investigation.md) for the separate
+controls, remaining limits and image-transfer performance.
+
 Primary references: [Microsoft GATT lifecycle](https://learn.microsoft.com/en-us/windows/apps/develop/devices-sensors/gatt-client),
 [MaintainConnection](https://learn.microsoft.com/en-us/uwp/api/windows.devices.bluetooth.genericattributeprofile.gattsession.maintainconnection?view=winrt-26100),
 [Windows pairing](https://support.microsoft.com/en-gb/windows/hardware/bluetooth/pair-a-bluetooth-device-in-windows),

@@ -68,7 +68,15 @@ $script:pipeName = $state.pipe
 if ($Action -eq 'Status') { $state | ConvertTo-Json -Compress; exit }
 if ($Action -eq 'Submit') {
   # The code is only stdin data, never a parameter, file, output or exception.
-  $code = [Console]::In.ReadLine()
+  # A PowerShell object pipeline is separate from the native process stdin.
+  if ($MyInvocation.ExpectingInput) {
+    $incoming = @($input)
+    if ($incoming.Count -ne 1) { throw 'Supply exactly four digits on stdin' }
+    $code = [string]$incoming[0]
+    $incoming = $null
+  } else {
+    $code = [Console]::In.ReadLine()
+  }
   if ($null -eq $code -or $code -notmatch '^\d{4}$') { throw 'Supply exactly four digits on stdin' }
   $client = New-Object IO.Pipes.NamedPipeClientStream('.', $script:pipeName, [IO.Pipes.PipeDirection]::Out)
   try {

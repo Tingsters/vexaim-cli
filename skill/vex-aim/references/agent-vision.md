@@ -7,8 +7,11 @@ require AI Vision mode on the LCD, a reset, VEXcode or a saved robot project.
 vexaim --json --session ID camera observe --output-dir .vexaim/captures
 ```
 
-Allow at least 75 seconds for the shell call so a 60-second camera deadline and
-cleanup can finish. Progress belongs on stderr; stdout contains JSON. Capture
+Allow 360 seconds for the shell call so the finite capture and cleanup deadlines
+can finish on slower Bluetooth links. On the tested Windows CSR radio with OS
+defaults, a ~21 KiB frame took ~36 seconds; this is frame capture, not live video.
+Prefer native on-robot AI Vision for fast steering and tracking.
+Progress belongs on stderr; stdout contains JSON. Capture
 uses the selected connection and never falls back to another robot/transport.
 It requires live stopped state; an active movement is reported without stopping
 it. Wait for the action, or explicitly cancel it if that matches the request.

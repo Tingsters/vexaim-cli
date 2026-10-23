@@ -438,6 +438,9 @@ async fn actor_with_idle<B: Backend>(
             tokio::pin!(operation);
             let deadline = tokio::time::sleep(Duration::from_secs(match &job.request {
                 Request::Exec { timeout, .. } => timeout + 30,
+                Request::Screenshot { .. } | Request::Observe { .. } | Request::Snap { .. } => {
+                    crate::bluetooth::CAPTURE_REQUEST_SECS
+                }
                 _ => 135,
             }));
             tokio::pin!(deadline);
@@ -596,6 +599,11 @@ async fn client(
     loop {
         let response_timeout = if matches!(request, Request::Status) {
             2
+        } else if matches!(
+            request,
+            Request::Screenshot { .. } | Request::Observe { .. } | Request::Snap { .. }
+        ) {
+            crate::bluetooth::CAPTURE_CLIENT_SECS
         } else {
             180
         };

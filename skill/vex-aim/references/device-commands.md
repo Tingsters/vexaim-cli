@@ -62,6 +62,8 @@ Other command groups:
 240×240 RGB565 LCD buffer and atomically saves a PNG, with `source` labeling it
 as LCD content and a postcapture `control_ready` check. It requires a session and
 stopped wheels. It is not a camera observation, and never changes display modes.
+The raw LCD buffer is much larger than a camera JPEG. Allow 360 seconds for the
+shell call on slower Bluetooth links; the download itself has a finite deadline.
 
 Bluetooth screen writes automatically activate the program
 display and maintain its required status keepalive. This fixes the earlier

@@ -5,7 +5,7 @@ use crate::{
     motion,
     repl::{Fail, PREAMBLE, Repl},
 };
-use btleplug::api::{ConnectionParameterPreset, Peripheral as _};
+use btleplug::api::Peripheral as _;
 use serde_json::{Value, json};
 use std::{
     path::Path,
@@ -28,6 +28,8 @@ pub struct Robot {
     last_error: Option<String>,
     last_disconnect_error: Option<String>,
     reconnect_count: usize,
+    connection_profile: crate::ble_profile::Profile,
+    connection_parameters: Value,
 }
 
 fn checked(result: &crate::repl::ExecResult) -> Result<(), Fail> {
@@ -75,6 +77,8 @@ impl Robot {
                 last_error: None,
                 last_disconnect_error: None,
                 reconnect_count: 0,
+                connection_profile: crate::ble_profile::Profile::OsDefault,
+                connection_parameters: Value::Null,
                 power: crate::power::Power::new(&Value::Null),
             };
             robot.prepare().await?;
@@ -84,6 +88,8 @@ impl Robot {
                 json!({"transport":"usb","id":name,"robot_state":details["robot_state"]}),
             ));
         }
+        let connection_profile = crate::ble_profile::Profile::selected()?;
+        let mut connection_parameters = Value::Null;
         let all = Instant::now();
         let (id, device) = bluetooth::select(name).await?;
         let discovery_ms = all.elapsed().as_millis() as u64;
@@ -92,13 +98,7 @@ impl Robot {
         let setup = async {
             let mut identity = bluetooth::identity(&conn).await?;
             bluetooth::authenticate(&mut conn, &id, false, false).await?;
-            // Keep this request alive in the patched backend for the connection.
-            let _ = tokio::time::timeout(
-                Duration::from_secs(3),
-                conn.peripheral
-                    .request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized),
-            )
-            .await;
+            connection_parameters = connection_profile.apply(&conn.peripheral).await;
             bluetooth::add_system_versions(&mut conn, &mut identity).await;
             Ok::<_, Fail>(identity)
         }
@@ -128,6 +128,8 @@ impl Robot {
             last_error: None,
             last_disconnect_error: None,
             reconnect_count: 0,
+            connection_profile,
+            connection_parameters,
         };
         if takeover {
             robot.power.take_over(&mut robot.repl).await?;
@@ -228,6 +230,7 @@ impl Robot {
         health["last_error"] = json!(self.last_error);
         health["last_disconnect_error"] = json!(self.last_disconnect_error);
         health["reconnect_count"] = json!(self.reconnect_count);
+        health["connection_parameters"] = self.connection_parameters.clone();
         health["healthy"] = json!(
             self.connection_state == "ready"
                 && (!self.repl.connection().inner().is_bluetooth() || health["healthy"] == true)
@@ -298,12 +301,7 @@ impl Robot {
                 return Err(Fail::AuthenticationRequired("Robot firmware identity changed; explicitly start a fresh session before private SDK power management".into()));
             }
         }
-        let _ = tokio::time::timeout(
-            Duration::from_secs(3),
-            conn.peripheral
-                .request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized),
-        )
-        .await;
+        self.connection_parameters = self.connection_profile.apply(&conn.peripheral).await;
         self.repl =
             Repl::from_connection(DisplayConnection::new(GenericConnection::Bluetooth(conn)));
         self.power.resume();
@@ -381,7 +379,7 @@ impl Robot {
             GenericConnection::Bluetooth(_) => {
                 bluetooth::require_camera_firmware(&self.identity)?;
                 tokio::time::timeout(
-                    Duration::from_secs(60),
+                    Duration::from_secs(bluetooth::CAPTURE_GUARD_SECS),
                     bluetooth::capture_jpeg(self.repl.connection_mut()),
                 )
                 .await
@@ -547,7 +545,7 @@ impl Backend for Robot {
                 bluetooth::require_camera_firmware(&self.identity)?;
             }
             let bytes = tokio::time::timeout(
-                Duration::from_secs(60),
+                Duration::from_secs(bluetooth::CAPTURE_GUARD_SECS),
                 bluetooth::capture_lcd(self.repl.connection_mut()),
             )
             .await
@@ -634,7 +632,10 @@ impl Backend for Robot {
                     json!({"ok":false,"rejected":true,"error":"Robot is moving; finish/wait/cancel its action before a stable observation","robot_state":before["robot_state"]}),
                 );
             }
-            eprintln!("Capturing a fresh camera observation (up to 60 seconds)");
+            eprintln!(
+                "Capturing a fresh camera observation (up to {} seconds)",
+                bluetooth::CAPTURE_GUARD_SECS
+            );
             let bytes = self.capture(*camera_index).await?;
             let after = self.state().await;
             let mut ready = after
@@ -1008,30 +1009,39 @@ mod acceptance {
         crate::session::guard_one_shot(&name).await.unwrap();
         let (mut robot, _) = Robot::open_options(&name, true).await.unwrap();
         robot.set_persistent();
-        let before = robot.state().await.unwrap();
-        assert_eq!(before["robot_state"]["stopped"], true);
-        let GenericConnection::Bluetooth(conn) = robot.repl.connection_mut().inner_mut() else {
-            panic!("Expected BLE");
-        };
-        conn.close().await.unwrap();
-        robot.lost("Controlled transport close; no movement requested");
-        let started = Instant::now();
-        tokio::time::timeout(Duration::from_secs(60), async {
-            while robot.connection_state != "ready" {
-                robot.idle().await.unwrap();
-                tokio::time::sleep(Duration::from_millis(100)).await;
+        let outcome = async {
+            let before = robot.state().await?;
+            if before["robot_state"]["stopped"] != true {
+                return Err(failure("Stationary recovery test found robot not stopped"));
             }
-        })
-        .await
-        .expect("Automatic recovery did not finish");
-        let after = robot.state().await.unwrap();
-        assert_eq!(after["robot_state"]["stopped"], true);
-        assert!(robot.health()["healthy"] == true);
-        assert!(robot.health()["power"]["active"] == true);
+            let GenericConnection::Bluetooth(conn) = robot.repl.connection_mut().inner_mut() else {
+                return Err(failure("Expected Bluetooth for recovery test"));
+            };
+            conn.close().await.map_err(failure)?;
+            robot.lost("Controlled transport close; no movement requested");
+            let started = Instant::now();
+            tokio::time::timeout(Duration::from_secs(60), async {
+                while robot.connection_state != "ready" {
+                    robot.idle().await?;
+                    if matches!(robot.connection_state, "auth_required" | "program_running") {
+                        return Err(failure("Recovery needs attendance; test stopped"));
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                Ok::<_, Fail>(())
+            }).await.map_err(|_| failure("Automatic recovery did not finish"))??;
+            let after = robot.state().await?;
+            if after["robot_state"]["stopped"] != true || robot.health()["healthy"] != true
+                || robot.health()["power"]["active"] != true {
+                return Err(failure("Recovery did not restore stopped readiness and power lease"));
+            }
+            Ok::<_, Fail>(json!({"event":"controlled_reconnect_passed","recovery_ms":started.elapsed().as_millis(),"robot_state":after["robot_state"],"health":robot.health()}))
+        }.await;
+        // Preserve cleanup even when a live check fails; do not panic first.
+        robot.close().await;
         println!(
             "{}",
-            json!({"event":"controlled_reconnect_passed","recovery_ms":started.elapsed().as_millis(),"robot_state":after["robot_state"],"health":robot.health()})
+            outcome.expect("Controlled recovery failed; cleanup attempted")
         );
-        robot.close().await;
     }
 }

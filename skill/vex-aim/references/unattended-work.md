@@ -3,11 +3,23 @@
 Use this workflow when the user wants to leave a stationary investigation
 running. Ordinary short robot requests do not need an alert rehearsal.
 
+If the user requires involvement only at the beginning, complete dependencies,
+builds, permissions and authentication verification before they leave. Arrange
+all physical setup together. Do not schedule a later restart, pairing code,
+adapter move or return cue. An unexpected need for attendance makes that phase
+incomplete: checkpoint it, release investigative connections and continue only
+independent work. Use a whole-run deadline, live battery checkpoints and cleanup
+of detached children. State clearly when setup has been verified and the user
+can leave. This preference replaces the return-cue workflow below.
+
 Prepare binaries and diagnostics before waking the robot. Gather charge,
 power-on/restart, exact robot, requested transport, USB state, competing
 applications, controller state and pairing permissions together at the start.
 Keep pairing codes out of arguments and files. Use masked local input or the
 workshop's one-process stdin/pipe workflow. State what will run and its duration.
+For Bluetooth-only tests, verify that a charging cable is not also a USB data
+connection to the computer. Wall charging is a different test condition from
+battery-only operation; record which is used instead of assuming from "on power."
 After a firmware update, record the actual reported revisions before measuring.
 An active link monitor or visible REPL screen does not prove sleep prevention.
 Keep failed runs failed, and separate a firmware compatibility rejection from

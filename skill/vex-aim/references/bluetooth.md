@@ -63,6 +63,12 @@ while another computer remains connected. Until verified, explicitly release
 from the previous computer if required. Pairing another device may invalidate
 previous saved codes; do not promise otherwise.
 
+Windows 0.4.1 leaves connection parameters to the operating system instead of
+holding a throughput request while idle. In health JSON, `requested:os-default`
+with `accepted:null` is expected. An optional parameter-request error on another
+platform is not itself a disconnect; use connection state, fresh monitoring and
+live commands to assess the link.
+
 Camera photographs use the native 640x480 JPEG path independently of LCD mode.
 No menu navigation, reset, preview project or USB cable is required. Firmware
 profiles and actual hardware evidence are in docs/hardware-notes.md. The finite
