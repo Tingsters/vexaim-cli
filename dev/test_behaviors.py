@@ -42,6 +42,10 @@ class World:
         self.blocked_contact = False
         self.released_until = 0
         self.loop_limit = 0
+        self.tags_need_settle = False
+        self.still_since = 0
+        self.possession_missing = False
+        self.acceleration_ms = 0
         self.ns = self.namespace()
         self.robot = self.ns['robot']
         exec(compile(DEVICE.read_text(), str(DEVICE), 'exec'), self.ns)
@@ -63,6 +67,7 @@ class World:
                 m['remaining'] -= dt
                 if m['remaining'] <= .01:
                     self.motion_state = None
+                    self.still_since = self.ms + dt
             if self.held is None and self.collect_enabled and self.ms > self.released_until:
                 for obj in self.objects:
                     if obj['kind'] not in ('BLUE_BARREL','ORANGE_BARREL','SPORTS_BALL'):
@@ -105,8 +110,12 @@ class World:
         if self.dropout and self.ms >= (200 if self.dropout is True else self.dropout):
             return ()
         data = []
+        is_tag = target == 'ALL_TAGS' or target.startswith('TAG')
+        rotating = self.motion_state is not None and 'turn' in self.motion_state
+        if is_tag and self.tags_need_settle and (rotating or self.ms-self.still_since < 240):
+            return ()
         for obj in self.objects:
-            if obj['kind'] != target:
+            if obj['kind'] != target and not (target == 'ALL_TAGS' and obj['kind'].startswith('TAG')):
                 continue
             d, bearing = self.geometry(obj)
             if d < self.blind_mm or d > 1200 or abs(bearing) > 34:
@@ -122,13 +131,13 @@ class World:
 
     def possession(self, cargo):
         self.possession_reads += 1
-        return self.held == cargo and not (self.flicker and self.possession_reads % 5 == 0)
+        return self.held == cargo and not self.possession_missing and not (self.flicker and self.possession_reads % 5 == 0)
 
     def move(self, distance, angle, speed, units, blocking):
         self.log('move_for', distance, angle, speed, units)
         speed *= 2 if units == 'PERCENT' else 1
-        duration = abs(distance) / speed * 1000
-        self.motion_state = dict(speed=speed, angle=angle, remaining=duration)
+        duration = abs(distance) / speed * 1000 + self.acceleration_ms
+        self.motion_state = dict(speed=abs(distance)/duration*1000, angle=angle, remaining=duration)
         if blocking:
             self.wait(duration)
 
@@ -150,6 +159,8 @@ class World:
 
     def stop(self):
         self.log('stop')
+        if self.motion_state is not None:
+            self.still_since = self.ms
         self.motion_state = None
 
     def place(self):
@@ -196,6 +207,94 @@ class World:
 
 class Behaviors(unittest.TestCase):
     CONFIG='behaviors.configure(move_mmps=150,turn_dps=45,contact_mmps=200,timeout_ms=30000)\n'
+    PLAY='behaviors.configure(move_mmps=150,turn_dps=45,tag_turn_dps=90,contact_mmps=200,timeout_ms=30000,verification="contact")\n'
+
+    def test_tags_need_stationary_views_in_both_search_directions(self):
+        for target,position,direction in [('TAG0',(0,450),'RIGHT'),('TAG12',(0,-450),'LEFT'),('ALL_TAGS',(-450,0),'RIGHT')]:
+            world=World([('TAG12' if target=='ALL_TAGS' else target,*position)],blind_mm=0)
+            world.tags_need_settle=True
+            error,out=world.run(self.PLAY+'behaviors.find('+target+','+direction+')')
+            self.assertIsNone(error,out+'\n'+str(error))
+            self.assertIn('stationary_views',out)
+            self.assertFalse(any(c[1]=='turn' for c in world.calls),'Tag search must stop between views')
+            self.assertLess(world.ms,15000)
+            self.assertIsNone(world.motion_state)
+
+    def test_stationary_tag_search_is_bounded_when_marker_absent(self):
+        world=World()
+        error,out=world.run(self.PLAY+'behaviors.find(TAG0)')
+        self.assertIn('not_found',error)
+        self.assertLessEqual(sum(c[1]=='turn_to' for c in world.calls),7)
+        self.assertLessEqual(abs(world.rotation),360)
+        self.assertLess(world.ms,15000)
+
+    def test_fast_game_keeps_going_when_held_cargo_disappears_from_detector(self):
+        world=World([('BLUE_BARREL',350,0),('TAG0',0,450)],blind_mm=0)
+        world.tags_need_settle=True
+        world.possession_missing=True
+        error,out=world.run(self.PLAY+'pickup=behaviors.collect(BLUE_BARREL)\ndelivery=behaviors.deliver(BLUE_BARREL,TAG0)\nprint(pickup)\nprint(delivery)\nprint("celebrate")')
+        self.assertIsNone(error,out+'\n'+str(error))
+        self.assertIsNone(world.held,'Physical simulated cargo was released')
+        self.assertIn('contact_assumed',out)
+        self.assertIn('place_assumed',out)
+        self.assertIsNone(world.ns['pickup']['collected'])
+        self.assertIsNone(world.ns['delivery']['delivered'])
+        self.assertTrue(world.ns['delivery']['completed'])
+        self.assertIn('celebrate',out)
+        self.assertFalse(any(c[1]=='move_for' and c[2] in (40,60,80) for c in world.calls))
+        self.assertNotIn('contact_retry',out)
+        self.assertLess(world.ms,20000)
+
+    def test_contact_limit_can_end_a_play_attempt_without_claiming_attachment(self):
+        world=World([('BLUE_BARREL',55,0)],blind_mm=0,stalled=True)
+        error,out=world.run(self.PLAY+'pickup=behaviors.collect(BLUE_BARREL)')
+        self.assertIsNone(error,out+'\n'+str(error))
+        self.assertIsNone(world.held)
+        self.assertIsNone(world.ns['pickup']['collected'])
+        self.assertTrue(world.ns['pickup']['completed'])
+        self.assertLess(world.ms,4000)
+
+    def test_contact_policy_cannot_skip_missing_target_or_invent_carried_cargo(self):
+        for body,expected in [('behaviors.collect(BLUE_BARREL)','not_found'),('behaviors.deliver(BLUE_BARREL,TAG0)','cargo_required')]:
+            world=World()
+            error,out=world.run(self.PLAY+body)
+            self.assertIn(expected,error)
+            self.assertFalse(any(c[1]=='place' for c in world.calls))
+
+    def test_play_contact_still_obeys_shared_deadline(self):
+        world=World([('BLUE_BARREL',55,0)],blind_mm=0,stalled=True)
+        error,out=world.run('behaviors.configure(verification="contact",timeout_ms=600)\nbehaviors.collect(BLUE_BARREL)\nprint("celebrate")')
+        self.assertIn('deadline',error)
+        self.assertNotIn('celebrate',out)
+        self.assertLess(world.ms,800)
+        self.assertIsNone(world.motion_state)
+
+    def test_play_release_can_finish_without_fabricating_release_confirmation(self):
+        world=World([('TAG0',55,0)],held='BLUE_BARREL',blind_mm=0,release_stuck=True)
+        error,out=world.run(self.PLAY+'result=behaviors.deliver(BLUE_BARREL,TAG0)\nprint("celebrate")')
+        self.assertIsNone(error,out+'\n'+str(error))
+        self.assertEqual(world.held,'BLUE_BARREL')
+        self.assertTrue(world.ns['result']['completed'])
+        self.assertIsNone(world.ns['result']['delivered'])
+        self.assertIn('place_assumed',out)
+        self.assertIn('celebrate',out)
+
+    def test_tag_view_pause_still_obeys_frozen_clock_watchdog(self):
+        world=World(frozen_timer=True,frozen_system=True)
+        error,out=world.run('behaviors.configure(timeout_ms=400)\nbehaviors.find(TAG0)')
+        self.assertIn('deadline',error)
+        self.assertLess(world.ms,600)
+        self.assertIsNone(world.motion_state)
+
+    def test_short_reverse_allows_native_acceleration_without_fixed_delay(self):
+        world=World(held='BLUE_BARREL')
+        world.acceleration_ms=800
+        context=world.ns['_VxBehaviors']().begin()
+        try:
+            context.configure(move_mmps=150)
+            self.assertTrue(context.retained('BLUE_BARREL'))
+        finally:context.close()
+        self.assertLess(world.ms,1500)
 
     def test_collects_all_cargo_from_different_directions(self):
         for cargo in ('BLUE_BARREL','ORANGE_BARREL','SPORTS_BALL'):
@@ -381,7 +480,8 @@ class Behaviors(unittest.TestCase):
 
     def test_invalid_configuration_does_not_move(self):
         for source in ('behaviors.configure(move_mmps=201)','behaviors.configure(turn_dps=float("nan"))',
-                       'behaviors.configure(timeout_ms=60000)','behaviors.collect(TAG0)'):
+                       'behaviors.configure(timeout_ms=60000)','behaviors.collect(TAG0)',
+                       'behaviors.configure(verification="guess")','behaviors.configure(tag_turn_dps=151)'):
             world=World()
             error,out=world.run(source)
             self.assertIsNotNone(error)

@@ -4,6 +4,8 @@ Version 0.5.0 adds `exec --behaviors` for composing the same tested vision
 controller used by the named macros. See the [behavior interface](../skill/vex-aim/references/behaviors.md).
 Collection handles near-field target loss and contact; marker approach uses
 the target-specific VEX stand-off. Existing macro names and action IDs remain.
+Version 0.5.1 adds stationary tag views and `verification="contact"` for brisk
+assume-and-continue play, while retaining vision verification for diagnostics.
 
 Use `vexaim catalog [GROUP]` offline to discover commands and parameters. Native
 commands map to AIM Python APIs rather than WebSocket-library defaults. The

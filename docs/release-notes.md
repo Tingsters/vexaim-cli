@@ -1,4 +1,32 @@
-# vexaim 0.5.0
+# vexaim 0.5.1
+
+Tag search now takes brief stationary native-camera readings at eight viewpoints
+instead of relying on continuous rotation. This brings the successful Windows
+blue-barrel-to-purple-Tag-0 test into `find`, `approach`, `deliver` and named
+vision macros. Cargo acquisition remains a brisk continuous sweep.
+
+`behaviors.configure(verification="contact", tag_turn_dps=90)` opts into fast
+play: finish deliberate bounded contact, continue to the marker and operate the
+kicker without diagnostic retention reverses, repeated possession gates or host
+camera round trips. The default `verification="vision"` retains those checks.
+Assumed completion is explicit in result evidence; it does not fabricate native
+attachment/release confirmation. Missing targets, transport errors, cancellation
+and whole-activity deadlines still stop the sequence.
+
+Short native moves now allow acceleration/status-reporting margin while still
+returning immediately on completion. Matching workshop instructions warm the
+helpers during stationary setup and compose each game in one execution. The
+workshop installer requires 0.5.1 so students receive matching APIs and guidance.
+
+The earlier test's camera independently showed the barrel beside the marker.
+The final 0.5.1 source follow-up could not reacquire blue in the current layout;
+it stopped after a bounded search. Full new-mode hardware acceptance remains
+pending. Automated tests cover stationary-only tag decoding, missing targets,
+false-negative possession, assumed placement and cancellation/deadlines. See
+[hardware evidence](https://github.com/Tingsters/vexaim-cli/blob/main/docs/hardware-notes.md).
+This release does not claim to resolve all Bluetooth or lighting failures.
+
+## Previous release: 0.5.0
 
 Compose supported object search, magnetic pickup and tag delivery in one
 `exec --behaviors` activity. The CLI supplies `behaviors.find`, `collect`,

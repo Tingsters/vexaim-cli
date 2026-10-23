@@ -6,6 +6,9 @@ move, stop, and save native camera photographs. The command is **`vexaim`**.
 The 0.5 release adds [composable native vision behaviors](skill/vex-aim/references/behaviors.md):
 find kit objects, collect a barrel or ball, approach a marker, and deliver cargo
 in one `exec --behaviors` script. Existing macros share the same implementation.
+Version 0.5.1 adds stationary tag search and opt-in contact-based play, so a
+completed magnetic-contact attempt can continue to placement without diagnostic
+retention reverses or laptop camera checks.
 
 The 0.4 release added persistent workshop sessions, automatic Bluetooth recovery,
 explicit program takeover and separate preparation/upload/execution timing. It includes the [VEX AIM device catalogue](docs/device-commands.md)

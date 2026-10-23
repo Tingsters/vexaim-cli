@@ -1,5 +1,46 @@
 # Hardware evidence
 
+## Blue barrel to purple Tag 0 and fast-play follow-up (Windows, 2026-10-23)
+
+On AIM9E18 / firmware 1.0.4.b0 over Bluetooth, the 0.5.0 controller collected the
+blue barrel and verified retention at robot elapsed 11.294 seconds in the kit
+pen. Its continuous Tag 0 search then missed the marker after 360.3 measured
+degrees. The robot stopped with the barrel still held; a native stationary
+probe confirmed possession. No placement was claimed from that failed search.
+
+A short transient continuation took stationary views 45 degrees apart, turning
+at 90 DPS, settling for 300 ms and reading three times 100 ms apart. It found
+Tag 0 at the third view, then used the existing `behaviors.deliver` controller
+for approach, `kicker.place`, backing away and native release confirmation. That
+continuation used 9.350 seconds of robot execution, separately from 15.779
+seconds preparation and 1.812 seconds source upload. A final local camera frame
+independently showed the separated blue barrel directly beside the purple
+marker visibly labelled 0. This was not a nine-second total cold-start task.
+
+The 0.5.1 source implements those stationary tag views in the shared controller
+and adds explicit contact-based play. The new policy omits the diagnostic
+retention reverse and continues from bounded contact despite unconfirmed
+possession. It marks assumed evidence rather than declaring native confirmation.
+Independent simulation exercises real attachment with deliberately missing
+possession readings, stationary-only tag decoding, empty scenes and deadlines.
+
+For a final source check, the exact new controller plus one whole fast-play
+activity was transiently executed through the existing installed 0.5.0 owner;
+no firmware or saved project was written. Native Python compiled and executed
+the new module. Blue was not reacquired: the search ended after 8.842 seconds
+and 61.9 degrees of accumulated rotation (not a successful full sweep).
+Execution including cleanup was 9.400 seconds; stop was confirmed. The reason
+for the incomplete rotation was not diagnosed. The subsequent image faced desk
+objects with no blue barrel or marker in that frame. Battery was 28%, control
+ready, and no further movement was attempted or human reset requested.
+
+That check is not full 0.5.1 hardware acceptance. Keep it separate from the
+earlier camera-verified delivery. The separate blue false-negative and
+orange/ball motion-deadline observations remain important: contact-based play
+is an explicit completion policy, not a repaired neural model or force sensor.
+Bluetooth recovery and lighting limits remain as recorded below. Photos and
+raw traces stay local under `.vexaim/behaviors/` and are never release assets.
+
 ## Composed behavior investigation (Windows, 2026-10-23)
 
 AIM9E18, firmware 1.0.4.b0, was prepared once with USB unplugged and a persistent

@@ -13,6 +13,9 @@ class _VxBehaviors:
         self.move_mmps = 80
         self.turn_dps = 30
         self.contact_mmps = 80
+        self.tag_turn_dps = 30
+        self.verification = 'vision'
+        self.pickup_verified = False
         self.job = job
         self.emit = emit
         self.active = False
@@ -63,13 +66,18 @@ class _VxBehaviors:
             event(expired, max(1, self.timeout_ms - self.age(self.origin)))
             wait(15, MSEC)
 
-    def configure(self, move_mmps=80, turn_dps=30, contact_mmps=None, timeout_ms=30000):
+    def configure(self, move_mmps=80, turn_dps=30, contact_mmps=None, timeout_ms=30000,
+                  verification='vision', tag_turn_dps=None):
         if self.started:
             raise RuntimeError('Configure once before the first behavior')
         contact_mmps = move_mmps if contact_mmps is None else contact_mmps
+        tag_turn_dps = turn_dps if tag_turn_dps is None else tag_turn_dps
+        if verification not in ('vision', 'contact'):
+            raise ValueError('verification must be vision or contact')
         for name, value, maximum in (('move_mmps', move_mmps, 200),
                                       ('turn_dps', turn_dps, 150),
                                       ('contact_mmps', contact_mmps, 200),
+                                      ('tag_turn_dps', tag_turn_dps, 150),
                                       ('timeout_ms', timeout_ms, self.limit_ms)):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value <= maximum:
                 raise ValueError(name + ' outside native/activity limits')
@@ -78,6 +86,8 @@ class _VxBehaviors:
         self.move_mmps = move_mmps
         self.turn_dps = turn_dps
         self.contact_mmps = contact_mmps
+        self.tag_turn_dps = tag_turn_dps
+        self.verification = verification
         self.timeout_ms = int(timeout_ms)
         self.arm()
 
@@ -185,7 +195,10 @@ class _VxBehaviors:
         return (self.call('get_x_position', robot.get_x_position),
                 self.call('get_y_position', robot.get_y_position))
 
-    def motion(self, fn, args, limit_ms, cargo=None):
+    def motion(self, fn, args, limit_ms, cargo=None, allow_contact_limit=False):
+        # Short native moves include acceleration and delayed stopped reports.
+        # This is a maximum, not a mandatory delay; completion returns early.
+        limit_ms = max(1500, limit_ms)
         began = self.now()
         self.call('finite_motion', fn, *args)
         self.pause(80)  # Motion status may lag dispatch.
@@ -197,11 +210,15 @@ class _VxBehaviors:
                 positives = positives + 1 if self.held(cargo) else 0
                 if positives >= 2:
                     self.stop()
-                    return
+                    return True
             if self.call('is_stopped', robot.is_stopped):
-                return
+                return True
             self.pause(20)
         self.stop()
+        if allow_contact_limit:
+            # Deliberate contact can meet a pen wall before its full distance.
+            # Only the opt-in contact policy accepts that bounded attempt.
+            return False
         raise RuntimeError('Motion stalled during ' + self.phase)
 
     def align(self, obj):
@@ -215,11 +232,13 @@ class _VxBehaviors:
         self.pause(100)
 
     def find(self, target, direction=None):
-        self.prepare(target)
+        kind = self.prepare(target)
         self.last_target = None
         direction = RIGHT if direction is None else direction
         if direction not in (LEFT, RIGHT):
             raise ValueError('Find direction must be LEFT or RIGHT')
+        if kind == 'TAG':
+            return self.find_tag(target, direction)
         self.report('searching', target=str(target))
         began = self.now()
         previous = self.call('inertial.get_rotation', robot.inertial.get_rotation)
@@ -247,6 +266,37 @@ class _VxBehaviors:
         self.report('not_found', search_degrees=round(travel, 1))
         raise RuntimeError('not_found: ' + str(target) + '; one search sweep exhausted')
 
+    def find_tag(self, target, direction):
+        # Real AIM tag acquisition succeeded with stationary views after a
+        # continuous sweep missed the same marker. Keep those views on robot.
+        self.report('searching', target=str(target), strategy='stationary_views')
+        began = self.now()
+        start_rotation = self.call('inertial.get_rotation', robot.inertial.get_rotation)
+        for view in range(8):
+            self.stop()
+            self.pause(300)
+            for sample in range(3):
+                obj = self.objects(target)
+                if obj is not None:
+                    self.align(obj)
+                    self.last_target = obj
+                    travel = abs(self.call('inertial.get_rotation', robot.inertial.get_rotation) - start_rotation)
+                    self.report('found', strategy='stationary_views', views=view + 1,
+                                search_degrees=round(travel, 1))
+                    return _vx_plain(obj)
+                if sample < 2:
+                    self.pause(100)
+            self.report('tag_search_view', view=view + 1)
+            if view == 7 or self.age(began) >= 20000:
+                break
+            heading = self.call('inertial.get_heading', robot.inertial.get_heading)
+            heading = (heading + (-45 if direction == LEFT else 45)) % 360
+            self.motion(robot.turn_to, (heading, self.tag_turn_dps, DPS, False),
+                        int(45 / self.tag_turn_dps * 1500 + 700))
+        self.stop()
+        self.report('not_found', strategy='stationary_views', views=view + 1)
+        raise RuntimeError('not_found: ' + str(target) + '; stationary tag views exhausted')
+
     def reacquire(self, target):
         self.report('reacquiring', target=str(target))
         self.stop()
@@ -254,6 +304,8 @@ class _VxBehaviors:
         for offset in (0, -20, 20, 0):
             if offset:
                 self.motion(robot.turn_to, ((heading + offset) % 360, self.turn_dps, DPS, False), 1800)
+            if self.kind(target) == 'TAG':
+                self.pause(300)
             obj = self.objects(target)
             if obj is not None:
                 self.align(obj)
@@ -265,8 +317,15 @@ class _VxBehaviors:
         self.report('contacting', target=str(cargo), distance_limit_mm=200)
         self.stop()
         self.motion(robot.move_for, (200, bearing, self.contact_mmps, MMPS, False),
-                    int(200 / self.contact_mmps * 1500 + 400), cargo)
-        return self.confirm(cargo)
+                    int(200 / self.contact_mmps * 1500 + 400), cargo,
+                    self.verification == 'contact')
+        self.pickup_verified = self.confirm(cargo) if self.verification == 'vision' else self.held(cargo)
+        return self.pickup_verified or self.verification == 'contact'
+
+    def finish_contact(self, cargo, bearing):
+        if not self.contact(cargo, bearing):
+            return False
+        return self.verification == 'contact' or self.retained(cargo)
 
     def retained(self, cargo):
         self.report('verifying_retention', target=str(cargo))
@@ -286,7 +345,11 @@ class _VxBehaviors:
         last_command = None
         for _ in range(240):
             # Possession is checked independently of the separate detection frame.
-            if self.held(cargo) and self.confirm(cargo):
+            if self.held(cargo) and (self.verification == 'contact' or self.confirm(cargo)):
+                if self.verification == 'contact':
+                    self.stop()
+                    self.pickup_verified = True
+                    return True
                 return self.retained(cargo)
             obj = self.objects(cargo)
             if obj is not None:
@@ -303,13 +366,13 @@ class _VxBehaviors:
                     self.align(obj)
                     last_command = None
                 elif near:
-                    return self.contact(cargo, obj.bearing) and self.retained(cargo)
+                    return self.finish_contact(cargo, obj.bearing)
                 else:
                     if last_command is None or abs(last_command - obj.bearing) > 3:
                         self.call('move_at', robot.move_at, obj.bearing, self.move_mmps, MMPS)
                         last_command = obj.bearing
             elif last is not None and can_commit and abs(last.bearing) <= 12 and self.age(last_seen) <= 500:
-                return self.contact(cargo, last.bearing) and self.retained(cargo)
+                return self.finish_contact(cargo, last.bearing)
             elif self.age(last_seen) <= 350:
                 # The detector is asynchronous. A single empty update, especially
                 # just after gyro alignment, is not yet target loss.
@@ -331,9 +394,10 @@ class _VxBehaviors:
     def collect(self, cargo):
         self.prepare(cargo)
         self.cargo_fn(cargo)  # Reject non-cargo targets before movement.
-        if self.confirm(cargo):
+        if self.held(cargo) if self.verification == 'contact' else self.confirm(cargo):
             self.carrying = cargo
-            return {'collected': True, 'target': str(cargo), 'evidence': 'native_possession'}
+            self.pickup_verified = True
+            return {'collected': True, 'completed': True, 'target': str(cargo), 'evidence': 'native_possession'}
         for name in ('BLUE_BARREL', 'ORANGE_BARREL', 'SPORTS_BALL'):
             other = globals().get(name)
             if other is not None and other != cargo and self.held(other) and self.confirm(other):
@@ -342,6 +406,11 @@ class _VxBehaviors:
         for attempt in range(2):
             if self.capture(cargo):
                 self.carrying = cargo
+                if self.verification == 'contact':
+                    evidence = 'native_possession' if self.pickup_verified else 'contact_assumed'
+                    self.report('pickup_complete', target=str(cargo), evidence=evidence)
+                    return {'collected': True if self.pickup_verified else None,
+                            'completed': True, 'target': str(cargo), 'evidence': evidence}
                 self.report('collected', target=str(cargo))
                 return {'collected': True, 'target': str(cargo), 'evidence': 'native_possession_and_retention'}
             if attempt == 0:
@@ -370,7 +439,7 @@ class _VxBehaviors:
         reacquired = False
         previous = None
         for _ in range(240):
-            if self.carrying is not None:
+            if self.carrying is not None and self.verification == 'vision':
                 if self.held(self.carrying):
                     last_cargo = self.now()
                 elif self.age(last_cargo) > 600:
@@ -406,22 +475,27 @@ class _VxBehaviors:
         self.cargo_fn(cargo)
         if self.kind(tag) != 'TAG' or tag == globals().get('ALL_TAGS'):
             raise ValueError('Delivery requires an individual AprilTag')
-        if not self.confirm(cargo):
+        if not (self.verification == 'contact' and self.carrying == cargo) and not self.confirm(cargo):
             raise RuntimeError('cargo_required: collect the requested cargo first')
         self.carrying = cargo
         self.approach(tag)
-        if not self.confirm(cargo):
+        if self.verification == 'vision' and not self.confirm(cargo):
             raise RuntimeError('cargo_lost_before_placement')
+        native_before = self.held(cargo) if self.verification == 'contact' else True
         self.report('placing', target=str(cargo), destination=str(tag))
         self.call('kicker.place', robot.kicker.place)
         self.pause(300)
         self.motion(robot.move_for, (100, 180, self.move_mmps, MMPS, False),
                     int(100 / self.move_mmps * 1500 + 500))
-        if not self.confirm(cargo, False):
+        released = not self.held(cargo) if self.verification == 'contact' else self.confirm(cargo, False)
+        if self.verification == 'vision' and not released:
             raise RuntimeError('release_not_confirmed')
         self.carrying = None
-        self.report('delivered', destination=str(tag))
-        return {'delivered': True, 'cargo': str(cargo), 'destination': str(tag), 'evidence': 'native_release'}
+        confirmed = native_before and released
+        evidence = 'native_release' if confirmed else 'place_assumed'
+        self.report('delivered', destination=str(tag), evidence=evidence)
+        return {'delivered': True if confirmed else None, 'completed': True,
+                'cargo': str(cargo), 'destination': str(tag), 'evidence': evidence}
 
     def close(self):
         global _vb_owner
@@ -459,6 +533,7 @@ def _vx_behavior_macro(args, action, job):
     context = _VxBehaviors(action['timeout'] * 1000, job)
     context.move_mmps = _vx_move_velocity[0] * (2 if _vx_move_velocity[1] == globals().get('PERCENT') else 1)
     context.turn_dps = _vx_turn_velocity[0] * (1.5 if _vx_turn_velocity[1] == globals().get('PERCENT') else 1)
+    context.tag_turn_dps = context.turn_dps
     context.contact_mmps = context.move_mmps
     context.begin()
     try:

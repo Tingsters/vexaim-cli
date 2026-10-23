@@ -1,6 +1,6 @@
 # Compose native vision behaviors
 
-Requires vexaim **0.5.0** and its matching skill. These CLI helpers use native
+Requires vexaim **0.5.1** and its matching skill. These CLI helpers use native
 VEX APIs; they are not additional firmware methods on `robot`.
 
 ```sh
@@ -12,7 +12,7 @@ seconds is suitable here). Reuse the persistent session and supplied Robot.
 
 ```python
 behaviors.configure(move_mmps=150, turn_dps=45, contact_mmps=200,
-                    timeout_ms=30000)
+                    timeout_ms=30000, tag_turn_dps=90, verification="contact")
 behaviors.collect(ORANGE_BARREL)
 behaviors.deliver(ORANGE_BARREL, TAG0)
 robot.screen.show_emoji(HAPPY)
@@ -26,26 +26,55 @@ Ordinary `exec` is unchanged.
 
 ## Interface
 
-- `configure(move_mmps=80, turn_dps=30, contact_mmps=None, timeout_ms=30000)`:
+- `configure(move_mmps=80, turn_dps=30, contact_mmps=None, timeout_ms=30000,
+  verification="vision", tag_turn_dps=None)`:
   call before the first behavior. Contact defaults to move speed. Native limits
-  are 200 MMPS and 150 DPS. The shared timeout cannot exceed CLI execution time.
+  are 200 MMPS and 150 DPS. Tag-turn speed defaults to `turn_dps`; use 90 for
+  brisk travel between stationary views. The shared timeout cannot exceed CLI
+  execution time. `vision` retains diagnostic possession/retention/release
+  checks. `contact` opts into assume-and-continue play as described below.
 - `find(target, direction=RIGHT)`: locate a kit object or tag, then face its
-  bearing. At most one 360-degree sweep or 15 seconds, plus the shared deadline.
-- `collect(cargo)`: find, align, approach, make magnetic contact and verify
-  retention. Supports `BLUE_BARREL`, `ORANGE_BARREL`, `SPORTS_BALL`. Already-held
+  bearing. Cargo uses one sweep bounded by 15 seconds and the shared deadline.
+  Tags use up to eight stationary views, 45 degrees apart, with brief settling
+  and native reads. The shared deadline still applies. No host images are used.
+- `collect(cargo)`: find, align, approach and make magnetic contact; vision
+  mode also verifies retention. Supports `BLUE_BARREL`, `ORANGE_BARREL`, `SPORTS_BALL`. Already-held
   requested cargo is accepted; other cargo fails explicitly. One local contact
   retry is allowed, without restarting a full-circle search.
 - `approach(target)`: find and approach an AprilTag or `AIM_ROBOT`. Visual
   stand-offs follow VEX: width 60 for tags, 140 for AIM, in native 320x240
   coordinates. These are not calibrated millimeter distances.
-- `deliver(cargo, tag)`: require the specified cargo already held, approach an
-  individual `TAG0`–`TAG37`, place, back away and verify release. No automatic
+- `deliver(cargo, tag)`: require held cargo or the same contact-mode activity's
+  preceding pickup, approach an individual `TAG0`–`TAG37`, place and back away.
+  Vision mode verifies release. No automatic
   collection of missing cargo and no added celebration.
 
 Each helper returns a small evidence dictionary. Failure raises an exception,
 stops wheels and prevents later lines from claiming success. Include native
 effects freely. Custom motion loops still need their own finite bounds: the
 watchdog does not rewrite arbitrary Python or prevent a later raw native command.
+
+## Contact-based play
+
+Set `verification="contact"` when the task favors a brisk attempt over diagnostic
+confirmation. After selecting and aligning with actual nearby cargo, the helper
+finishes one bounded contact stroke and continues without the retention reverse,
+repeat-contact cycle or possession-loss gates during delivery. A contact stroke
+may finish at its local time limit against a pen wall, with stop confirmed.
+Cancellation, SDK errors, unconfirmed stop and the whole-activity deadline still
+fail. Missing cargo/markers are never invented.
+
+This policy remembers attempted cargo within the same activity. A standalone
+`deliver` still requires native possession if no preceding `collect` selected
+that cargo. Placement uses `robot.kicker.place()` and backs away to separate the
+magnet. It does not launch the object with `kick`.
+
+`completed: true` means the requested helper sequence finished. `collected` or
+`delivered` is true only with native evidence, and null when completion was
+assumed (`evidence: contact_assumed` or `place_assumed`). Those nulls are expected
+play outcomes, not errors requiring a camera check or another agent turn. Effects
+can follow directly. Report routine completion without claiming independent
+physical verification. For explicit tests use the default `verification="vision"`.
 
 Use native constants rather than numeric class IDs. For unexported tag aliases,
 use `Tagdesc(12)`. `ALL_TAGS` can find any marker but is not a delivery address.

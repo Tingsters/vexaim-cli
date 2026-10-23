@@ -73,6 +73,9 @@ For kit-cargo pickup, native search and tag delivery, read
 `find`, `collect`, `approach` and `deliver` helpers with native effects in one
 execution instead of regenerating vision loops. A helper failure stops the
 sequence. These helpers belong to the CLI; `robot` retains its VEX API.
+Version 0.5.1 adds stationary native tag views and opt-in contact-based play.
+Follow the workshop's `verification="contact"` setting when its skill applies;
+routine completion with assumed evidence does not require host camera verification.
 
 For Bluetooth faces, messages and drawings, use the reusable session. Screen
 writes activate the program display automatically and camera capture is independent
