@@ -296,6 +296,102 @@ class Behaviors(unittest.TestCase):
         finally:context.close()
         self.assertLess(world.ms,1500)
 
+    def test_arrival_uses_acquisition_frame_without_demanding_another_detection(self):
+        # Reproduces seeing a large marker during search, then losing its next
+        # frame. Requiring that second frame used to abort before kicker.place.
+        for config in (self.CONFIG, self.PLAY):
+            world=World([('TAG0',55,0)],held='BLUE_BARREL',blind_mm=0)
+            vision=world.vision
+            calls=[]
+            def one_frame(target,count=8):
+                calls.append(target)
+                return vision(target,count) if len(calls)==1 else ()
+            world.robot.vision.get_data=one_frame
+            error,out=world.run(config+'result=behaviors.deliver(BLUE_BARREL,TAG0)')
+            self.assertIsNone(error,out+'\n'+str(error))
+            self.assertEqual(len(calls),1)
+            self.assertEqual(sum(c[1]=='place' for c in world.calls),1)
+            self.assertEqual(world.ns['result']['arrival_evidence'],'native_marker_size')
+            self.assertTrue(world.ns['result']['delivered'])
+
+    def test_close_tag_occlusion_finishes_workshop_placement_without_reacquiring(self):
+        world=World([('TAG0',200,0)],held='BLUE_BARREL',blind_mm=0)
+        vision=world.vision
+        def cargo_blocks_close_tag(target,count=8):
+            d,_=world.geometry(world.objects[0])
+            return () if d<85 else vision(target,count)
+        world.robot.vision.get_data=cargo_blocks_close_tag
+        error,out=world.run(self.PLAY+'result=behaviors.deliver(BLUE_BARREL,TAG0)\nprint("celebrate")')
+        self.assertIsNone(error,out+'\n'+str(error))
+        self.assertEqual(sum(c[1]=='place' for c in world.calls),1)
+        self.assertNotIn('reacquiring',out)
+        self.assertIn('celebrate',out)
+        self.assertIsNone(world.held)
+        self.assertTrue(world.ns['result']['completed'])
+        self.assertIsNone(world.ns['result']['delivered'])
+        self.assertEqual(world.ns['result']['evidence'],'near_marker_assumed')
+        self.assertTrue(world.ns['result']['release_confirmed'])
+        self.assertLess(world.ms,4000)
+
+    def test_close_tag_loss_remains_a_failure_in_vision_verification_mode(self):
+        world=World([('TAG0',200,0)],held='BLUE_BARREL',blind_mm=0)
+        vision=world.vision
+        def hidden(target,count=8):
+            d,_=world.geometry(world.objects[0])
+            return () if d<85 else vision(target,count)
+        world.robot.vision.get_data=hidden
+        error,out=world.run(self.CONFIG+'behaviors.deliver(BLUE_BARREL,TAG0)')
+        self.assertIn('marker_lost',error)
+        self.assertFalse(any(c[1]=='place' for c in world.calls))
+
+    def test_far_tag_loss_cannot_be_reported_as_arrival(self):
+        world=World([('TAG0',500,0)],held='BLUE_BARREL',blind_mm=0,dropout=500)
+        error,out=world.run(self.PLAY+'behaviors.deliver(BLUE_BARREL,TAG0)')
+        self.assertIn('marker_lost',error)
+        self.assertFalse(any(c[1]=='place' for c in world.calls))
+        self.assertNotIn('near_marker_assumed',out)
+
+    def test_stale_near_tag_observation_cannot_finish_placement(self):
+        world=World([('TAG0',80,0)],held='BLUE_BARREL',blind_mm=0)
+        vision=world.vision
+        reads=[]
+        def stale(target,count=8):
+            reads.append(target)
+            if len(reads)==1:return vision(target,count)
+            world.wait(2100)
+            return ()
+        world.robot.vision.get_data=stale
+        error,out=world.run(self.PLAY+'behaviors.deliver(BLUE_BARREL,TAG0)')
+        self.assertIn('marker_lost',error)
+        self.assertFalse(any(c[1]=='place' for c in world.calls))
+
+    def test_failed_alignment_cannot_turn_near_loss_into_assumed_arrival(self):
+        angle=math.radians(26)
+        world=World([('TAG0',80*math.cos(angle),80*math.sin(angle))],held='BLUE_BARREL',blind_mm=0)
+        world.robot.turn_to=lambda *args:None  # Native completion without heading change.
+        vision=world.vision
+        reads=[]
+        def one_frame(target,count=8):
+            reads.append(target)
+            return vision(target,count) if len(reads)==1 else ()
+        world.robot.vision.get_data=one_frame
+        error,out=world.run(self.PLAY+'behaviors.deliver(BLUE_BARREL,TAG0)')
+        self.assertIn('marker_lost',error)
+        self.assertFalse(any(c[1]=='place' for c in world.calls))
+
+    def test_arrival_fallback_does_not_override_activity_deadline(self):
+        world=World([('TAG0',80,0)],held='BLUE_BARREL',blind_mm=0)
+        vision=world.vision
+        reads=[]
+        def one_frame(target,count=8):
+            reads.append(target)
+            return vision(target,count) if len(reads)==1 else ()
+        world.robot.vision.get_data=one_frame
+        error,out=world.run('behaviors.configure(verification="contact",timeout_ms=600)\nbehaviors.deliver(BLUE_BARREL,TAG0)')
+        self.assertIn('deadline',error)
+        self.assertFalse(any(c[1]=='place' for c in world.calls))
+        self.assertIsNone(world.motion_state)
+
     def test_collects_all_cargo_from_different_directions(self):
         for cargo in ('BLUE_BARREL','ORANGE_BARREL','SPORTS_BALL'):
             for position in ((350,0),(0,350),(-350,0)):

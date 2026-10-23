@@ -26,6 +26,7 @@ class _VxBehaviors:
         self.last_call = None
         self.carrying = None
         self.last_target = None
+        self.last_bearing = None
         self.near = False
         self.last_seen_ms = 0
 
@@ -113,7 +114,9 @@ class _VxBehaviors:
     def pause(self, milliseconds):
         # Iteration bounds remain finite even if a firmware clock stops advancing.
         for _ in range(max(1, int((milliseconds + 19) // 20))):
-            self.call('wait', wait, min(20, milliseconds), MSEC)
+            amount = min(20, milliseconds)
+            self.call('wait', wait, amount, MSEC)
+            milliseconds -= amount
 
     def report(self, phase, **details):
         self.phase = phase
@@ -178,6 +181,7 @@ class _VxBehaviors:
         objects = [data[n] for n in range(min(8, len(data))) if getattr(data[n], 'exists', False)]
         if not objects:
             return None
+        self.last_seen_ms = self.now()
         # Prefer continuity of the selected target over alternating between barrels.
         if self.last_target is not None:
             return min(objects, key=lambda o: abs(o.bearing - self.last_target.bearing))
@@ -223,17 +227,20 @@ class _VxBehaviors:
 
     def align(self, obj):
         if abs(obj.bearing) <= 5:
-            return
+            return obj.bearing
         self.report('aligning', bearing=obj.bearing)
         self.stop()
         heading = (self.call('inertial.get_heading', robot.inertial.get_heading) + obj.bearing) % 360
         self.motion(robot.turn_to, (heading, self.turn_dps, DPS, False),
                     min(4000, int(abs(obj.bearing) / self.turn_dps * 1500 + 700)))
         self.pause(100)
+        actual = self.call('inertial.get_heading', robot.inertial.get_heading)
+        return (heading - actual + 180) % 360 - 180
 
     def find(self, target, direction=None):
         kind = self.prepare(target)
         self.last_target = None
+        self.last_bearing = None
         direction = RIGHT if direction is None else direction
         if direction not in (LEFT, RIGHT):
             raise ValueError('Find direction must be LEFT or RIGHT')
@@ -249,7 +256,7 @@ class _VxBehaviors:
             obj = self.objects(target)
             if obj is not None:
                 self.stop()
-                self.align(obj)
+                self.last_bearing = self.align(obj)
                 self.last_target = obj
                 self.report('found', search_degrees=round(travel, 1))
                 return _vx_plain(obj)
@@ -278,11 +285,12 @@ class _VxBehaviors:
             for sample in range(3):
                 obj = self.objects(target)
                 if obj is not None:
-                    self.align(obj)
+                    self.last_bearing = self.align(obj)
                     self.last_target = obj
                     travel = abs(self.call('inertial.get_rotation', robot.inertial.get_rotation) - start_rotation)
                     self.report('found', strategy='stationary_views', views=view + 1,
-                                search_degrees=round(travel, 1))
+                                search_degrees=round(travel, 1), width=obj.width,
+                                bearing_remaining=self.last_bearing)
                     return _vx_plain(obj)
                 if sample < 2:
                     self.pause(100)
@@ -308,7 +316,7 @@ class _VxBehaviors:
                 self.pause(300)
             obj = self.objects(target)
             if obj is not None:
-                self.align(obj)
+                self.last_bearing = self.align(obj)
                 self.last_target = obj
                 return True
         return False
@@ -426,16 +434,31 @@ class _VxBehaviors:
                     break
         raise RuntimeError('not_collected: ' + str(cargo) + '; contact retry exhausted')
 
+    def marker_arrival(self, target, snapshot, assumed=False):
+        self.stop()
+        evidence = 'near_marker_assumed' if assumed else 'native_marker_size'
+        self.report('arrived', target=str(target), evidence=evidence, width=snapshot['width'])
+        return {'approached': snapshot, 'evidence': evidence}
+
     def approach(self, target):
         kind = self.prepare(target)
         if kind not in ('TAG', 'AIM_ROBOT'):
             raise ValueError('Approach requires an AprilTag or AIM_ROBOT; use collect for cargo')
         threshold = 60 if kind == 'TAG' else 140
         self.find(target)
-        self.report('approaching_marker', target=str(target), width_threshold=threshold)
+        self.report('approaching_marker', target=str(target), width_threshold=threshold,
+                    acquired_width=self.last_target.width)
         began = self.now()
         last_cargo = self.now()
-        last_seen = self.now()
+        last_seen = self.last_seen_ms
+        # Keep an owned snapshot: the next native read may be empty or reuse
+        # its object buffer. Acquisition already aligned to this observation.
+        snapshot = _vx_plain(self.last_target)
+        bearing = self.last_bearing
+        near = snapshot if kind == 'TAG' and snapshot['width'] >= threshold * .75 and abs(bearing) <= 12 else None
+        near_seen = last_seen
+        if snapshot['width'] >= threshold:
+            return self.marker_arrival(target, snapshot)
         reacquired = False
         previous = None
         for _ in range(240):
@@ -449,23 +472,40 @@ class _VxBehaviors:
                 if self.age(last_seen) <= 350:
                     self.pause(50)
                     continue
+                if self.verification == 'contact' and near is not None and self.age(near_seen) <= 2000:
+                    # Workshop arrival can hide a close tag behind carried cargo.
+                    # End the existing approach here, without another blind move
+                    # or a turn away from the destination before kicker.place.
+                    return self.marker_arrival(target, near, True)
                 self.stop()
                 if not reacquired and self.reacquire(target):
                     reacquired = True
                     previous = None
+                    snapshot = _vx_plain(self.last_target)
+                    last_seen = self.last_seen_ms
+                    if snapshot['width'] >= threshold:
+                        return self.marker_arrival(target, snapshot)
+                    if kind == 'TAG' and snapshot['width'] >= threshold * .75 and abs(self.last_bearing) <= 12:
+                        near = snapshot
+                        near_seen = last_seen
                     continue
                 raise RuntimeError('marker_lost: ' + str(target))
             self.last_target = obj
-            last_seen = self.now()
+            last_seen = self.last_seen_ms
+            snapshot = _vx_plain(obj)
+            if obj.width >= threshold:
+                return self.marker_arrival(target, snapshot)
             if abs(obj.bearing) > 12:
-                self.align(obj)
+                bearing = self.align(obj)
                 previous = None
-            elif obj.width >= threshold:
-                self.stop()
-                return {'approached': _vx_plain(obj)}
-            elif previous is None or abs(previous - obj.bearing) > 3:
-                self.call('move_at', robot.move_at, obj.bearing, self.move_mmps, MMPS)
-                previous = obj.bearing
+            else:
+                bearing = obj.bearing
+                if previous is None or abs(previous - obj.bearing) > 3:
+                    self.call('move_at', robot.move_at, obj.bearing, self.move_mmps, MMPS)
+                    previous = obj.bearing
+            if kind == 'TAG' and snapshot['width'] >= threshold * .75 and abs(bearing) <= 12:
+                near = snapshot
+                near_seen = last_seen
             if self.age(began) >= 10000:
                 break
             self.pause(50)
@@ -478,7 +518,7 @@ class _VxBehaviors:
         if not (self.verification == 'contact' and self.carrying == cargo) and not self.confirm(cargo):
             raise RuntimeError('cargo_required: collect the requested cargo first')
         self.carrying = cargo
-        self.approach(tag)
+        arrival = self.approach(tag)
         if self.verification == 'vision' and not self.confirm(cargo):
             raise RuntimeError('cargo_lost_before_placement')
         native_before = self.held(cargo) if self.verification == 'contact' else True
@@ -491,11 +531,14 @@ class _VxBehaviors:
         if self.verification == 'vision' and not released:
             raise RuntimeError('release_not_confirmed')
         self.carrying = None
-        confirmed = native_before and released
-        evidence = 'native_release' if confirmed else 'place_assumed'
+        release_confirmed = native_before and released
+        arrival_assumed = arrival['evidence'] == 'near_marker_assumed'
+        confirmed = release_confirmed and not arrival_assumed
+        evidence = 'near_marker_assumed' if arrival_assumed else 'native_release' if release_confirmed else 'place_assumed'
         self.report('delivered', destination=str(tag), evidence=evidence)
         return {'delivered': True if confirmed else None, 'completed': True,
-                'cargo': str(cargo), 'destination': str(tag), 'evidence': evidence}
+                'cargo': str(cargo), 'destination': str(tag), 'evidence': evidence,
+                'arrival_evidence': arrival['evidence'], 'release_confirmed': release_confirmed}
 
     def close(self):
         global _vb_owner

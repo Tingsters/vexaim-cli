@@ -1,5 +1,34 @@
 # Hardware evidence
 
+## False arrival failure and 0.5.2 regression coverage (2026-10-23)
+
+The user repeated the exact released 0.5.1 fast-play activity after changing the
+object positions. Its SHA-256 matched the earlier activity. Native possession
+was reported at 11.021 seconds, Tag 0 was found at 16.325 seconds and the robot
+entered marker approach. It then raised `marker_lost` after local reacquisition,
+with stop confirmed, at 19.846 seconds execution. Preparation was 21.603 seconds
+and activity upload 0.974 seconds. `kicker.place()` was not reached.
+
+The user directly observed the barrel reaching the purple tag, accepted the
+contact/displacement and considered the physical task successful. Record that
+as a physical goal pass and software completion failure, without claiming
+independently verified release. The exact optical cause was not established.
+
+The 0.5.2 fix covers two control-flow gaps: ignoring the acquisition observation
+when it already met stand-off, and rejecting recent aligned near-tag loss in
+contact-based play instead of finishing placement. It caches an owned snapshot,
+tracks read age and alignment, adds arrival evidence, and keeps far/stale loss
+and deadlines distinct from assumed near arrival. The original trace did not
+log marker width, so the near-size threshold is a stated play policy, not a
+measurement inferred from that run. New progress records retain marker width.
+
+Two independent geometric/temporal regression cases fail with `marker_lost`
+on the released 0.5.1 controller and pass with the fix. Additional cases reject
+far/stale loss and failed alignment and preserve strict vision diagnostics and
+the activity watchdog. The user requested software checks only for this fix;
+no new live movement or physical acceptance run was performed. Raw traces and
+the user's local test record remain under ignored `.vexaim/behaviors/`.
+
 ## Blue barrel to purple Tag 0 and fast-play follow-up (Windows, 2026-10-23)
 
 On AIM9E18 / firmware 1.0.4.b0 over Bluetooth, the 0.5.0 controller collected the

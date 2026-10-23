@@ -1,4 +1,29 @@
-# vexaim 0.5.1
+# vexaim 0.5.2
+
+Fix false `marker_lost` after a successful physical approach. The controller now
+uses the marker observation already obtained during acquisition when it meets
+the arrival stand-off. It no longer requires another detection before placing.
+
+In contact-based workshop play, a recent, aligned near-tag observation can also
+complete arrival when the next frames disappear. The robot stops the existing
+approach and continues to `kicker.place()` and backing away, without an extra
+forward stroke, reacquisition turns or laptop-camera/agent round trips. Distant,
+stale or unaligned tag loss retains bounded recovery; cancellation and activity
+deadlines still apply. Default vision verification remains available.
+
+`near_marker_assumed` is explicit result evidence, with `completed: true` and
+null `delivered` when destination arrival was assumed. Release confirmation is
+reported separately. Matching workshop guidance treats this as routine
+completion rather than a new confirmation gate. Polling pauses now honor their
+requested duration instead of rounding a 50 ms pause up to 60 ms.
+
+The user observed the 0.5.1 barrel reaching Tag 0 despite its software error.
+Two regression cases reproduce `marker_lost` on that released controller and
+pass on this version; further cases cover far/stale loss, failed alignment,
+diagnostic mode and deadlines. Validation for this fix is software-only at the
+user's request; it is not a new live hardware acceptance claim.
+
+## Previous release: 0.5.1
 
 Tag search now takes brief stationary native-camera readings at eight viewpoints
 instead of relying on continuous rotation. This brings the successful Windows

@@ -1,6 +1,6 @@
 # Compose native vision behaviors
 
-Requires vexaim **0.5.1** and its matching skill. These CLI helpers use native
+Requires vexaim **0.5.2** and its matching skill. These CLI helpers use native
 VEX APIs; they are not additional firmware methods on `robot`.
 
 ```sh
@@ -43,7 +43,9 @@ Ordinary `exec` is unchanged.
   retry is allowed, without restarting a full-circle search.
 - `approach(target)`: find and approach an AprilTag or `AIM_ROBOT`. Visual
   stand-offs follow VEX: width 60 for tags, 140 for AIM, in native 320x240
-  coordinates. These are not calibrated millimeter distances.
+  coordinates. Arrival uses the acquisition observation immediately when it
+  already meets that stand-off; no duplicate detection is required. These are
+  not calibrated millimeter distances.
 - `deliver(cargo, tag)`: require held cargo or the same contact-mode activity's
   preceding pickup, approach an individual `TAG0`–`TAG37`, place and back away.
   Vision mode verifies release. No automatic
@@ -75,6 +77,19 @@ assumed (`evidence: contact_assumed` or `place_assumed`). Those nulls are expect
 play outcomes, not errors requiring a camera check or another agent turn. Effects
 can follow directly. Report routine completion without claiming independent
 physical verification. For explicit tests use the default `verification="vision"`.
+
+Version 0.5.2 also accepts `near_marker_assumed` as a completed play outcome.
+After a tag was read within two seconds, faced within 12 degrees and seen at
+least 45 pixels wide (75% of the 60-pixel stand-off), its loss during final
+approach can mean close-range occlusion. The helper stops the existing approach
+and continues to placement instead of turning away or requiring an agent turn.
+It adds no further forward movement after accepting that arrival. A distant,
+unaligned or stale marker still follows ordinary bounded recovery.
+
+Delivery includes `arrival_evidence` and `release_confirmed`; `delivered` is null
+when destination arrival was assumed even if native release was confirmed.
+`completed: true` remains the normal play completion signal. Diagnostic vision
+mode still requires the observed marker-size stand-off.
 
 Use native constants rather than numeric class IDs. For unexported tag aliases,
 use `Tagdesc(12)`. `ALL_TAGS` can find any marker but is not a delivery address.

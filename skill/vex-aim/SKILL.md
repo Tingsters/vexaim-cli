@@ -76,6 +76,9 @@ sequence. These helpers belong to the CLI; `robot` retains its VEX API.
 Version 0.5.1 adds stationary native tag views and opt-in contact-based play.
 Follow the workshop's `verification="contact"` setting when its skill applies;
 routine completion with assumed evidence does not require host camera verification.
+Version 0.5.2 fixes false marker loss at arrival. Contact-based play can finish
+placement using a recent, aligned, near-tag observation; treat
+`near_marker_assumed` with `completed: true` as a completed play routine.
 
 For Bluetooth faces, messages and drawings, use the reusable session. Screen
 writes activate the program display automatically and camera capture is independent
