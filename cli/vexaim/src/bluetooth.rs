@@ -1,10 +1,11 @@
 //! Explicit BLE selection, native credential storage and the verified AIM JPEG path.
+use crate::camera_capture::{CaptureTransport, Options as CaptureOptions, Trace as CaptureTrace};
 use crate::{
     BluetoothCmd, Cli, Cmd, out, print_exec,
     repl::{Fail, PREAMBLE, Repl},
     snap::Snap,
 };
-use btleplug::api::{ConnectionParameterPreset, Peripheral as _};
+use btleplug::api::Peripheral as _;
 use serde_json::json;
 use std::{
     io::{IsTerminal, Write},
@@ -364,19 +365,16 @@ pub fn run(cli: &Cli) -> Result<i32, Fail> {
             }
             if let Cmd::Snap { output } = &cli.cmd {
                 require_camera_firmware(&info)?;
-                let throughput_requested = matches!(tokio::time::timeout(
-                    Duration::from_secs(3),
-                    conn.peripheral.request_connection_parameters(ConnectionParameterPreset::ThroughputOptimized)
-                ).await, Ok(Ok(())));
+                let parameters = crate::ble_profile::Profile::selected()?.apply(&conn.peripheral).await;
                 let started = Instant::now();
-                let image = tokio::time::timeout(Duration::from_secs(60), capture_jpeg(&mut conn)).await.map_err(|_| fail("Camera capture timed out; existing output was preserved."))??;
+                let image = tokio::time::timeout(Duration::from_secs(CAPTURE_GUARD_SECS), capture_jpeg(&mut conn)).await.map_err(|_| fail("Camera capture timed out; existing output was preserved."))??;
                 let (width,height) = crate::observation::validate(&image)?;
                 let path = crate::snap::output_path(output.as_deref());
                 save_atomic(Path::new(&path), &image)?;
                 let elapsed = started.elapsed();
                 let result = Snap { path, width, height, bytes:image.len() };
                 let interval_us = tokio::time::timeout(Duration::from_secs(2), conn.peripheral.connection_parameters()).await.ok().and_then(Result::ok).flatten().map(|p|p.interval_us);
-                out(cli.json, json!({"ok":true,"transport":"bluetooth","path":result.path,"width":width,"height":height,"bytes":result.bytes,"elapsed_ms":elapsed.as_millis() as u64,"within_30_seconds":elapsed<=Duration::from_secs(30),"throughput_request_accepted":throughput_requested,"connection_interval_us":interval_us}), || format!("saved {} ({}x{}, {} bytes, {:.2}s over Bluetooth)",result.path,width,height,result.bytes,elapsed.as_secs_f64()));
+                out(cli.json, json!({"ok":true,"transport":"bluetooth","path":result.path,"width":width,"height":height,"bytes":result.bytes,"elapsed_ms":elapsed.as_millis() as u64,"within_30_seconds":elapsed<=Duration::from_secs(30),"throughput_request_accepted":parameters["requested"]=="throughput" && parameters["accepted"]==true,"connection_parameters":parameters,"connection_interval_us":interval_us}), || format!("saved {} ({}x{}, {} bytes, {:.2}s over Bluetooth)",result.path,width,height,result.bytes,elapsed.as_secs_f64()));
                 return Ok(0);
             }
             // Borrow the connection through the operation so explicit disconnect runs
@@ -461,7 +459,7 @@ pub(crate) fn require_camera_firmware(info: &serde_json::Value) -> Result<(), Fa
     Ok(())
 }
 
-pub(crate) async fn capture_jpeg<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
+pub(crate) async fn capture_jpeg<C: CaptureTransport>(conn: &mut C) -> Result<Vec<u8>, Fail> {
     capture_buffer(conn, Some(8), true).await
 }
 
@@ -473,15 +471,30 @@ pub(crate) const CAPTURE_GUARD_SECS: u64 = 250;
 pub(crate) const CAPTURE_REQUEST_SECS: u64 = 300;
 pub(crate) const CAPTURE_CLIENT_SECS: u64 = 330;
 
-pub(crate) async fn capture_lcd<C: Connection>(conn: &mut C) -> Result<Vec<u8>, Fail> {
+pub(crate) async fn capture_lcd<C: CaptureTransport>(conn: &mut C) -> Result<Vec<u8>, Fail> {
     capture_buffer(conn, None, false).await
 }
 
-async fn capture_buffer<C: Connection>(
+async fn capture_buffer<C: CaptureTransport>(
     conn: &mut C,
     layer: Option<u8>,
     jpeg: bool,
 ) -> Result<Vec<u8>, Fail> {
+    let options = CaptureOptions::selected()?;
+    let mut trace = CaptureTrace::new(&options, conn.capture_metrics());
+    let result = capture_buffer_inner(conn, layer, jpeg, &options, &mut trace).await;
+    trace.finish(result.is_ok(), conn.capture_metrics());
+    result
+}
+
+async fn capture_buffer_inner<C: CaptureTransport>(
+    conn: &mut C,
+    layer: Option<u8>,
+    jpeg: bool,
+    options: &CaptureOptions,
+    trace: &mut CaptureTrace,
+) -> Result<Vec<u8>, Fail> {
+    let setup = Instant::now();
     conn.handshake(ScreenCapturePacket { layer }, Duration::from_secs(3), 0)
         .await
         .map_err(io)?
@@ -524,18 +537,45 @@ async fn capture_buffer<C: Connection>(
             "Unsupported AIM LCD buffer layout; expected 240x240 RGB565, no alternate layer was tried",
         ));
     }
-    let chunk = usize::from(init.window_size.saturating_sub(14)).min(216) / 4 * 4;
+    let chunk = if options.payload_window {
+        // The official AIM BLE uploader treats the advertised window as payload,
+        // capped at 232 bytes; 232 data + reply framing fits its 244-byte packet.
+        usize::from(init.window_size).min(232) / 4 * 4
+    } else {
+        usize::from(init.window_size.saturating_sub(14)).min(216) / 4 * 4
+    };
     if chunk == 0 {
         return Err(fail("Camera receive window is too small."));
     }
-    let seconds = CAPTURE_TRANSFER_SECS;
-    let deadline = Instant::now() + Duration::from_secs(seconds);
+    trace.report["setup_ms"] = json!(setup.elapsed().as_millis() as u64);
+    trace.report["buffer_bytes"] = json!(size);
+    trace.report["block_bytes"] = json!(chunk);
+    let deadline = Instant::now() + options.transfer_timeout;
+    let authorization = if options.operation_auth {
+        tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            conn.authorize_capture(),
+        )
+        .await
+        .map_err(|_| fail("Camera authentication exceeded the transfer deadline"))?
+        .map_err(io)?
+        .map(|authorization| {
+            if options.reply_pacing {
+                authorization.with_reply_pacing()
+            } else {
+                authorization
+            }
+        })
+    } else {
+        None
+    };
     let mut bytes = Vec::with_capacity(size);
     while bytes.len() < size {
         if Instant::now() >= deadline {
             return Err(fail(format!(
-                "{} transfer exceeded {seconds} seconds; existing output was preserved.",
-                if jpeg { "Camera" } else { "LCD" }
+                "{} transfer exceeded {} seconds; existing output was preserved.",
+                if jpeg { "Camera" } else { "LCD" },
+                options.transfer_timeout.as_secs_f64()
             )));
         }
         let requested = if bytes.is_empty() {
@@ -545,28 +585,58 @@ async fn capture_buffer<C: Connection>(
         }
         .min((size - bytes.len()).div_ceil(4) * 4);
         let address = bytes.len() as u32;
-        let reply = conn
-            .handshake(
+        let began = Instant::now();
+        let budget = options
+            .block_timeout
+            .min(deadline.saturating_duration_since(Instant::now()));
+        let operation = async {
+            conn.send_capture_read(
                 FileDataReadPacket {
                     address,
                     size: requested as u16,
                 },
-                Duration::from_secs(3),
-                0,
+                authorization.as_ref(),
+            )
+            .await
+            .map_err(io)?;
+            conn.recv::<Result<FileDataReadReplyPacket, vex_v5_serial::protocol::cdc2::Cdc2Ack>>(
+                budget,
             )
             .await
             .map_err(io)?
-            .map_err(io)?;
+            .map_err(io)
+        };
+        let reply = if options.diagnostic {
+            tokio::time::timeout(budget, operation).await.map_err(|_| fail("Camera block made no progress before its finite deadline; interrupted capture must not be reused"))??
+        } else {
+            // Normal commands retain their existing write and per-reply deadlines.
+            operation.await?
+        };
         append_block(&mut bytes, size, address, requested, &reply)?;
+        trace.report["blocks"] = json!(trace.report["blocks"].as_u64().unwrap_or(0) + 1);
+        trace.report["bytes_received"] = json!(bytes.len());
+        trace.report["block_ms"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(began.elapsed().as_micros() as f64 / 1000.));
         if jpeg && address == 0 && !bytes.starts_with(&[0xff, 0xd8]) {
             return Err(fail(
                 "Camera layer did not return JPEG; no other layer or menu action was attempted.",
             ));
         }
     }
+    tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        conn.verify_capture(authorization),
+    )
+    .await
+    .map_err(|_| fail("Camera final authentication exceeded the transfer deadline"))?
+    .map_err(io)?;
+    let validation = Instant::now();
     if jpeg {
         jpeg_dimensions(&bytes)?;
     }
+    trace.report["validation_ms"] = json!(validation.elapsed().as_micros() as f64 / 1000.);
     // Read-only downloads have no FILE_EXIT/program-upload completion command.
     Ok(bytes)
 }
@@ -654,6 +724,236 @@ pub(crate) fn save_atomic(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vex_v5_serial::{
+        ConnectionType,
+        bluetooth::{BluetoothError, BluetoothIoMetrics, FileReadAuthorization},
+        protocol::{
+            cdc::{CdcCommand, CdcReply},
+            cdc2::file::FileDataReadPacket,
+        },
+    };
+
+    struct CaptureFake {
+        command: Vec<u8>,
+        reads: usize,
+        begun: usize,
+        verified: usize,
+        fail_verification: bool,
+        stall: bool,
+        corrupt: bool,
+        stall_authorization: bool,
+        stall_final_auth: bool,
+        image: Vec<u8>,
+        read_sizes: Vec<usize>,
+    }
+    impl CaptureFake {
+        fn new() -> Self {
+            Self {
+                command: vec![],
+                reads: 0,
+                begun: 0,
+                verified: 0,
+                fail_verification: false,
+                stall: false,
+                corrupt: false,
+                stall_authorization: false,
+                stall_final_auth: false,
+                image: vec![
+                    0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 1, 224, 2, 128, 1, 1, 0x11, 0, 0, 0xff, 0xd9,
+                ],
+                read_sizes: vec![],
+            }
+        }
+        fn frame(&self, ecmd: u8, payload: &[u8]) -> Vec<u8> {
+            let size = payload.len() + 3;
+            let mut bytes = vec![0xaa, 0x55, 0x56];
+            if size > 127 {
+                bytes.extend([0x80 | (size >> 8) as u8, size as u8]);
+            } else {
+                bytes.push(size as u8);
+            }
+            bytes.push(ecmd);
+            bytes.extend(payload);
+            let mut crc = 0_u16;
+            for byte in &bytes {
+                crc ^= (*byte as u16) << 8;
+                for _ in 0..8 {
+                    crc = if crc & 0x8000 != 0 {
+                        (crc << 1) ^ 0x1021
+                    } else {
+                        crc << 1
+                    };
+                }
+            }
+            bytes.extend(crc.to_be_bytes());
+            bytes
+        }
+    }
+    impl Connection for CaptureFake {
+        type Error = BluetoothError;
+        fn connection_type(&self) -> ConnectionType {
+            ConnectionType::Bluetooth
+        }
+        async fn send(&mut self, p: impl CdcCommand) -> Result<(), Self::Error> {
+            self.command = vec![0; p.size()];
+            p.encode(&mut self.command);
+            Ok(())
+        }
+        async fn recv<P: CdcReply>(&mut self, _: Duration) -> Result<P, Self::Error> {
+            let ecmd = self.command[5];
+            let data = match ecmd {
+                0x28 => self.frame(ecmd, &[0x76]),
+                0x11 => {
+                    let mut body = vec![0x76];
+                    body.extend(232_u16.to_le_bytes());
+                    body.extend((self.image.len() as u32).to_le_bytes());
+                    body.extend(0_u32.to_be_bytes());
+                    self.frame(ecmd, &body)
+                }
+                0x14 => {
+                    self.reads += 1;
+                    if self.stall {
+                        std::future::pending::<()>().await;
+                    }
+                    let requested =
+                        u16::from_le_bytes([self.command[11], self.command[12]]) as usize;
+                    self.read_sizes.push(requested);
+                    let address =
+                        u32::from_le_bytes(self.command[7..11].try_into().unwrap()) as usize;
+                    let mut body = self.command[7..11].to_vec();
+                    body.extend(&self.image[address..(address + requested).min(self.image.len())]);
+                    body.resize(4 + requested, 0);
+                    let mut bytes = self.frame(ecmd, &body);
+                    if self.corrupt {
+                        *bytes.last_mut().unwrap() ^= 1;
+                    }
+                    bytes
+                }
+                _ => panic!("A capture must not issue an upload, menu, motor or program command"),
+            };
+            P::decode(&mut data.as_slice()).map_err(Into::into)
+        }
+        async fn read_user(&mut self, _: &mut [u8]) -> Result<usize, Self::Error> {
+            panic!("No Python during native capture")
+        }
+        async fn write_user(&mut self, _: &[u8]) -> Result<usize, Self::Error> {
+            panic!("No Python during native capture")
+        }
+    }
+    impl CaptureTransport for CaptureFake {
+        fn capture_metrics(&self) -> Option<BluetoothIoMetrics> {
+            None
+        }
+        async fn authorize_capture(
+            &mut self,
+        ) -> Result<Option<FileReadAuthorization>, Self::Error> {
+            self.begun += 1;
+            if self.stall_authorization {
+                std::future::pending::<()>().await;
+            }
+            Ok(None)
+        }
+        async fn verify_capture(
+            &mut self,
+            _: Option<FileReadAuthorization>,
+        ) -> Result<(), Self::Error> {
+            self.verified += 1;
+            if self.stall_final_auth {
+                std::future::pending::<()>().await;
+            }
+            if self.fail_verification {
+                Err(BluetoothError::PairingRequired)
+            } else {
+                Ok(())
+            }
+        }
+        async fn send_capture_read(
+            &mut self,
+            p: FileDataReadPacket,
+            _: Option<&FileReadAuthorization>,
+        ) -> Result<(), Self::Error> {
+            self.send(p).await
+        }
+    }
+    fn capture_options() -> CaptureOptions {
+        CaptureOptions {
+            operation_auth: true,
+            block_timeout: Duration::from_millis(5),
+            transfer_timeout: Duration::from_millis(50),
+            diagnostic: true,
+            report_path: None,
+            payload_window: false,
+            reply_pacing: false,
+        }
+    }
+    #[tokio::test]
+    async fn read_only_capture_verifies_authentication_before_returning_bytes() {
+        let mut fake = CaptureFake::new();
+        let options = capture_options();
+        let mut trace = CaptureTrace::new(&options, None);
+        let image = capture_buffer_inner(&mut fake, Some(8), true, &options, &mut trace)
+            .await
+            .unwrap();
+        assert_eq!(image.len(), 18);
+        assert_eq!(fake.begun, 1);
+        assert_eq!(fake.verified, 1);
+        assert_eq!(fake.reads, 1);
+        fake.fail_verification = true;
+        assert!(
+            capture_buffer_inner(&mut fake, Some(8), true, &options, &mut trace)
+                .await
+                .is_err()
+        );
+    }
+    #[tokio::test]
+    async fn stalled_or_corrupt_camera_blocks_fail_without_retrying_a_read() {
+        for stall in [true, false] {
+            let mut fake = CaptureFake::new();
+            fake.stall = stall;
+            fake.corrupt = !stall;
+            let options = capture_options();
+            let mut trace = CaptureTrace::new(&options, None);
+            assert!(
+                capture_buffer_inner(&mut fake, Some(8), true, &options, &mut trace)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(fake.reads, 1);
+            assert_eq!(fake.verified, 0);
+        }
+    }
+    #[tokio::test]
+    async fn source_backed_payload_window_keeps_sequential_addresses_and_padding() {
+        let mut fake = CaptureFake::new();
+        fake.image.resize(600, 0);
+        fake.image[598..].copy_from_slice(&[0xff, 0xd9]);
+        let mut options = capture_options();
+        options.payload_window = true;
+        let mut trace = CaptureTrace::new(&options, None);
+        let image = capture_buffer_inner(&mut fake, Some(8), true, &options, &mut trace)
+            .await
+            .unwrap();
+        assert_eq!(fake.read_sizes, vec![128, 232, 232, 8]);
+        assert_eq!(image, fake.image);
+    }
+    #[tokio::test]
+    async fn transfer_deadline_includes_both_authentication_boundaries() {
+        for first in [true, false] {
+            let mut fake = CaptureFake::new();
+            fake.stall_authorization = first;
+            fake.stall_final_auth = !first;
+            let mut options = capture_options();
+            options.transfer_timeout = Duration::from_millis(5);
+            let mut trace = CaptureTrace::new(&options, None);
+            assert!(
+                capture_buffer_inner(&mut fake, Some(8), true, &options, &mut trace)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(fake.begun, 1);
+            assert_eq!(fake.reads, if first { 0 } else { 1 });
+        }
+    }
     #[test]
     fn slow_link_capture_fits_before_all_enclosing_deadlines() {
         // Independently observed ~600 bytes/s: a full RGB565 LCD needs 192s.

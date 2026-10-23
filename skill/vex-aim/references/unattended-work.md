@@ -22,6 +22,12 @@ connection to the computer. Wall charging is a different test condition from
 battery-only operation; record which is used instead of assuming from "on power."
 After a firmware update, record the actual reported revisions before measuring.
 An active link monitor or visible REPL screen does not prove sleep prevention.
+For a short camera/performance investigation, capture the baseline once and test
+promising changes with a few frames before expanding the run. Use progress-based
+diagnostic deadlines; do not repeatedly wait through production timeouts. Budget
+the whole run and cleanup in advance. A timed-out image transfer invalidates that
+capture and requires recovery before another camera request. Longer transfer
+deadlines are reliability allowances, not evidence of a responsive visual loop.
 Keep failed runs failed, and separate a firmware compatibility rejection from
 a transport failure or independently observed power-off.
 

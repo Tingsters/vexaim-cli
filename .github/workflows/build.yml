@@ -85,6 +85,8 @@ jobs:
           python -m unittest discover -s dev -p test_pair_bridge.py -v
           python -m unittest discover -s dev -p test_inspect_vexcode.py -v
           python -m unittest discover -s dev -p test_ble_diagnostics.py -v
+          python -m unittest discover -s dev -p test_ble_camera_benchmark.py -v
+          python -m unittest discover -s dev -p test_camera_search.py -v
           python -m unittest discover -s dev -p test_aim_idle_probe.py -v
 
       - name: Test robot motion helpers and independent benchmark evaluation (no hardware)
@@ -98,6 +100,7 @@ jobs:
         run: |
           python -m pip install opencv-python-headless==4.13.0.92
           python -m unittest discover -s dev -p test_turn_frames.py -v
+          python -m unittest discover -s dev -p test_camera_reference.py -v
 
       - name: Test blocking adapter (Linux)
         if: runner.os == 'Linux'

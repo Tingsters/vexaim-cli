@@ -375,7 +375,11 @@ impl Robot {
                 "Previous capture was interrupted; close/start the session before another image transfer",
             ));
         }
-        match self.repl.connection().inner() {
+        let bluetooth_capture = matches!(
+            self.repl.connection().inner(),
+            GenericConnection::Bluetooth(_)
+        );
+        let result = match self.repl.connection().inner() {
             GenericConnection::Bluetooth(_) => {
                 bluetooth::require_camera_firmware(&self.identity)?;
                 tokio::time::timeout(
@@ -383,7 +387,11 @@ impl Robot {
                     bluetooth::capture_jpeg(self.repl.connection_mut()),
                 )
                 .await
-                .map_err(|_| failure("Camera capture timed out; no stale artifact returned"))?
+                .unwrap_or_else(|_| {
+                    Err(failure(
+                        "Camera capture timed out; no stale artifact returned",
+                    ))
+                })
             }
             GenericConnection::Serial(_) => {
                 tokio::task::spawn_blocking(move || crate::snap::capture(camera_index))
@@ -391,7 +399,12 @@ impl Robot {
                     .map_err(failure)?
                     .map_err(failure)
             }
+        };
+        if bluetooth_capture && result.is_err() {
+            self.camera_usable = false;
+            self.needs_check = true;
         }
+        result
     }
 
     async fn state(&mut self) -> Result<Value, Fail> {
@@ -544,12 +557,17 @@ impl Backend for Robot {
             ) {
                 bluetooth::require_camera_firmware(&self.identity)?;
             }
-            let bytes = tokio::time::timeout(
+            let capture = tokio::time::timeout(
                 Duration::from_secs(bluetooth::CAPTURE_GUARD_SECS),
                 bluetooth::capture_lcd(self.repl.connection_mut()),
             )
             .await
-            .map_err(|_| failure("LCD capture timed out"))??;
+            .unwrap_or_else(|_| Err(failure("LCD capture timed out")));
+            if capture.is_err() {
+                self.camera_usable = false;
+                self.needs_check = true;
+            }
+            let bytes = capture?;
             let png = crate::observation::lcd_png(&bytes)?;
             crate::observation::save_bytes(Path::new(output), &png)?;
             let after = self.state().await;

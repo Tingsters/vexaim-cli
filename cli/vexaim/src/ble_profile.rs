@@ -7,6 +7,9 @@ use std::time::Duration;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Profile {
     Throughput,
+    // Constructed only by explicit maintainer diagnostics (or their unit tests).
+    #[cfg_attr(not(any(test, feature = "ble-diagnostics")), allow(dead_code))]
+    Balanced,
     OsDefault,
 }
 
@@ -40,6 +43,7 @@ impl Profile {
         match value {
             None => Ok(Self::production_default()),
             Some("throughput") => Ok(Self::Throughput),
+            Some("balanced") => Ok(Self::Balanced),
             Some("os-default") => Ok(Self::OsDefault),
             Some(_) => Err(Fail::Session(
                 "Unknown diagnostic Bluetooth connection profile".into(),
@@ -52,9 +56,11 @@ impl Profile {
             .request(
                 async {
                     peripheral
-                        .request_connection_parameters(
-                            ConnectionParameterPreset::ThroughputOptimized,
-                        )
+                        .request_connection_parameters(if matches!(self, Self::Balanced) {
+                            ConnectionParameterPreset::Balanced
+                        } else {
+                            ConnectionParameterPreset::ThroughputOptimized
+                        })
                         .await
                         .map_err(|e| e.to_string())
                 },
@@ -78,13 +84,19 @@ impl Profile {
     {
         match self {
             Self::OsDefault => json!({"requested":"os-default","accepted":null,"error":null}),
-            Self::Throughput => match tokio::time::timeout(budget, operation).await {
-                Ok(Ok(())) => json!({"requested":"throughput","accepted":true,"error":null}),
-                Ok(Err(error)) => json!({"requested":"throughput","accepted":false,"error":error}),
-                Err(_) => {
-                    json!({"requested":"throughput","accepted":false,"error":"parameter request timed out"})
+            Self::Throughput | Self::Balanced => {
+                match tokio::time::timeout(budget, operation).await {
+                    Ok(Ok(())) => {
+                        json!({"requested":if matches!(self, Self::Balanced) {"balanced"} else {"throughput"},"accepted":true,"error":null})
+                    }
+                    Ok(Err(error)) => {
+                        json!({"requested":if matches!(self, Self::Balanced) {"balanced"} else {"throughput"},"accepted":false,"error":error})
+                    }
+                    Err(_) => {
+                        json!({"requested":if matches!(self, Self::Balanced) {"balanced"} else {"throughput"},"accepted":false,"error":"parameter request timed out"})
+                    }
                 }
-            },
+            }
         }
     }
 }
@@ -109,6 +121,7 @@ mod tests {
             Profile::OsDefault
         );
         assert!(Profile::parse(Some("typo")).is_err());
+        assert_eq!(Profile::parse(Some("balanced")).unwrap(), Profile::Balanced);
         #[cfg(not(feature = "ble-diagnostics"))]
         assert_eq!(Profile::selected().unwrap(), Profile::production_default());
     }

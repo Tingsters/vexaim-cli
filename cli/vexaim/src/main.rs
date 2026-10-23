@@ -4,6 +4,8 @@ mod assets;
 mod ble_profile;
 #[cfg(feature = "bluetooth")]
 mod bluetooth;
+#[cfg(feature = "bluetooth")]
+mod camera_capture;
 mod device;
 #[cfg(feature = "bluetooth")]
 mod display;

@@ -3,6 +3,10 @@ use std::{
     collections::{HashSet, VecDeque},
     future::Future,
     pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use btleplug::api::{
@@ -20,6 +24,53 @@ use crate::trim_packets;
 use vex_cdc::{Decode, DecodeError, Encode, FixedStringSizeError, cdc2::Cdc2Ack};
 
 use super::{Connection, ConnectionType, RawPacket};
+
+/// Numeric transport counters only; never includes authentication or packet bytes.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct BluetoothIoMetrics {
+    pub mtu: u16,
+    pub auth_reads: u64,
+    pub auth_us: u64,
+    pub writes: u64,
+    pub write_us: u64,
+    pub pacing_us: u64,
+    pub notifications: u64,
+    pub notification_bytes: u64,
+    pub authorized_file_reads: u64,
+}
+
+#[derive(Default)]
+struct IoCounters {
+    auth_reads: AtomicU64,
+    auth_us: AtomicU64,
+    writes: AtomicU64,
+    write_us: AtomicU64,
+    pacing_us: AtomicU64,
+    notifications: AtomicU64,
+    notification_bytes: AtomicU64,
+    authorized_file_reads: AtomicU64,
+}
+
+/// An opaque authorization for read-only file blocks on one connection.
+/// It grants no permission to write files, execute Python or operate a robot.
+/// Dropping it changes no connection state, including when a transfer is cancelled.
+pub struct FileReadAuthorization {
+    connection: Arc<()>,
+    authentication: [u8; 4],
+    delay_after_request: bool,
+}
+
+impl FileReadAuthorization {
+    /// Experimental: the caller must await each complete reply before sending
+    /// another FILE_READ. Ordinary authorizations retain the legacy pacing.
+    pub fn with_reply_pacing(mut self) -> Self {
+        self.delay_after_request = false;
+        self
+    }
+    fn matches(&self, connection: &Arc<()>, authentication: &[u8; 4]) -> bool {
+        Arc::ptr_eq(&self.connection, connection) && self.authentication == *authentication
+    }
+}
 
 /// The BLE GATT Service that V5 Brains provide
 pub const V5_SERVICE: Uuid = Uuid::from_u128(0x08590f7e_db05_467e_8757_72f6faeb13d5);
@@ -246,6 +297,8 @@ pub struct BluetoothConnection {
 
     notification_stream: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     buffers: NotificationBuffers,
+    file_read_identity: Arc<()>,
+    io_counters: IoCounters,
 }
 
 impl BluetoothConnection {
@@ -311,6 +364,8 @@ impl BluetoothConnection {
             user_rx: user_rx.ok_or(BluetoothError::MissingCharacteristic)?,
             pairing: pairing.ok_or(BluetoothError::MissingCharacteristic)?,
             buffers: NotificationBuffers::default(),
+            file_read_identity: Arc::new(()),
+            io_counters: IoCounters::default(),
         };
 
         connection
@@ -322,12 +377,84 @@ impl BluetoothConnection {
         Ok(connection)
     }
 
-    pub async fn is_paired(&self) -> Result<bool, BluetoothError> {
-        with_timeout(Duration::from_secs(5), async {
-            let auth_bytes = self.peripheral.read(&self.pairing).await?;
-            auth_state(&auth_bytes)
+    async fn authentication_bytes(&self) -> Result<[u8; 4], BluetoothError> {
+        let started = Instant::now();
+        self.io_counters.auth_reads.fetch_add(1, Ordering::Relaxed);
+        let result = with_timeout(Duration::from_secs(5), async {
+            let bytes = self.peripheral.read(&self.pairing).await?;
+            auth_state(&bytes)?;
+            bytes
+                .try_into()
+                .map_err(|_| BluetoothError::InvalidAuthentication)
         })
-        .await
+        .await;
+        self.io_counters
+            .auth_us
+            .fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+        result
+    }
+
+    pub async fn is_paired(&self) -> Result<bool, BluetoothError> {
+        auth_state(&self.authentication_bytes().await?)
+    }
+
+    pub fn io_metrics(&self) -> BluetoothIoMetrics {
+        let c = &self.io_counters;
+        BluetoothIoMetrics {
+            mtu: self.peripheral.mtu(),
+            auth_reads: c.auth_reads.load(Ordering::Relaxed),
+            auth_us: c.auth_us.load(Ordering::Relaxed),
+            writes: c.writes.load(Ordering::Relaxed),
+            write_us: c.write_us.load(Ordering::Relaxed),
+            pacing_us: c.pacing_us.load(Ordering::Relaxed),
+            notifications: c.notifications.load(Ordering::Relaxed),
+            notification_bytes: c.notification_bytes.load(Ordering::Relaxed),
+            authorized_file_reads: c.authorized_file_reads.load(Ordering::Relaxed),
+        }
+    }
+
+    pub async fn authorize_file_reads(&self) -> Result<FileReadAuthorization, BluetoothError> {
+        let authentication = self.authentication_bytes().await?;
+        if !auth_state(&authentication)? {
+            return Err(BluetoothError::PairingRequired);
+        }
+        Ok(FileReadAuthorization {
+            connection: self.file_read_identity.clone(),
+            authentication,
+            delay_after_request: true,
+        })
+    }
+
+    /// Only the typed FILE_READ request can use the operation authorization.
+    pub async fn send_authorized_file_read(
+        &mut self,
+        authorization: &FileReadAuthorization,
+        packet: vex_cdc::cdc2::file::FileDataReadPacket,
+    ) -> Result<(), BluetoothError> {
+        if !Arc::ptr_eq(&authorization.connection, &self.file_read_identity) {
+            return Err(BluetoothError::InvalidAuthentication);
+        }
+        let mut bytes = vec![0; packet.size()];
+        packet.encode(&mut bytes);
+        self.io_counters
+            .authorized_file_reads
+            .fetch_add(1, Ordering::Relaxed);
+        // The reader waits for each complete reply before its next request.
+        // This acknowledgement supplies flow control; no extra post-write sleep
+        // is needed for a single small FILE_READ command. Other writes stay paced.
+        self.write_chunks_paced(&self.system_rx, &bytes, authorization.delay_after_request)
+            .await
+    }
+
+    pub async fn verify_file_reads(
+        &self,
+        authorization: FileReadAuthorization,
+    ) -> Result<(), BluetoothError> {
+        let current = self.authentication_bytes().await?;
+        if !auth_state(&current)? || !authorization.matches(&self.file_read_identity, &current) {
+            return Err(BluetoothError::PairingRequired);
+        }
+        Ok(())
     }
 
     pub async fn request_pairing(&mut self) -> Result<(), BluetoothError> {
@@ -370,6 +497,13 @@ impl BluetoothConnection {
             return Err(BluetoothError::NoResponse);
         };
 
+        self.io_counters
+            .notifications
+            .fetch_add(1, Ordering::Relaxed);
+        self.io_counters
+            .notification_bytes
+            .fetch_add(notification.value.len() as u64, Ordering::Relaxed);
+
         self.buffers.receive(notification)
     }
 
@@ -397,16 +531,37 @@ impl BluetoothConnection {
         characteristic: &Characteristic,
         bytes: &[u8],
     ) -> Result<(), BluetoothError> {
+        self.write_chunks_paced(characteristic, bytes, true).await
+    }
+
+    async fn write_chunks_paced(
+        &self,
+        characteristic: &Characteristic,
+        bytes: &[u8],
+        paced: bool,
+    ) -> Result<(), BluetoothError> {
         let limit = write_limit(self.peripheral.mtu())?;
         for chunk in bytes.chunks(limit) {
-            with_timeout(Duration::from_secs(5), async {
+            let started = Instant::now();
+            self.io_counters.writes.fetch_add(1, Ordering::Relaxed);
+            let result = with_timeout(Duration::from_secs(5), async {
                 Ok(self
                     .peripheral
                     .write(characteristic, chunk, WriteType::WithoutResponse)
                     .await?)
             })
-            .await?;
-            async_io::Timer::after(Duration::from_millis(10)).await;
+            .await;
+            self.io_counters
+                .write_us
+                .fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+            result?;
+            if paced || bytes.len() > limit {
+                let started = Instant::now();
+                async_io::Timer::after(Duration::from_millis(10)).await;
+                self.io_counters
+                    .pacing_us
+                    .fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+            }
         }
         Ok(())
     }
@@ -523,6 +678,22 @@ pub enum BluetoothError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_authorization_is_bound_to_connection_and_current_authentication() {
+        let identity = Arc::new(());
+        let authorization = FileReadAuthorization {
+            connection: identity.clone(),
+            authentication: [0, 4, 2, 7],
+            delay_after_request: true,
+        };
+        assert!(authorization.matches(&identity, &[0, 4, 2, 7]));
+        assert!(!authorization.matches(&Arc::new(()), &[0, 4, 2, 7]));
+        assert!(!authorization.matches(&identity, &[0, 4, 2, 8]));
+        // Cancellation only discards a capability; no ambient authentication bypass exists.
+        drop(authorization);
+        assert_eq!(Arc::strong_count(&identity), 1);
+    }
 
     fn notification(uuid: Uuid, bytes: &[u8]) -> ValueNotification {
         ValueNotification {

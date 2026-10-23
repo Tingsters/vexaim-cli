@@ -5,7 +5,8 @@
 taken from upstream commit `b3a712a16c9c6819b69faacfee2284826a138070` (2026-09-22) with the patches
 `0001-aim-user-port-and-write-all.patch`, `0002-serial-windows-capable-async-layer.patch`, and
 `0003-windows-aim-dtr.patch`, `0004-aim-bluetooth-transport.patch` and
-`0005-validated-camera-download.patch` and `0006-aim-display-lifecycle.patch` applied. They are
+`0005-validated-camera-download.patch`, `0006-aim-display-lifecycle.patch` and
+`0007-aim-read-only-capture-auth.patch` applied. They are
 vendored so the repository builds with no network access to anything but crates.io, and so students never depend
 on an unreleased upstream branch.
 
@@ -78,6 +79,26 @@ image bytes. Regression tests corrupt every byte and truncate at every boundary,
 and check NACKs and extra bytes. `Connection` also forwards through `&mut C`, so
 the generic REPL can borrow a BLE connection while its owner guarantees disconnect
 on both success and failure. Neither change adds upload or firmware commands.
+
+## Patch 0007: measured read-only capture authorization
+
+The BLE backend now exposes numeric I/O counters and an opaque, connection-bound
+authorization for typed file-data reads. It can check authentication once at the
+beginning and again at the end of a camera transfer instead of issuing an
+uncached pairing read before each small block. Other commands retain their
+checks. Cancellation drops the token without leaving a connection-wide bypass;
+the token cannot authorize writes, Python, movement or another connection.
+Authentication values are never formatted by the token or numeric counters.
+
+The Windows operation path passed three native-camera checks, including a
+same-executable per-packet/operation comparison. Normal Windows captures now use
+it, retaining the tested pacing and 216-byte block cap. Other operating systems
+retain per-packet checks pending their own hardware comparisons. Source-backed
+232-byte payload windows and reply-paced reads remain diagnostic-only options.
+See
+`docs/bluetooth-camera-responsiveness.md` for timing scope, short test budgets,
+recognition limitations and the current evidence. This patch does not alter
+Windows connection policy or the vendored btleplug backend.
 
 ## Vendored btleplug 0.13.5: Windows notifications
 

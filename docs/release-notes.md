@@ -1,35 +1,33 @@
-# vexaim 0.4.1
+# vexaim 0.4.2
 
-Windows Bluetooth connections now keep the operating system's connection
-parameters instead of holding a ThroughputOptimized request for the whole
-workshop. This addresses the policy that reproduced USB-radio resets in the
-Windows comparison. Persistent ownership, automatic recovery and the AIM power
-lease continue to operate. Other operating systems retain their existing policy.
+Windows Bluetooth camera downloads now authorize a read-only transfer at its
+boundaries instead of reading the pairing characteristic before every small
+image block. Ordinary commands and keepalive retain their authentication checks;
+the read authorization is bound to one connection and cannot authorize writes
+or robot movement. Other operating systems retain per-packet checks pending
+their own hardware comparisons.
 
-The Windows pairing helper now accepts the PowerShell object pipeline shown in
-the skill, as well as native process stdin. Codes still travel only over stdin
-and a current-user pipe; no code parameter, PIN file or student terminal is needed.
-Regression checks cover exact-code delivery in Windows PowerShell and PowerShell 7.
+On the tested Windows computer and AIM9E18 firmware 1.0.4, comparable ~27 KiB
+images improved from 43–45 seconds to 26–29 seconds. A same-executable comparison
+reduced authentication reads from 149 to 16. No USB radio re-enumerations were
+observed. These results describe the tested adapter and scene; they do not
+establish a universal camera speed or a 15-second arbitrary-object search.
 
-Native camera/LCD downloads now have ordered, finite transfer/actor/client
-deadlines suitable for the stable Windows link rate. The previous 55-second LCD
-limit failed on the tested radio; its corrected recheck passed. Allow 360 seconds
-for an agent shell capture call. Motion and Python execution limits are unchanged.
+Standalone Bluetooth snap now uses the same platform connection policy and
+capture guard as persistent sessions. Interrupted camera/LCD transfers require
+a fresh session before another capture, and transfer authentication fits inside
+the existing finite deadline. Windows keeps the OS-default connection policy;
+the balanced experiment provided no speed benefit.
 
-The matching skill explains setup-only unattended testing and distinguishes
-computer USB charging from a Bluetooth-only connection. Developer diagnostics
-record negotiated parameters and Windows metadata, preserve failed comparisons,
-and clean up their own test processes without changing Windows drivers or power
-settings. These diagnostics are separate from normal student commands.
+The matching agent skill explains bounded searches, useful image checkpoints,
+native feedback and short unattended testing. Developer-only diagnostics and
+local perception prototypes are included with simulated regression checks.
+Larger payload windows and alternate pacing remain diagnostic-only; no model
+download, new paid image API or new student search command is introduced.
 
-Windows acceptance on AIM9E18 firmware 1.0.4 recorded 60 uninterrupted minutes
-with zero disconnects or radio resets. A same-executable throughput control
-reproduced a radio reset and 20-second outage. The original full report retains
-its final LCD-timeout failure; a separate corrected capture/display/stop recheck
-passed. The CI-built Windows package passed connection/camera/stop/cleanup, and
-the stationary OS-default recovery fixture recovered in 10.1 seconds.
-
-On this radio a ~21 KiB camera frame takes ~36 seconds and an LCD download about
-three minutes. Prefer native on-robot AI Vision for fast steering. Other radios,
-macOS/Linux hardware and second-computer handoff are not newly certified. See
-docs/windows-bluetooth-investigation.md for the distinct builds and test scopes.
+The short hardware comparison did not complete a five-minute candidate stability
+screen or physical search/approach acceptance. The independent Python comparison
+was incomplete because of a vault-lookup mismatch; the developer lookup is fixed
+and unit tested, without changing stored credentials. See
+[the investigation report](https://github.com/Tingsters/vexaim-cli/blob/main/docs/bluetooth-camera-responsiveness.md)
+for the separate reports, executable hashes and remaining limits.
