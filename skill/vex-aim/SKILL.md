@@ -36,9 +36,10 @@ that finite lease automatically. Do not set private SDK flags yourself or infer
 power state from the final displayed picture. Unknown firmware is not equivalent
 hardware coverage.
 
-When the user asks for unattended work, arrange physical setup, pairing and a
-rehearsed audible computer cue up front. Do not assume they watch the console.
-Read `references/unattended-work.md`; a disconnected robot cannot sound its cue.
+For unattended work, read `references/unattended-work.md` and verify physical
+setup and pairing up front. If the user wants involvement only at the beginning,
+checkpoint and stop when later help becomes necessary. Arrange an audible return
+cue only when later attendance is allowed; do not assume they watch the console.
 
 For USB, run `vexaim doctor` initially and after a connection failure. A successful
 check reports `verdict: ready` and battery. For Bluetooth use its transport/name
