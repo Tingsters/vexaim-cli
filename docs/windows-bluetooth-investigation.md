@@ -25,7 +25,7 @@ peripheral-role capabilities. Neither message alone proves the cause of a
 central/client connection failure. Repeated initialization plus independent
 PnP arrival changes is stronger evidence. The exact trigger is unresolved.
 
-The released owner retains `ThroughputOptimized` for its whole lifetime, even
+The v0.4.0 owner retains `ThroughputOptimized` for its whole lifetime, even
 while idle. Microsoft's [connection parameter guidance](https://learn.microsoft.com/en-us/uwp/api/windows.devices.bluetooth.bluetoothledevice.requestpreferredconnectionparameters)
 recommends using that request sparingly for bulk transfers. The investigation
 compares it with no application parameter request. This is a hypothesis, not
@@ -37,9 +37,12 @@ validated AIM power lease remain unchanged in both comparisons.
 Build with `cargo build --locked --release --manifest-path cli/Cargo.toml
 --features ble-diagnostics`. Keep a verified released executable separately.
 Only this feature reads `VEXAIM_DIAGNOSTIC_CONNECTION_PROFILE`, accepting
-`throughput` (the default) or `os-default`. Normal builds ignore the override.
+`throughput` or `os-default`. Normal builds ignore the override.
 Owner health records requested/accepted/actual parameters and request errors.
-Student commands and release defaults are unchanged.
+Student commands are unchanged. The proposed v0.4.1 Windows default is
+`os-default`; other platforms retain their existing policy. Diagnostic builds
+use that platform default when no override is supplied. Use `throughput`
+explicitly when reproducing the old Windows request.
 
 Before unattended work, charge to at least 90%, put the computer on power and
 move its Bluetooth dongle directly to a computer port. Then turn on the AIM,

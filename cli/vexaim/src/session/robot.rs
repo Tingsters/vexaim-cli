@@ -1036,6 +1036,9 @@ mod acceptance {
         }.await;
         // Preserve cleanup even when a live check fails; do not panic first.
         robot.close().await;
-        println!("{}", outcome.expect("Controlled recovery failed; cleanup attempted"));
+        println!(
+            "{}",
+            outcome.expect("Controlled recovery failed; cleanup attempted")
+        );
     }
 }

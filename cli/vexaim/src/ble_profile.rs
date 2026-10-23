@@ -1,4 +1,4 @@
-//! Isolate a Windows connection-parameter hypothesis without changing releases.
+//! Preserve Windows' stable link policy; isolate optional parameter requests.
 use crate::repl::Fail;
 use btleplug::api::{ConnectionParameterPreset, Peripheral};
 use serde_json::{Value, json};
@@ -21,13 +21,25 @@ impl Profile {
             );
         }
         #[cfg(not(feature = "ble-diagnostics"))]
-        Ok(Self::Throughput)
+        Ok(Self::production_default())
+    }
+
+    fn production_default() -> Self {
+        // Holding ThroughputOptimized for an idle workshop session reproduced
+        // USB-radio resets on Windows. MaintainConnection and the independent
+        // AIM power lease still retain the link without this parameter request.
+        if cfg!(target_os = "windows") {
+            Self::OsDefault
+        } else {
+            Self::Throughput
+        }
     }
 
     #[cfg(any(test, feature = "ble-diagnostics"))]
     fn parse(value: Option<&str>) -> Result<Self, Fail> {
         match value {
-            None | Some("throughput") => Ok(Self::Throughput),
+            None => Ok(Self::production_default()),
+            Some("throughput") => Ok(Self::Throughput),
             Some("os-default") => Ok(Self::OsDefault),
             Some(_) => Err(Fail::Session(
                 "Unknown diagnostic Bluetooth connection profile".into(),
@@ -82,15 +94,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn diagnostic_profiles_are_explicit_and_do_not_change_the_release_default() {
-        assert_eq!(Profile::parse(None).unwrap(), Profile::Throughput);
+    fn windows_uses_os_policy_and_diagnostics_can_explicitly_request_throughput() {
+        #[cfg(target_os = "windows")]
+        assert_eq!(Profile::production_default(), Profile::OsDefault);
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(Profile::production_default(), Profile::Throughput);
+        assert_eq!(Profile::parse(None).unwrap(), Profile::production_default());
+        assert_eq!(
+            Profile::parse(Some("throughput")).unwrap(),
+            Profile::Throughput
+        );
         assert_eq!(
             Profile::parse(Some("os-default")).unwrap(),
             Profile::OsDefault
         );
         assert!(Profile::parse(Some("typo")).is_err());
         #[cfg(not(feature = "ble-diagnostics"))]
-        assert_eq!(Profile::selected().unwrap(), Profile::Throughput);
+        assert_eq!(Profile::selected().unwrap(), Profile::production_default());
     }
 
     #[tokio::test]

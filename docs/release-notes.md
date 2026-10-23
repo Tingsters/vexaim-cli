@@ -1,41 +1,22 @@
-# vexaim 0.4.0
+# vexaim 0.4.1
 
-Persistent Bluetooth sessions and quicker workshop retries, with the matching
-vex-aim skill and installers for Windows, Linux and both Mac architectures.
+Windows Bluetooth connections now keep the operating system's connection
+parameters instead of holding a ThroughputOptimized request for the whole
+workshop. This addresses the policy that reproduced USB-radio resets in the
+Windows comparison. Persistent ownership, automatic recovery and the AIM power
+lease continue to operate. Other operating systems retain their existing policy.
 
-- `session start --persistent` keeps the background owner across prompts, chats,
-  agent application closure and workshop breaks, without the ordinary 30-minute
-  idle cutoff. It renews a finite, firmware-gated power lease while alive.
-- `--takeover` explicitly stops an existing student program on the selected robot
-  before preparing the REPL. Saved programs and firmware are not deleted.
-- Degraded sessions report `reconnecting` instead of cached `ready`, rebuild
-  closed Bluetooth transports, authenticate the same robot using saved credentials
-  and verify stopped state. No interrupted movement is replayed.
-- Changed pairing yields `auth_required` and stops background reconnect attempts.
-  Explicit close releases the link without forgetting pairing. AIM two-computer
-  handoff still needs hardware verification; release the old connection first.
-- Windows retains GattSession.MaintainConnection for the owning transport and
-  handles closed GATT objects without panicking.
-- JSON progress, retained last result, preparation/upload/execution timings and
-  delivery certainty make host timeouts and fresh retries easier to diagnose.
-  Execution timeout starts after source submission, rather than during upload.
-- The shipped Windows pairing bridge keeps the original stdin process alive,
-  accepts one code over a current-user pipe and expires abandoned requests. It
-  does not save PIN files or require terminal gymnastics from students.
+The Windows pairing helper now accepts the PowerShell object pipeline shown in
+the skill, as well as native process stdin. Codes still travel only over stdin
+and a current-user pipe; no code parameter, PIN file or student terminal is needed.
+Regression checks cover exact-code delivery in Windows PowerShell and PowerShell 7.
 
-Update with the one-line installer in the README. Install the matching skill and
-binary together, close an old-version owner once, then start a fresh agent chat.
-Camera photographs remain local. Persistent mode is a background process, not
-an OS service; a computer restart requires starting a new session.
+The matching skill explains setup-only unattended testing and distinguishes
+computer USB charging from a Bluetooth-only connection. Developer diagnostics
+record negotiated parameters and Windows metadata, preserve failed comparisons,
+and clean up their own test processes without changing Windows drivers or power
+settings. These diagnostics are separate from normal student commands.
 
-Windows controlled-disconnect recovery passed in 7.3 seconds on AIM6518 firmware
-1.0.4, with stopped state and power lease restored. Stationary endurance evidence
-is recorded in docs/persistent-workshops.md. CI coverage is separate from real
-robot verification; no new macOS/Linux radio or two-computer hardware claim is made.
-
-The core candidate completed one hour unattended, including 35 minutes without
-live client commands and camera/display/stop checks. It recovered 33 link losses;
-the longest sampled gap was about 66 seconds. Windows USB-radio re-enumeration
-remains unresolved, so this is not a claim of uninterrupted radio service.
-The final CI-built Windows candidate separately replaced a running routine in
-17.2 seconds and captured a fresh camera image with control ready afterward.
+Hardware acceptance is in progress. Do not tag this candidate until the
+uninterrupted run and camera/display/stop checks are recorded here. See
+docs/windows-bluetooth-investigation.md for scope and limitations.
