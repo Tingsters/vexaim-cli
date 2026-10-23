@@ -1,6 +1,6 @@
 """Explicit stationary CLI acceptance: replace a running display, then camera.
 
-No wheels, kicker, uploads or credential reads. Start with no existing owner.
+No wheels, kicker, saved projects or credential reads. Start with no existing owner.
 Leaves the persistent owner connected. Python is a maintainer tool only.
 """
 import argparse

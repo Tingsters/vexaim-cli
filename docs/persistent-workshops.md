@@ -69,6 +69,55 @@ outages; adapter reinitialization is a plausible contributor, not established
 proof of its exact driver cause. Recovery alone must not be described as an
 uninterrupted physical radio link. No student cargo movement was tested here.
 
+### One-hour Windows result, 22 October 2026
+
+The locally built core candidate, SHA-256
+`ab55df5e2d3fec493a2d9b68e76862035f643f1def7760a244ff0e5aebfd482c`,
+passed the complete stationary harness in 3654.92 seconds including setup and
+final capture. The quiet interval was 35 minutes without live client commands;
+the owner then completed camera, drawing, stop and live-info checks, followed
+by the remaining quiet period and a final camera capture. Battery went from
+61% before this run to 38% at the middle check and 23% at the end. It reported
+stopped with no owned action. No wheels or kicker ran, and no further human
+action was requested. Local photographs showed the controller, not LCD content.
+
+The owner recorded 33 automatic recoveries. Five-second cached sampling observed
+32 outages, totaling about 692 seconds, with a longest observed gap of 65.69
+seconds. This is a pass for owner persistence, power retention and recovery,
+and a failure to establish an uninterrupted physical connection on this host.
+It does not certify motion accuracy or constant low latency.
+
+Windows additionally changed the USB radio's `DEVPKEY_Device_LastArrivalDate`
+from 18:06:41 to 18:07:11 local time during these failures. The active radio was
+the Generic Bluetooth Radio (`0a12:0001`); the built-in MediaTek adapter was
+already disabled. Neither drivers, adapter settings nor OS power settings were
+changed. USB-radio re-enumeration is observed evidence; why it is happening,
+including any driver/controller interaction, remains unresolved. Do not tell a
+student to power-cycle an awake robot as the first response to this condition.
+
+The core endurance build preceded the final program-replacement metadata fixes.
+Those have separate unit and shipping-candidate checks; do not relabel this
+hour as a test of an identical shipping executable. Raw results and images stay
+locally under `dist/persistent-workshop-final/`, outside Git.
+
+### CI-built Windows retry result
+
+The Windows package from CI run `39881212223`, commit `99538d9`, executable
+SHA-256 `9e03ebdbba35a3580e23fb477e3889ee8b6ff849d59265477859354020f1e7b2`,
+passed `dev/workshop_retry_acceptance.py`: start a persistent owner, begin a
+20-second HAPPY display routine, replace it while still running, retain its
+confirmed cancellation and the new live readiness, show a fresh HAPPY, and take
+a native camera frame. Native takeover and readiness restoration took 17.235
+seconds; the 640x480 image took 7.874 seconds and returned `control_ready:true`.
+It stayed stopped and retained the owner, at 22% battery. No physical action or
+further pairing code was needed. The first startup found no robot during another
+adapter gap; one rescan and fresh stationary attempt succeeded. That failed
+startup remains a failed attempt, not an interrupted activity replay.
+
+This is still single-computer Windows evidence. Actual second-computer pairing
+and handoff, uninterrupted radio reliability, and physical cargo collection
+remain outside this acceptance.
+
 Primary references: [Microsoft GATT lifecycle](https://learn.microsoft.com/en-us/windows/apps/develop/devices-sensors/gatt-client),
 [MaintainConnection](https://learn.microsoft.com/en-us/uwp/api/windows.devices.bluetooth.genericattributeprofile.gattsession.maintainconnection?view=winrt-26100),
 [Windows pairing](https://support.microsoft.com/en-gb/windows/hardware/bluetooth/pair-a-bluetooth-device-in-windows),

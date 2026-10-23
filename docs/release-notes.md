@@ -32,3 +32,10 @@ Windows controlled-disconnect recovery passed in 7.3 seconds on AIM6518 firmware
 1.0.4, with stopped state and power lease restored. Stationary endurance evidence
 is recorded in docs/persistent-workshops.md. CI coverage is separate from real
 robot verification; no new macOS/Linux radio or two-computer hardware claim is made.
+
+The core candidate completed one hour unattended, including 35 minutes without
+live client commands and camera/display/stop checks. It recovered 33 link losses;
+the longest sampled gap was about 66 seconds. Windows USB-radio re-enumeration
+remains unresolved, so this is not a claim of uninterrupted radio service.
+The final CI-built Windows candidate separately replaced a running routine in
+17.2 seconds and captured a fresh camera image with control ready afterward.
