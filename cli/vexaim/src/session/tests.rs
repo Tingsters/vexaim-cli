@@ -511,6 +511,24 @@ async fn explicit_takeover_replaces_a_paused_program_without_repairing_pairing()
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn requested_takeover_is_not_skipped_because_cached_state_says_ready() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let (id, counters, owner, listener) = rig("cached-takeover").await;
+            let name = format!("test-cached-takeover-{}", std::process::id());
+            let status = start_options(&name, true, true).await.unwrap();
+            assert_eq!(status["state"], "ready");
+            assert_eq!(status["persistent"], true);
+            assert_eq!(counters.takeovers.get(), 1);
+            assert_eq!(counters.calls.get(), 0);
+            client(&id, &Request::Close, false, false).await.unwrap();
+            owner.await.unwrap();
+            listener.abort();
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn connection_owner_is_reused_and_busy_motion_is_never_queued() {
     tokio::task::LocalSet::new()
         .run_until(async {

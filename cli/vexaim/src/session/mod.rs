@@ -646,7 +646,7 @@ async fn start_options(name: &str, persistent: bool, takeover: bool) -> Result<V
             ));
         }
         if value["state"] == "ready" && value["keepalive"]["healthy"] != false {
-            if takeover && (value["busy"] == true || value["needs_check"] == true) {
+            if takeover {
                 let result = client(&id, &Request::Takeover, false, false).await?;
                 if result["ok"] != true {
                     return Err(failure(result));
